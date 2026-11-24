@@ -12,7 +12,8 @@ g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-stdlib-loader.cpp" \
     -o "$work/test-stdlib" $(pkg-config --libs libobs) -Wl,-rpath,"$libdir"
 mkdir -p "$work/hyperShaderFX"
 export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
-for mode in math wrapper managed vector scalar macro bloom bloom_off missing apply; do
+read -r -a modes <<< "${STDLIB_TEST_MODES:-math wrapper managed vector scalar macro bloom bloom_off sampling missing apply}"
+for mode in "${modes[@]}"; do
     echo "TEST: stdlib $mode"
     shader="$data/shaders/tests/stdlib_${mode}_probe.effect"
     if [[ "$mode" == "missing" ]]; then

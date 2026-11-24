@@ -415,6 +415,7 @@ Supported high-level audio tags include `bass`, `mid`, `treble`, and `level`.
 For the full authoring contract, see:
 
 - [`data/shaders/SHADERS.md`](data/shaders/SHADERS.md)
+- [Shader capability roadmap and verified primitives](docs/SHADER-CAPABILITIES.md)
 - [`data/shaders/OBS_SHADER_SYNTAX.md`](data/shaders/OBS_SHADER_SYNTAX.md)
 - [`docs/TWO-BUFFER-GRAPH.md`](docs/TWO-BUFFER-GRAPH.md)
 - [`docs/GLOBAL-SHADER-COMPOSITING.md`](docs/GLOBAL-SHADER-COMPOSITING.md)

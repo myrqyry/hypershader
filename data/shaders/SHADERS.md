@@ -14,7 +14,7 @@ A basic shader file looks like this:
 uniform float speed = 1.0;
 
 uniform float iTime;
-uniform float2 iResolution;
+uniform float3 iResolution;
 
 float4 PSMain(VertData v_in) : TARGET {
     return float4(1.0, 0.0, 0.0, 1.0); // Red
@@ -112,10 +112,10 @@ The HyperShader runtime automatically provides these standard uniforms:
 | `float` | `iTimeDelta` | Time since last frame |
 | `int` | `iFrame` | Frame count |
 | `float4` | `iDate` | year, month, day, seconds |
-| `float2` | `iResolution` | Viewport size (pixels) |
+| `float3` | `iResolution` | Viewport size (pixels) in xy |
 | `float4` | `iMouse` | xy = current pos, zw = click pos |
 | `sampler2D` | `iChannel0`..`3` | Texture inputs (set in plugin UI) |
-| `float3` | `iChannelResolution[4]` | Resolution of each input |
+| `float4` | `iChannelResolution0`…`3` | Resolution of each input in xy |
 
 ---
 
@@ -147,6 +147,34 @@ You can include helper functions from `data/stdlib/` (source effects live in `da
 
 
 ---
+
+### Portable texture addressing
+
+Include `hypershader_standard.glsl` followed by `sampling.glsl`.
+The latter provides explicit texture-coordinate addressing rather than
+relying on independent sampler states for a shared OBS texture.
+
+| Helper | Behavior |
+| --- | --- |
+| `hsFloorMod(x, y)` | GLSL floor remainder, including negative values; scalar/vector, nonzero divisor |
+| `hsTexelUV(pixel, size)` | Clamp integer pixel coordinates and return normalized texel-center UV |
+| `hsFetchTexel(tex, pixel, size)` | Texel-center sampling of a non-mipmapped 2D resource |
+| `hsSamplePointClamp(tex, uv, size)` | Nearest texel, clamp outside bounds |
+| `hsSamplePointRepeat(tex, uv, size)` | Nearest texel, repeat across edges |
+| `hsSampleLinearRepeat(tex, uv, size)` | Four-tap bilinear repeat, including the edge seam |
+| `hsSampleLinearMirror(tex, uv)` | Linear mirrored repeat |
+
+Pass the sampled texture's positive integral dimensions, not necessarily
+the output resolution. For the full-resolution filter image use
+`iResolution.xy`. For channels use `iChannelResolution0.xy` through
+`iChannelResolution3.xy` as appropriate. Check resource availability
+before sampling. Macro arguments must be side-effect-free. These helpers
+use the existing linear/clamp sampler; they do not generate mipmaps,
+create new resources or implement independent hardware sampler bindings.
+For ordinary linear clamp use `texture(tex, uv)`.
+
+See [shader capability roadmap](../../docs/SHADER-CAPABILITIES.md)
+for the verified platform scope and remaining runtime work.
 
 ## 7. Windows/macOS Variant Workflow
 

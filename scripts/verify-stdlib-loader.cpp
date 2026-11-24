@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
  const bool vector=(mode=="vector");
  const bool scalar=(mode=="scalar");
  const bool audit=(mode=="audit");
- if(!missing && !apply && mode!="math" && mode!="wrapper" && mode!="managed" && mode!="vector" && mode!="scalar" && mode!="macro" && mode!="bloom" && mode!="bloom_off" && mode!="audit") return 2;
+ if(!missing && !apply && mode!="math" && mode!="wrapper" && mode!="managed" && mode!="vector" && mode!="scalar" && mode!="macro" && mode!="bloom" && mode!="bloom_off" && mode!="audit" && mode!="sampling") return 2;
  if(!obs_startup("en-US",nullptr,nullptr))return 1;
  obs_set_ui_task_handler(test_ui_task_handler);
  obs_video_info video{};
@@ -202,6 +202,13 @@ int main(int argc, char **argv) {
  for(int i=0;i<(apply?72:48);i++){
     int x=70+(i%12)*5;
     auto input=make_frame(x);
+    if(mode=="sampling") {
+       for(unsigned y=0;y<H;y++) {
+          // Distinct edges ensure seam interpolation cannot pass by clamping.
+          auto edge=4*(y*W+W-1);
+          input[edge]=60;input[edge+1]=100;input[edge+2]=180;
+       }
+    }
     obs_enter_graphics();
     gs_texture_set_image(primary->texture,input.data(),W*4,false);
     if(audit_data)gs_texture_set_image(audit_data->texture,input.data(),W*4,false);
@@ -285,7 +292,19 @@ int main(int argc, char **argv) {
     if(i>20) {
        if(exact)++unchanged;
        if(!missing && output.size()==input.size()) {
-          if(scalar) {
+          if(mode=="sampling") {
+             // Clamp samples the distinct right edge; repeat/fetch sample this pixel.
+             bool ok=true;
+             for(size_t j=0;j<input.size();j+=4) {
+                if(std::abs(int(output[j])-60)>3 ||
+                   std::abs(int(output[j+1])-int(input[j+1]))>3 ||
+                   std::abs(int(output[j+2])-int(input[j+2]))>3 ||
+                   output[j+3]!=255) {
+                   if(i==30)std::cout<<"SAMPLING_MISMATCH x="<<(j/4%W)<<" y="<<(j/4/W)<<" out="<<int(output[j])<<","<<int(output[j+1])<<","<<int(output[j+2])<<","<<int(output[j+3])<<" expected=60,"<<int(input[j+1])<<","<<int(input[j+2])<<",255\n";
+                   ok=false;break;}
+             }
+             if(ok)++verified;
+          } else if(scalar) {
              const bool gain=std::abs(int(output[0])-191)<=4 &&
                              std::abs(int(output[1])-191)<=4 &&
                              std::abs(int(output[2])-191)<=4 && output[3]==255;
