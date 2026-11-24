@@ -1542,14 +1542,7 @@ static void sync_ui_visibility(struct hypershader_data *s, obs_properties_t *pro
 			mediapipe_has_modes = s->metadata_rc->capabilities.mediapipe_has_modes;
 		}
 		pthread_mutex_unlock(&s->mutex);
-		/* The dedicated native visualizer always uses the OBS audio worker.
-		 * Its standard audio_band0..7 uniforms are built into the shared
-		 * library, so metadata scanning does not mark a custom @audio tag.
-		 * Keep its source selector visible without exposing it on unrelated
-		 * HyperShaderFX source/filter instances. */
-		if (s->context &&
-		    strcmp(obs_source_get_id(s->context), "hypershader_audio_visualizer") == 0)
-			audio_required = true;
+
 	}
 	set_property_visible_if_present(props, "global_overrides_group", true);
 	set_property_visible_if_present(props, "preset", true);

@@ -1,4 +1,4 @@
-// Native OBS integration: the dedicated HyperShaderFX visualizer must load
+// Native OBS integration: an ordinary HyperShaderFX source must load
 // its preset, preserve alpha, and respond to PCM from a selected OBS source.
 #include <obs.h>
 #include <obs-module.h>
@@ -78,7 +78,14 @@ int main(int argc,char**argv) {
    obs_shutdown();return 6;
  }
  auto* input=obs_source_create("hyper_visualizer_pcm_fixture","Visualizer Test Tone",nullptr,nullptr);
- auto* viz=obs_source_create("hypershader_audio_visualizer","Native Audio Visualizer",nullptr,nullptr);
+ const char* typeId=nullptr;
+ int hyperTypes=0;
+ for(size_t i=0;obs_enum_source_types(i,&typeId);++i)
+   if(typeId&&strncmp(typeId,"hypershader_",12)==0)++hyperTypes;
+ auto* initial=obs_data_create();
+ obs_data_set_string(initial,"shader_file","shaders/root/source.audio_spectrum_orbit.effect");
+ auto* viz=obs_source_create("hypershader_source","Audio Preset",initial,nullptr);
+ obs_data_release(initial);
  if(!input||!viz) {
    fprintf(stderr,"AUDIO_VIS_SOURCE_MISSING input=%d viz=%d\n",input!=nullptr,viz!=nullptr);
    if(input)obs_source_release(input);
@@ -87,12 +94,14 @@ int main(int argc,char**argv) {
  }
  auto* settings=obs_source_get_settings(viz);
  const char* preset=obs_data_get_string(settings,"shader_file");
- bool defaults=std::string(preset)=="shaders/root/source.audio_spectrum_orbit.effect" &&
+ bool defaults=hyperTypes==3 && std::string(preset)=="shaders/root/source.audio_spectrum_orbit.effect" &&
+    obs_data_get_int(settings,"input_mode")==2 &&
+    obs_data_get_int(settings,"channel0_type")==0 &&
     obs_data_get_bool(settings,"enable_sound");
+ printf("AUDIO_PRESET defaults=%d registered_types=%d\n",defaults,hyperTypes);
  obs_data_set_int(settings,"source_width",W);
  obs_data_set_int(settings,"source_height",H);
  obs_data_set_string(settings,"audio_source","Visualizer Test Tone");
- obs_data_set_bool(settings,"enable_sound",true);
  obs_data_set_int(settings,"input_mode",0);
  obs_data_set_double(settings,"speed",0.0);
  obs_data_set_double(settings,"param_gain",2.2);
@@ -164,6 +173,37 @@ int main(int argc,char**argv) {
  bool ok=defaults&&controls&&active>80&&active<W*H/2&&response>130&&response>staticDrift*2&&transparent&&gainResponse>130;
  printf("AUDIO_VIS source_defaults=%d controls=%d active_pixels=%zu tone_response=%zu gain_response=%zu tone_drift=%zu transparent=%d PASS=%d\n",
   defaults,controls,active,response,gainResponse,staticDrift,transparent,ok);
+ // Switch presets on the same live source, keeping explicit choices intact.
+ auto* switching=obs_source_get_settings(viz);
+ obs_data_set_string(switching,"audio_source","");
+ obs_data_unset_user_value(switching,"input_mode");
+ obs_data_unset_user_value(switching,"enable_sound");
+ obs_data_unset_user_value(switching,"channel0_type");
+ obs_data_set_string(switching,"shader_file","shaders/root/source.phosphor_scope.effect");
+ auto checkDefaults=[&](bool sound,int mode,int texture) {
+   obs_source_update(viz,switching);
+   for(int i=0;i<40;i++) {
+     render(viz);
+     if(obs_data_get_bool(switching,"enable_sound")==sound &&
+        obs_data_get_int(switching,"input_mode")==mode &&
+        obs_data_get_int(switching,"channel0_type")==texture)
+       return true;
+     std::this_thread::sleep_for(25ms);
+   }
+   return false;
+ };
+ bool switchAudio=checkDefaults(true,2,3);
+ obs_data_set_bool(switching,"enable_sound",false);
+ obs_data_set_int(switching,"channel0_type",1);
+ bool explicitOverride=checkDefaults(false,0,1);
+ obs_data_unset_user_value(switching,"enable_sound");
+ obs_data_unset_user_value(switching,"channel0_type");
+ obs_data_set_string(switching,"shader_file","shaders/root/template.effect");
+ bool switchAway=checkDefaults(false,0,0);
+ obs_data_release(switching);
+ printf("AUDIO_PRESET_SWITCH audio=%d explicit_override=%d away=%d\n",
+        switchAudio,explicitOverride,switchAway);
+ ok=ok&&switchAudio&&explicitOverride&&switchAway;
  // Disconnect the selected PCM callback while both sources are still alive.
  auto* cleanup=obs_source_get_settings(viz);
  obs_data_set_string(cleanup,"audio_source","");

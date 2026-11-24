@@ -78,7 +78,14 @@ int main(int argc,char**argv) {
    obs_shutdown();return 6;
  }
  auto* input=obs_source_create("hyper_visualizer_pcm_fixture","Visualizer Test Tone",nullptr,nullptr);
- auto* viz=obs_source_create("hypershader_audio_visualizer","Native Audio Visualizer",nullptr,nullptr);
+ const char* typeId=nullptr;
+ int hyperTypes=0;
+ for(size_t i=0;obs_enum_source_types(i,&typeId);++i)
+   if(typeId&&strncmp(typeId,"hypershader_",12)==0)++hyperTypes;
+ auto* initial=obs_data_create();
+ obs_data_set_string(initial,"shader_file","shaders/root/source.phosphor_scope.effect");
+ auto* viz=obs_source_create("hypershader_source","Audio Preset",initial,nullptr);
+ obs_data_release(initial);
  if(!input||!viz) {
    fprintf(stderr,"AUDIO_VIS_SOURCE_MISSING input=%d viz=%d\n",input!=nullptr,viz!=nullptr);
    if(input)obs_source_release(input);
@@ -87,14 +94,14 @@ int main(int argc,char**argv) {
  }
  auto* settings=obs_source_get_settings(viz);
  const char* preset=obs_data_get_string(settings,"shader_file");
- bool defaults=std::string(preset)=="shaders/root/source.audio_spectrum_orbit.effect" &&
+ bool defaults=hyperTypes==3 && std::string(preset)=="shaders/root/source.phosphor_scope.effect" &&
+    obs_data_get_int(settings,"input_mode")==2 &&
     obs_data_get_int(settings,"channel0_type")==3 &&
     obs_data_get_bool(settings,"enable_sound");
- obs_data_set_string(settings,"shader_file","shaders/root/source.phosphor_scope.effect");
+ printf("AUDIO_PRESET defaults=%d registered_types=%d\n",defaults,hyperTypes);
  obs_data_set_int(settings,"source_width",W);
  obs_data_set_int(settings,"source_height",H);
  obs_data_set_string(settings,"audio_source","Visualizer Test Tone");
- obs_data_set_bool(settings,"enable_sound",true);
  obs_data_set_int(settings,"input_mode",0);
  obs_data_set_double(settings,"speed",0.0);
  obs_data_set_double(settings,"param_trace_gain",2.0);

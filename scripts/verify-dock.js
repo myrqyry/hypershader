@@ -86,9 +86,9 @@ const checks = [
 			apply.indexOf('Apply In Progress') < apply.indexOf('currentItem()'),
 	},
 	{
-		name: 'Shader Manager and Apply share a target predicate that includes audio visualizer',
+		name: 'Shader Manager and Apply share a target predicate for all three native types',
 		ok: source.includes('isShaderBuilderTargetSourceId') &&
-			source.includes('"hypershader_audio_visualizer"') &&
+			!source.includes('"hypershader_audio_visualizer"') &&
 			source.includes('if (!isShaderBuilderTargetSourceId(id))') &&
 			apply.includes('if (!isShaderBuilderTargetSourceId(sourceId))'),
 	},

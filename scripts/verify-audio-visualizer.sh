@@ -14,5 +14,6 @@ g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-audio-visualizer.cpp" \
     tail -45 "$work/result.log"
     exit 1
 }
-grep '^AUDIO_VIS' "$work/result.log"
+grep -E '^(AUDIO_VIS|AUDIO_PRESET_SWITCH)' "$work/result.log"
 grep -q 'AUDIO_VIS .*PASS=1' "$work/result.log"
+grep -q '^AUDIO_PRESET_SWITCH audio=1 explicit_override=1 away=1' "$work/result.log"

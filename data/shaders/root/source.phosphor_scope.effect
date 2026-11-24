@@ -43,3 +43,5 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     fragColor = float4(rgb, outA);
 }
 HYPERSHADER_MAINIMAGE_WRAPPER
+
+// @audio (native audio inputs)

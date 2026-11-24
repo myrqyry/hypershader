@@ -49,7 +49,6 @@ OBS_MODULE_USE_DEFAULT_LOCALE("hyperShaderFX", "en-US")
 
 extern struct obs_source_info hypershader_filter_info;
 extern struct obs_source_info hypershader_source_info;
-extern struct obs_source_info hypershader_audio_visualizer_info;
 extern struct obs_source_info hypershader_transition_info;
 
 #include "hyper_ui.h"
@@ -75,7 +74,6 @@ bool obs_module_load(void)
 	hyper_ui_init();
 	obs_register_source(&hypershader_filter_info);
 	obs_register_source(&hypershader_source_info);
-	obs_register_source(&hypershader_audio_visualizer_info);
 	obs_register_source(&hypershader_transition_info);
 	log_runtime_status();
 

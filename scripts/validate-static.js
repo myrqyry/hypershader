@@ -110,6 +110,9 @@ function checkUniqueSourceIds() {
     }
   }
 
+  const expected = ['hypershader_filter', 'hypershader_source', 'hypershader_transition'].sort();
+  if (JSON.stringify(ids.map(x => x.id).sort()) !== JSON.stringify(expected))
+    fail('Expected exactly the three native OBS source/filter/transition registrations');
   const seen = new Map();
   let unique = true;
   for (const { id, file } of ids) {

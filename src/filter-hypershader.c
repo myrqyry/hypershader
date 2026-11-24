@@ -1986,6 +1986,34 @@ static bool hs_ensure_native_mediapipe(struct hypershader_data *s)
 	return true;
 }
 
+/* Audio visualization is a preset of the normal source. Only supply
+ * defaults, never replace an explicit input, channel, or sound choice.
+ * Reset defaults on every update so switching to a non-audio shader
+ * cannot leave an implicit mix subscription or FFT channel behind. */
+static void hs_source_audio_defaults(struct hypershader_data *s, obs_data_t *settings)
+{
+    if (s->kind != HYPER_KIND_SOURCE)
+        return;
+    const char *path = obs_data_get_string(settings, "shader_file");
+    if (path && s->data_path && hs_path_in_data_dir(path, s->data_path)) {
+        size_t length = strlen(s->data_path);
+        while (length && s->data_path[length - 1] == '/')
+            --length;
+        path += length;
+        if (*path == '/')
+            ++path;
+    }
+    bool texture = path &&
+        (strcmp(path, "shaders/root/source.phosphor_scope.effect") == 0 ||
+         strcmp(path, "shaders/root/source.spectral_strata.effect") == 0);
+    bool audio = texture || (path &&
+        strcmp(path, "shaders/root/source.audio_spectrum_orbit.effect") == 0);
+    obs_data_set_default_bool(settings, "enable_sound", audio);
+    obs_data_set_default_int(settings, "input_mode",
+        audio && obs_data_get_bool(settings, "enable_sound") ? INPUT_MODE_AUDIO : INPUT_MODE_SOURCE);
+    obs_data_set_default_int(settings, "channel0_type", texture ? 3 : 0);
+}
+
 static void filter_update(void *data, obs_data_t *settings)
 {
 	struct hypershader_data *s = data;
@@ -1993,6 +2021,7 @@ static void filter_update(void *data, obs_data_t *settings)
 		return;
 
 	hyper_ui_migrate_legacy_preset(settings);
+	hs_source_audio_defaults(s, settings);
 	const bool sight_requested = obs_data_get_bool(settings, "sight_use_tracking");
 	const char *channel = obs_data_get_string(settings, "sight_tracking_channel");
 	if (!channel || !*channel) channel = "face";
@@ -5287,48 +5316,6 @@ struct obs_source_info hypershader_source_info = {
 	.get_height = source_get_height,
 	.get_properties = hyper_ui_get_source_properties,
 	.get_defaults = hyper_ui_get_source_defaults,
-	.mouse_move = filter_mouse_move,
-	.mouse_click = filter_mouse_click,
-	.video_get_color_space = source_get_color_space,
-};
-
-/* Native Audio Visualizer is a dedicated OBS Source entry backed by the same
- * audio worker, shader loader, renderer, and controls as HyperShaderFX Source.
- * Only its fresh-instance defaults differ. Existing source/scene IDs and
- * saved settings remain untouched. */
-static const char *audio_visualizer_get_name(void *unused)
-{
-	UNUSED_PARAMETER(unused);
-	return "HyperShaderFX Audio Visualizer";
-}
-
-static void audio_visualizer_get_defaults(obs_data_t *settings)
-{
-	hyper_ui_get_source_defaults(settings);
-	obs_data_set_default_string(settings, "shader_file", "shaders/root/source.audio_spectrum_orbit.effect");
-	obs_data_set_default_bool(settings, "enable_sound", true);
-	/* Channel 0 carries a 512x2 texture: spectrum row 0, PCM row 1.
-	 * This is only a default for the dedicated visualizer source, not
-	 * a change to regular shader instances or explicitly saved inputs. */
-	obs_data_set_default_int(settings, "channel0_type", 3);
-	/* With no selected individual source, follow OBS's master audio mix. */
-	obs_data_set_default_int(settings, "input_mode", INPUT_MODE_AUDIO);
-}
-
-struct obs_source_info hypershader_audio_visualizer_info = {
-	.id = "hypershader_audio_visualizer",
-	.type = OBS_SOURCE_TYPE_INPUT,
-	.output_flags = OBS_SOURCE_VIDEO | OBS_SOURCE_INTERACTION | OBS_SOURCE_CUSTOM_DRAW,
-	.get_name = audio_visualizer_get_name,
-	.create = source_create_wrapper,
-	.destroy = filter_destroy,
-	.update = filter_update,
-	.video_tick = filter_tick,
-	.video_render = source_video_render,
-	.get_width = source_get_width,
-	.get_height = source_get_height,
-	.get_properties = hyper_ui_get_source_properties,
-	.get_defaults = audio_visualizer_get_defaults,
 	.mouse_move = filter_mouse_move,
 	.mouse_click = filter_mouse_click,
 	.video_get_color_space = source_get_color_space,

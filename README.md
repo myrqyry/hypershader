@@ -26,11 +26,10 @@ porting paths, not the underlying runtime architecture.
 
 ### Native OBS effect types
 
-HyperShaderFX registers four OBS-facing effect types:
+HyperShaderFX registers three OBS-facing effect types:
 
 - **HyperShaderFX Filter** — apply shaders to an existing source.
-- **HyperShaderFX Source** — render procedural or generated shader visuals directly.
-- **Audio Visualizer Source** — a native transparent spectrum source backed by the plugin's FFT/audio engine.
+- **HyperShaderFX Source** — render procedural graphics, audio visualizers, and reactive sprites directly.
 - **HyperShaderFX Transition** — render shader-driven A/B scene transitions with native transition progress and audio mixing.
 
 The same authoring model and most host controls are shared across those lanes.
@@ -79,7 +78,7 @@ The existing native OBS audio engine drives eight measured bands, live PCM
 and FFT textures. Optional kick/snare-region energy, spectral flux,
 approximate tempo, beat phase, bar phase and confidence signals reuse the
 same worker. Drum-region names do not imply isolated instruments. The
-Audio Visualizer Source includes spectrum orbit, phosphor oscilloscope and
+The ordinary Source includes spectrum orbit, phosphor oscilloscope and
 spectral history strata. See [audio visualizer](docs/audio-visualizer.md).
 
 ### Original Instruments — first-party shader collection
@@ -454,7 +453,7 @@ See [development notes](DEVELOPMENT.md) for build details.
 - [`docs/SHADER-NAMING.md`](docs/SHADER-NAMING.md) — categories, friendly names and compatibility behavior
 - [`docs/GLOBAL-SHADER-COMPOSITING.md`](docs/GLOBAL-SHADER-COMPOSITING.md) — global animation and compositing controls
 - [`docs/TWO-BUFFER-GRAPH.md`](docs/TWO-BUFFER-GRAPH.md) — native A/B feedback graph
-- [`docs/audio-visualizer.md`](docs/audio-visualizer.md) — audio visualizer source
+- [`docs/audio-visualizer.md`](docs/audio-visualizer.md) — audio visualization presets
 - [`docs/SHADER-NOTES-CREDITS.md`](docs/SHADER-NOTES-CREDITS.md) — per-effect notes, credits and provenance
 
 ## Contributing

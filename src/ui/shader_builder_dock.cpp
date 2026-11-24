@@ -768,8 +768,7 @@ QString ShaderBuilderDock::getShaderFolderPath() const
 static bool isShaderBuilderTargetSourceId(const char *id)
 {
 	return id && (strcmp(id, "hypershader_filter") == 0 || strcmp(id, "hypershader_source") == 0 ||
-		      strcmp(id, "hypershader_transition") == 0 ||
-		      strcmp(id, "hypershader_audio_visualizer") == 0);
+		      strcmp(id, "hypershader_transition") == 0);
 }
 
 bool ShaderBuilderDock::enumActiveShaderSources(void *param, obs_source_t *source)
@@ -805,8 +804,6 @@ void ShaderBuilderDock::addActiveShaderItem(const QString &name, const QString &
 		label += " [Source]";
 	else if (sourceId == "hypershader_transition")
 		label += " [Transition]";
-	else if (sourceId == "hypershader_audio_visualizer")
-		label += " [Audio Visualizer]";
 
 	auto *item = new QListWidgetItem(label, m_activeShadersList);
 	item->setData(Qt::UserRole, uuid);
