@@ -113,8 +113,9 @@ static void drain_ui() {
 }
 
 int main(int argc,char** argv) {
- if(argc!=4&&argc!=5)return 2;
- const std::string mode=argc==5?argv[4]:"default";
+ if(argc<4||argc>6)return 2;
+ const std::string mode=argc>=5?argv[4]:"default";
+ if(mode=="channels"&&argc!=6)return 2;
  if(!obs_startup("en-US",nullptr,nullptr))return 1;
  obs_set_ui_task_handler(queue_ui);
  obs_video_info info{};
@@ -131,12 +132,50 @@ int main(int argc,char** argv) {
  auto* primary=active;
  auto* data=obs_data_create();
  obs_data_set_string(data,"shader_file",argv[3]);
+ if(mode=="channels"){
+  obs_data_set_int(data,"channel0_type",1);
+  obs_data_set_string(data,"channel0_file",argv[5]);
+ }
  auto* filter=obs_source_create("hypershader_filter","Two buffers",data,nullptr);
  obs_data_release(data);
  if(!source||!filter){obs_shutdown();return 1;}
  obs_source_filter_add(source,filter);
  obs_source_inc_showing(source);
  auto fixed=make_frame(30);
+ if(mode=="channels"){
+  auto check=[&](int expected){
+   size_t valid=0;
+   for(int i=0;i<40;i++){
+    auto out=render(source);drain_ui();
+    if(i>20&&out.size()==W*H*4){
+     bool match=true;
+     for(size_t j=0;j<out.size();j+=4){
+      if(abs(int(out[j])-expected)>3||abs(int(out[j+1])-expected)>3||
+         abs(int(out[j+2])-expected)>3||out[j+3]!=255){match=false;break;}
+     }
+     if(match)++valid;
+    }
+    std::this_thread::sleep_for(40ms);
+   }
+   return valid;
+  };
+  size_t present=check(255);
+  auto* opts=obs_source_get_settings(filter);
+  obs_data_set_int(opts,"channel0_type",0);
+  obs_source_update(filter,opts);obs_data_release(opts);
+  size_t absent=check(64);
+  opts=obs_source_get_settings(filter);
+  obs_data_set_int(opts,"channel0_type",1);
+  obs_data_set_string(opts,"channel0_file",argv[5]);
+  obs_source_update(filter,opts);obs_data_release(opts);
+  size_t restored=check(255);
+  bool pass=present==19&&absent==19&&restored==19;
+  obs_source_dec_showing(source);obs_source_filter_remove(source,filter);
+  obs_source_release(filter);obs_source_release(source);drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_CHANNELS present="<<present<<" absent="<<absent<<" restored="<<restored<<" PASS="<<pass<<"\n";
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<pass<<"\n";
+  return pass?0:1;
+ }
  if(mode=="budget"){
   obs_enter_graphics();
   gs_texture_set_image(primary->texture,fixed.data(),W*4,false);

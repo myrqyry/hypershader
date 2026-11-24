@@ -4426,6 +4426,25 @@ static void graph_bind_controls(struct hypershader_data *s)
  * before rendering so subsequent stages never see uninitialized uniforms. */
 static void graph_bind_builtins(struct hypershader_data *s, uint32_t width, uint32_t height, bool flow, bool flow_step, bool sight_selected)
 {
+	/* A technique loop may clear mutable bindings. All graph stages share
+	 * the same already-updated external resources, without decoding or
+	 * advancing animation again. A missing input has a defined black
+	 * fallback and zero logical dimensions. */
+	for (unsigned i = 0; i < CHANNEL_COUNT; i++) {
+		gs_texture_t *tex = s->channel_textures[i];
+		if (s->ep_iChannel[i])
+			gs_effect_set_texture(s->ep_iChannel[i], tex ? tex : s->dummy_texture);
+		if (s->ep_iChannelResolution[i]) {
+			const float w = tex ? (float)gs_texture_get_width(tex) : 0.0f;
+			const float h = tex ? (float)gs_texture_get_height(tex) : 0.0f;
+			struct vec4 dims;
+			vec4_set(&dims, w, h, h > 0.0f ? w / h : 1.0f, 0.0f);
+			gs_effect_set_vec4(s->ep_iChannelResolution[i], &dims);
+		}
+		if (s->ep_iChannelTime[i])
+			gs_effect_set_float(s->ep_iChannelTime[i], s->time_accumulator);
+	}
+
     bind_reaction_state(s);
     bind_sprite_atlases(s);
 	for (int i = 0; i < 8; i++) {

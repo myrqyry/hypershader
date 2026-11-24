@@ -1,0 +1,39 @@
+// External image channel must be available independently in every pass.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iChannel0;
+uniform float4 iChannelResolution0;
+uniform float iChannelTime0;
+uniform texture2d iBufferA;
+uniform texture2d iBufferB;
+uniform texture2d iBufferAPrevious;
+uniform texture2d iBufferBPrevious;
+uniform int iBufferADivisor = 2;
+uniform int iBufferBDivisor = 4;
+sampler_state simSampler { Filter=Point; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+ VertData o; o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float channelStatus(float2 uv) {
+ float4 c=iChannel0.Sample(simSampler,uv);
+ if(length(iChannelResolution0.xy-float2(3.0,2.0))<0.01 &&
+    length(c.rgb-float3(0.25,0.5,0.75))<0.04 && iChannelTime0>0.0)
+  return 1.0;
+ if(length(iChannelResolution0.xy)<0.01 && length(c.rgb)<0.01)
+  return 0.25;
+ return 0.0;
+}
+float4 PSA(VertData v):TARGET {
+ return float4(channelStatus(v.uv),0,0,1);
+}
+float4 PSB(VertData v):TARGET {
+ return float4(iBufferA.Sample(simSampler,v.uv).r,channelStatus(v.uv),0,1);
+}
+float4 PSFinal(VertData v):TARGET {
+ float2 ab=iBufferB.Sample(simSampler,v.uv).rg;
+ return float4(ab,channelStatus(v.uv),1);
+}
+technique BufferA { pass {vertex_shader=VSDefault(v);pixel_shader=PSA(v);} }
+technique BufferB { pass {vertex_shader=VSDefault(v);pixel_shader=PSB(v);} }
+technique Draw { pass {vertex_shader=VSDefault(v);pixel_shader=PSFinal(v);} }

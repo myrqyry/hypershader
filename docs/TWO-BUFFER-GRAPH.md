@@ -70,6 +70,26 @@ BufferB contain 648,000 pixels in total per history pair, versus
 memory depends on format and full-resolution capture/output allocations.
 It is not an end-to-end performance benchmark.
 
+## External texture inputs in every stage
+
+The graph rebinds existing `iChannel0` through `iChannel3` textures,
+their `iChannelResolution0` through `iChannelResolution3` dimensions
+(float4: width, height, aspect, reserved), and their
+`iChannelTime0` through `iChannelTime3` values before each technique.
+All stages use the same current resource snapshot; rebinding does not
+decode or advance an animated image again. Missing textures sample
+opaque black and report zero width and height. Check logical dimensions
+before sampling a missing resource. Channel time follows the existing
+shader clock rather than a media decoder clock.
+
+The native test loads a generated 3x2 image, verifies every output pixel
+after sampling the channel in all three passes, clears the input, and
+restores it. This qualifies static file input and live replacement in
+the graph on Linux/OpenGL. Live OBS source capture, audio textures, GIF
+animation and other backends still need graph-specific verification.
+There are still only four user-configurable input slots; independent
+named resources are a future extension, not provided by this change.
+
 ## Resource allocation budget
 
 Graph color-target payload is capped per filter instance at 512 MiB.
@@ -134,7 +154,7 @@ the requested allocation. Graph mode remains intentionally opt-in.
   GPU drivers, and Windows/macOS were not established by Mesa tests.
 - No arbitrary pass graph, dynamic/adaptive per-pass resolution, general
   compute shaders, or spatial ML input integration yet.
-- Graph-enabled effects with external channels or per-pass audio
-  control need dedicated hardware/integration regression coverage.
+- Graph-enabled live-source/audio/animated channels and per-pass audio
+  controls need dedicated integration regression coverage.
 
 - The budget is per-filter logical graph color payload only; aggregate VRAM admission and backend-specific overhead are not accounted for.

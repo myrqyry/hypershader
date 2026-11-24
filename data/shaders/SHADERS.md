@@ -145,7 +145,9 @@ Use `iBufferAFormat = 1` or `iBufferBFormat = 1` for RGBA16F state.
 The shader's `iResolution` is the active pass size; the float3
 `iBufferAResolution`, `iBufferBResolution` and `iGraphOutputResolution`
 describe each respective resource. These are runtime bindings, not
-controls. Optionally declare an integer `iGraphBudgetMiB` (1–512) to
+controls. Existing iChannel texture, resolution and time uniforms are
+rebound in every graph pass. Missing textures report zero logical size
+and sample black. Optionally declare an integer `iGraphBudgetMiB` (1–512) to
 reduce the default logical graph allocation cap of 512 MiB. See the [two-buffer graph contract](../../docs/TWO-BUFFER-GRAPH.md)
 for declarations, defaults, reset behavior and verification scope.
 

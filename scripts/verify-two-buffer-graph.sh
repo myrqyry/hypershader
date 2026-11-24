@@ -9,11 +9,24 @@ inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-two-buffer-graph.cpp" -o "$work/test" $(pkg-config --libs libobs)
 export MESA_SHADER_CACHE_DISABLE=true
 export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+# Generate a known 3x2 RGBA texture locally; no third-party fixture asset.
+python3 - "$work/channel.png" <<'PYPNG'
+import struct,sys,zlib
+from pathlib import Path
+def chunk(kind,data):
+    return struct.pack(">I",len(data))+kind+data+struct.pack(">I",zlib.crc32(kind+data))
+row=b"\x00"+bytes([64,128,191,255])*3
+Path(sys.argv[1]).write_bytes(b"\x89PNG\r\n\x1a\n"+
+    chunk(b"IHDR",struct.pack(">IIBBBBB",3,2,8,6,0,0,0))+
+    chunk(b"IDAT",zlib.compress(row*2))+chunk(b"IEND",b""))
+PYPNG
 run_case() {
     local shader="$1" mode="$2" log="$work/$2.log"
     mkdir -p "$work/$mode/home" "$work/$mode/config"
+    local extra=()
+    if [[ "$mode" == channels ]]; then extra+=("$work/channel.png"); fi
     (cd "$work/$mode" && HOME="$work/$mode/home" XDG_CONFIG_HOME="$work/$mode/config" \
-      xvfb-run -a -s '-screen 0 1280x720x24' timeout 23 "$work/test" "$module" "$data" "$shader" "$mode") >"$log" 2>&1 || {
+      xvfb-run -a -s '-screen 0 1280x720x24' timeout 23 "$work/test" "$module" "$data" "$shader" "$mode" "${extra[@]}") >"$log" 2>&1 || {
         tail -130 "$log"; return 1;
     }
     echo "TEST graph $mode"
@@ -35,4 +48,5 @@ else
     run_case "$data/shaders/tests/two_buffer_scaled_graph.effect" scaled
     run_case "$data/shaders/tests/two_buffer_invalid_graph.effect" invalid
     run_case "$data/shaders/tests/two_buffer_budget_graph.effect" budget
+    run_case "$data/shaders/tests/two_buffer_channel_graph.effect" channels
 fi

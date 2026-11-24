@@ -56,12 +56,22 @@ until the source fits again; recovery starts with clean history.
 Verified in the real Linux graph with repeated reject/recover cycles.
 This is not an aggregate GPU memory manager or driver allocation estimate.
 
+## Qualified fourth slice: external texture binding across passes
+
+Existing four channel resources, their true dimensions and their shader
+clock are rebound for every graph stage. Missing resources have an
+opaque-black fallback and zero logical dimensions. A real image channel
+pixel test failed before the fix and now passes for present, removed
+and restored states. This does not yet expand the number of texture
+slots, implement arbitrary named bindings, or establish live OBS source
+capture. See [the graph contract](TWO-BUFFER-GRAPH.md).
+
 ## Capability matrix
 
 | Primitive | Current boundary | Next |
 | --- | --- | --- |
 | Scalar/vector math, timing, UV, controls | Existing; portable sampling qualified | Audit actual library functions and portable intrinsics, verify numerical parity |
-| Texture inputs | Four input channels, source image, auxiliary signals | Named resource descriptors, type/size/format/color-space declarations |
+| Texture inputs | Four input channels, source image, auxiliary signals; graph image rebind verified | Named resource descriptors, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
 | Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph for filter/source/transition; aggregate resource admission |
