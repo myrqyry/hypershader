@@ -82,6 +82,7 @@ enum hypershader_instance_kind {
 
 struct shader_param_meta {
 	char *name;
+	int input_slot; /* 0: not a named input; 1..4: slot + 1; -1: invalid */
 	float min;
 	float max;
 	float step;
@@ -231,6 +232,7 @@ struct hypershader_data {
 	char *channel_files[4];           /* The path to the selected image file (saved setting) */
 	int channel_types[4];             /* 0=None, 1=Image, 2=Source */
 	bool channel_required[4];         /* Whether the shader code actually uses this channel */
+	bool channel_named[4];            /* Named binding uses this existing slot */
 
 	hs_channel_image_t channel_images[4]; /* Runtime-compatible OBS image state */
 	gs_texture_t *channel_textures[4]; /* The final texture to bind (either from image or source) */
@@ -413,11 +415,6 @@ struct hypershader_data {
 	_Atomic bool audio_reconfig_pending;
 	int next_audio_fft_size;
 	int next_audio_window_type;
-
-	/* Per-instance metadata cache (avoids static race conditions) */
-	char *cached_metadata_path;
-	shader_meta_t cached_metadata;
-	struct shader_capabilities cached_capabilities;
 
 	/* FFT resources (kissfft wrapper) */
 	int fft_n;               /* FFT size (power of two) */
@@ -662,6 +659,31 @@ static inline bool is_builtin_uniform(const char *name)
 	    strncmp(name, "hs_buffer_b", 11) == 0)
 		return true;
 	return false;
+}
+
+/* Resource-owned uniforms are not editable scalar/color controls.
+ * Callers hold the existing metadata or graphics lock. */
+static inline bool hs_named_input_owns(const shader_meta_t *meta, const char *name)
+{
+	if (!meta || !name)
+		return false;
+	for (size_t i = 0; i < meta->num; ++i) {
+		const struct shader_param_meta *m = &meta->array[i];
+		if (m->input_slot <= 0 || !m->name)
+			continue;
+		size_t n = strlen(m->name);
+		if (strncmp(name, m->name, n) == 0 &&
+		    (name[n] == '\0' || strcmp(name + n, "_resolution") == 0 ||
+		     strcmp(name + n, "_time") == 0))
+			return true;
+	}
+	return false;
+}
+
+static inline bool hs_runtime_uniform(const struct hypershader_data *s, const char *name)
+{
+	return is_builtin_uniform(name) ||
+	       (s && s->metadata_rc && hs_named_input_owns(&s->metadata_rc->meta, name));
 }
 
 static inline shader_meta_t *hypershader_data_get_metadata(struct hypershader_data *s)

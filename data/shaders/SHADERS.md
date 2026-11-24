@@ -123,6 +123,20 @@ The HyperShader runtime automatically provides these standard uniforms:
 
 ---
 
+Named texture inputs can use arbitrary shader-owned names while retaining
+the existing four slots:
+
+```hlsl
+uniform texture2d normalMap; // @input 0 @label "Normal Map"
+uniform float4 normalMap_resolution;
+uniform float normalMap_time;
+```
+
+Use unique slots (0–3); do not also sample the corresponding numbered
+texture. The companions are optional read-only bindings. See
+[named texture inputs](../../docs/NATIVE-SHADER-API.md#named-texture-inputs)
+for limits and saved-settings behavior.
+
 ## 5. Persistence (Feedback Loops) 🔄
 
 To create trails or motion blur, read from the **previous frame**:

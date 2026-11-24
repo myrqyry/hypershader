@@ -24,7 +24,7 @@ run_case() {
     local shader="$1" mode="$2" log="$work/$2.log"
     mkdir -p "$work/$mode/home" "$work/$mode/config"
     local extra=()
-    if [[ "$mode" == channels ]]; then extra+=("$work/channel.png"); fi
+    if [[ "$mode" == channels || "$mode" == named ]]; then extra+=("$work/channel.png"); fi
     (cd "$work/$mode" && HOME="$work/$mode/home" XDG_CONFIG_HOME="$work/$mode/config" \
       xvfb-run -a -s '-screen 0 1280x720x24' timeout 40 "$work/test" "$module" "$data" "$shader" "$mode" "${extra[@]}") >"$log" 2>&1 || {
         tail -130 "$log"; return 1;
@@ -37,8 +37,11 @@ run_case() {
     elif [[ "$mode" == budget ]]; then
         grep -q 'Graph resource budget exceeded' "$log"
         test "$(grep -c 'Graph resource budget exceeded' "$log")" -eq 2
-    elif [[ "$mode" == live-source ]]; then
-        grep -q 'Loaded shader: shaders/tests/live_channel_source.effect' "$log"
+    elif [[ "$mode" == named ]]; then
+        grep -q 'Invalid named texture input' "$log"
+        grep -q 'TWO_BUFFER_NAMED_RELOAD retained=19 switched=19 reset_labels=1 PASS=1' "$log"
+    elif [[ "$mode" == live-source || "$mode" == named-live-source ]]; then
+        grep -q "Loaded shader: shaders/tests/$(basename "$shader")" "$log"
     else
         grep -q 'Two-buffer graph enabled: A -> B -> Draw' "$log"
     fi
@@ -51,6 +54,8 @@ else
     run_case "$data/shaders/tests/two_buffer_invalid_graph.effect" invalid
     run_case "$data/shaders/tests/two_buffer_budget_graph.effect" budget
     run_case "$data/shaders/tests/two_buffer_channel_graph.effect" channels
+    run_case "$data/shaders/tests/two_buffer_named_graph.effect" named
     run_case "$data/shaders/tests/two_buffer_live_channel_graph.effect" live
     run_case "$data/shaders/tests/live_channel_source.effect" live-source
+    run_case "$data/shaders/tests/named_live_channel_source.effect" named-live-source
 fi

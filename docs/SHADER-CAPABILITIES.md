@@ -44,7 +44,7 @@ signed and above-one history values, last-texel addressing, per-instance
 isolation, user controls and compositing, odd-dimension resizing and invalid descriptors.
 See [the graph contract](TWO-BUFFER-GRAPH.md). HDR input/output behavior,
 other platforms, dynamic scaling, and end-to-end performance are not
-yet qualified. Named resource descriptors and a general scheduler remain next.
+yet qualified. A general scheduler remains next.
 
 ## Qualified third slice: resource admission
 
@@ -78,12 +78,24 @@ identity changes and removal. Hidden-source activation, transition
 capture, arbitrary cross-shader cycles and HDR/platform parity are
 not qualified.
 
+## Qualified sixth slice: named texture bindings
+
+Native `@input N` texture declarations map author-defined uniform names
+and optional labels onto the four existing resource slots. Optional
+`_resolution` and `_time` companions expose read-only runtime data.
+The Linux graph test verifies two independent named image inputs,
+actual dimensions/timing, labels, clearing/restoring, rejected duplicate
+assignments and switching back to numbered inputs. A named standalone
+source also passes the existing live capture lifecycle checks.
+See [native shader vocabulary](NATIVE-SHADER-API.md#named-texture-inputs).
+An expanded slot pool and name-keyed saved settings remain future work.
+
 ## Capability matrix
 
 | Primitive | Current boundary | Next |
 | --- | --- | --- |
 | Scalar/vector math, timing, UV, controls | Existing; portable sampling qualified | Audit actual library functions and portable intrinsics, verify numerical parity |
-| Texture inputs | Four input channels, source image, auxiliary signals; graph image rebind and showing-source/scene capture verified | Named resource descriptors, type/size/format/color-space declarations |
+| Texture inputs | Four named or numbered input slots, source image, auxiliary signals; image and showing-source capture verified | Expand resource pool, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
 | Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph for filter/source/transition; aggregate resource admission |

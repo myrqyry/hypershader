@@ -29,8 +29,43 @@ remain unchanged. This is a shader API change, not a new renderer.
 
 The full graph allocation contract lives in [Two-buffer graph](TWO-BUFFER-GRAPH.md).
 See [shader authoring](../data/shaders/SHADERS.md) for declarations and
-sampling primitives. Named author-defined texture resources are still
-planned; the four slots remain for now.
+sampling primitives.
+
+## Named texture inputs
+
+Declare a texture with a same-line `@input N` annotation (N = 0 through
+3), optionally with `@label`. The shader can use its own semantic name,
+and OBS exposes the existing input picker under that label:
+
+```hlsl
+uniform texture2d normalMap; // @input 0 @label "Normal Map"
+uniform float4 normalMap_resolution;
+uniform float normalMap_time;
+
+uniform texture2d roughnessMap; // @input 2 @label "Roughness Map"
+uniform float4 roughnessMap_resolution;
+```
+
+Resolution (float4) and time (float) companions are optional read-only
+runtime values, automatically recognized by the exact suffix. Resolution
+contains actual texture width, height, aspect and a reserved component;
+time is the existing shader clock. If a companion is absent, its
+numbered runtime counterpart is still available. Do not use both
+spellings of the same binding. Missing named textures use the black
+fallback and zero logical width/height. Existing `hs_input_atlasN`
+sprite metadata remains slot-based.
+
+The annotation assigns the existing slot; this is not an additional
+resource pool. Saved `channelN_*` settings, images, showing OBS sources,
+and audio options stay in the same resource manager. Assignments and
+settings remain slot-based even when switching shaders. Use unique
+slots and names; do not also reference the corresponding numbered
+texture, including through macros. Native `hs_` names, text/audio
+metadata and defaults cannot be used for named texture declarations.
+The two transition A/B slots are reserved. Invalid declarations fail
+shader loading and retain the last working effect. Extra named slots,
+persistent settings keyed by semantic name, named atlas companions,
+and transition support have not been qualified.
 
 Simple native effects can use:
 

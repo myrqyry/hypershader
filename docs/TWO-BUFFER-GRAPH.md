@@ -111,8 +111,14 @@ capture, explicit UUID selection, restoration and removal. They verify
 every output pixel in all three graph passes and in a standalone source.
 Hardware camera/media behavior, HDR sampling, arbitrary graph cycles and
 hidden-source activation remain to be qualified.
-There are still only four user-configurable input slots; independent
-named resources are a future extension, not provided by this change.
+The four existing slots also accept shader-defined texture names and
+read-only resolution/time companions using the
+[native named input contract](NATIVE-SHADER-API.md#named-texture-inputs).
+Names and labels are resolved before shader replacement, and each pass
+uses the same existing image or live capture. The native test covers
+two named image inputs in all three passes, removal/restoration,
+duplicate-slot rejection without losing the old shader, switching back
+to numbered inputs, and a named live standalone source.
 
 ## Resource allocation budget
 

@@ -32,7 +32,10 @@
     "  uniform float strength = 1.0;\n" \
     "- Supported UI tags include @min, @max, @step, @default, @label, @group, and @list.\n" \
     "- If an effect consumes audio, use @audio metadata on the relevant uniform(s) so HyperShader exposes the audio chooser.\n" \
-    "- Referencing hs_input0..hs_input3 makes HyperShader expose only those channel inputs. Do not reference unused channels.\n\n" \
+    "- Referencing hs_input0..hs_input3 exposes those numbered texture inputs. Prefer meaningful names for material resources.\n" \
+    "- Example: uniform texture2d normalMap; // @input 0 @label \"Normal Map\"\n" \
+    "- Optional uniform float4 normalMap_resolution; and uniform float normalMap_time; are read-only runtime inputs.\n" \
+    "- Assign each named texture a unique existing slot 0..3. Do not also reference its numbered texture. Transition A/B reserve slots 0 and 1.\n\n" \
     "### Portability:\n" \
     "- Prefer OBS-compatible HLSL/Cg-style effect syntax or HyperShader's native aliases/helpers.\n" \
     "- Avoid non-portable matrix tricks and dynamic array-heavy code. Keep loop bounds constant when practical.\n\n" \

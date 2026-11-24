@@ -1655,10 +1655,7 @@ static void filter_destroy(void *data)
 		bfree(s->shader_path);
 		s->shader_path = NULL;
 	}
-	if (s->cached_metadata_path) {
-		bfree(s->cached_metadata_path);
-		s->cached_metadata_path = NULL;
-	}
+
 	if (s->shader_error) {
 		bfree(s->shader_error);
 		s->shader_error = NULL;
@@ -1695,11 +1692,6 @@ static void filter_destroy(void *data)
 		metadata_rc_release(&rc);
 	}
 
-	if (s->cached_metadata.array) {
-		log_debug_direct("filter_destroy: Freeing cached_metadata");
-		free_shader_metadata(&s->cached_metadata);
-		memset(&s->cached_metadata, 0, sizeof(s->cached_metadata));
-	}
 
 	if (s->meta_audio_values) {
 		bfree(s->meta_audio_values);
@@ -1962,54 +1954,10 @@ static shader_resource_t *load_shader_resource(struct hypershader_data *s, const
 		return res;
 	}
 
-	/* 1. Metadata & Caching */
-	/* Check cache validity */
-	bool cache_valid = (s->cached_metadata_path && strcmp(s->cached_metadata_path, path_dup) == 0);
-
-	if (!cache_valid) {
-		/* Update cache - Modifies s->cached_metadata (Safe as this is pre-swap helper) */
-		if (s->cached_metadata_path)
-			bfree(s->cached_metadata_path);
-		s->cached_metadata_path = bstrdup(path_dup);
-		free_shader_metadata(&s->cached_metadata);
-		memset(&s->cached_capabilities, 0, sizeof(s->cached_capabilities));
-
-		blog(LOG_INFO, "[HyperShader][DEBUG_META] Parsing metadata from: %s", path_dup);
-		memset(s->channel_required, 0, sizeof(s->channel_required)); // Cleared for parsing
-		parse_shader_metadata(path_dup, &s->cached_metadata, s->channel_required, &s->cached_capabilities);
-		blog(LOG_INFO, "[HyperShader][DEBUG_META] Parsed %zu metadata entries", s->cached_metadata.num);
-	} else {
-		blog(LOG_DEBUG, "[HyperShader] Using cached metadata for: %s", path_dup);
-	}
-	new_capabilities = s->cached_capabilities;
-
-	/* Capture channel usage from cache (or from just parsed) */
-	memcpy(res->channel_required, s->channel_required, sizeof(res->channel_required));
-
-	/* Prepare new metadata (Deep copy for instance) */
-	for (size_t i = 0; i < s->cached_metadata.num; i++) {
-		struct shader_param_meta m_copy = s->cached_metadata.array[i];
-		/* Deep copy strings */
-		if (m_copy.name)
-			m_copy.name = bstrdup(m_copy.name);
-		if (m_copy.label)
-			m_copy.label = bstrdup(m_copy.label);
-		if (m_copy.audio_tag)
-			m_copy.audio_tag = bstrdup(m_copy.audio_tag);
-		if (m_copy.list_options)
-			m_copy.list_options = bstrdup(m_copy.list_options);
-		if (m_copy.group)
-			m_copy.group = bstrdup(m_copy.group);
-		if (m_copy.visible_if)
-			m_copy.visible_if = bstrdup(m_copy.visible_if);
-		if (m_copy.default_val_str)
-			m_copy.default_val_str = bstrdup(m_copy.default_val_str);
-
-		/* IMPORTANT: Reset cached effect param pointer (prevents use-after-free) */
-		m_copy.cached_param = NULL;
-
-		da_push_back(new_meta, &m_copy);
-	}
+	/* Parse into candidate-owned state. A rejected shader must never
+	 * mutate the currently loaded resource contract; same-path edits and
+	 * changed includes must not reuse stale metadata. */
+	parse_shader_metadata(path_dup, &new_meta, res->channel_required, &new_capabilities);
 
 	/* Prepare audio values buffer */
 	if (new_meta.num > 0) {
@@ -2104,6 +2052,50 @@ static shader_resource_t *load_shader_resource(struct hypershader_data *s, const
 		if (new_meta.array[i].has_default && new_meta.array[i].cached_param) {
 			apply_parameter_default(new_meta.array[i].cached_param, &new_meta.array[i]);
 		}
+	}
+
+	/* Validate named slots against the compiled effect before publishing it.
+	 * Existing capture/decoding/settings remain the sole resource owner. */
+	for (size_t i = 0; i < new_meta.num; ++i) {
+		struct shader_param_meta *m = &new_meta.array[i];
+		if (!m->input_slot)
+			continue;
+		struct gs_effect_param_info info = {0};
+		if (m->cached_param)
+			gs_effect_get_param_info(m->cached_param, &info);
+		const int slot = m->input_slot - 1;
+		if (slot < 0 || slot >= CHANNEL_COUNT ||
+		    (s->kind == HYPER_KIND_TRANSITION && slot < 2) ||
+		    !m->cached_param || info.type != GS_SHADER_PARAM_TEXTURE ||
+		    !m->name || is_builtin_uniform(m->name) || strncmp(m->name, "hs_", 3) == 0 ||
+		    m->is_text || m->audio_tag || m->has_default ||
+		    res->channel_required[slot]) {
+			res->error = bstrdup("Invalid named texture input: use a unique @input 0..3 on a texture2d uniform; numbered references or reserved transition slots cannot share it");
+			goto cleanup_error;
+		}
+		const char *suffixes[] = {"_resolution", "_time"};
+		const enum gs_shader_param_type types[] = {GS_SHADER_PARAM_VEC4, GS_SHADER_PARAM_FLOAT};
+		for (unsigned j = 0; j < 2; ++j) {
+			char companion[160];
+			snprintf(companion, sizeof(companion), "%s%s", m->name, suffixes[j]);
+			gs_eparam_t *param = gs_effect_get_param_by_name(res->effect, companion);
+			if (!param)
+				continue;
+			gs_effect_get_param_info(param, &info);
+			if (info.type != types[j]) {
+				res->error = bstrdup("Invalid named texture companion: resolution must be float4 and time must be float");
+				goto cleanup_error;
+			}
+			for (size_t k = 0; k < new_meta.num; ++k) {
+				const struct shader_param_meta *other = &new_meta.array[k];
+				if (other->name && strcmp(other->name, companion) == 0 &&
+				    (other->input_slot || other->audio_tag || other->is_text || other->has_default)) {
+					res->error = bstrdup("Named texture companions are read-only runtime uniforms");
+					goto cleanup_error;
+				}
+			}
+		}
+		res->channel_required[slot] = true;
 	}
 
 	/* 4. Create RC Wrapper */
@@ -2272,7 +2264,7 @@ static void filter_update(void *data, obs_data_t *settings)
 			struct gs_effect_param_info info;
 			gs_effect_get_param_info(param, &info);
 
-			if (is_builtin_uniform(info.name))
+			if (hs_runtime_uniform(s, info.name))
 				continue;
 
 			/* If this is a mapped audio uniform, skip it too (controlled by audio logic) */
@@ -3328,7 +3320,7 @@ static void shader_load_complete_task(void *param)
 		 * Transfer saved numeric uniforms onto the compiled effect now. */
 		for (size_t i=0;i<res->rc->meta.num;i++) {
 			struct shader_param_meta *m=&res->rc->meta.array[i];
-			if (!m->cached_param || !m->name)continue;
+			if (!m->cached_param || !m->name || hs_named_input_owns(&res->rc->meta, m->name))continue;
 			char name[128];
 			snprintf(name,sizeof(name),"param_%s",m->name);
 			if (!obs_data_has_user_value(task->settings,name))continue;
@@ -3494,6 +3486,7 @@ static void shader_load_complete_task(void *param)
 			char name[32];
 			snprintf(name, sizeof(name), "hs_input%d", i);
 			s->ep_input[i] = gs_effect_get_param_by_name(s->effect, name);
+			s->channel_named[i] = false;
 			snprintf(name, sizeof(name), "hs_input_resolution%d", i);
 			s->ep_input_resolution[i] = gs_effect_get_param_by_name(s->effect, name);
             snprintf(name,sizeof(name),"hs_input_atlas%d",i);
@@ -3507,6 +3500,26 @@ static void shader_load_complete_task(void *param)
 			char name[32];
 			snprintf(name, sizeof(name), "hs_input_time%d", i);
 			s->ep_input_time[i] = gs_effect_get_param_by_name(s->effect, name);
+		}
+
+		/* Named uniforms replace the numbered texture handle for the slot.
+		 * Dimensions, timing, atlas and resource settings stay shared. */
+		for (size_t i = 0; i < s->metadata_rc->meta.num; ++i) {
+			const struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
+			if (m->input_slot > 0) {
+				const int slot = m->input_slot - 1;
+				char companion[160];
+				s->ep_input[slot] = m->cached_param;
+				s->channel_named[slot] = true;
+				snprintf(companion, sizeof(companion), "%s_resolution", m->name);
+				gs_eparam_t *resolution = gs_effect_get_param_by_name(s->effect, companion);
+				if (resolution)
+					s->ep_input_resolution[slot] = resolution;
+				snprintf(companion, sizeof(companion), "%s_time", m->name);
+				gs_eparam_t *time = gs_effect_get_param_by_name(s->effect, companion);
+				if (time)
+					s->ep_input_time[slot] = time;
+			}
 		}
 
 		/* Cache audio band parameters */
@@ -4377,7 +4390,8 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 			channel_res[i].z = (h > 0) ? w / h : 0.0f;
 		}
 		if (s->ep_input[i])
-			gs_effect_set_texture(s->ep_input[i], tex ? tex : (s->channel_types[i] == 2 ? s->dummy_texture : NULL));
+			gs_effect_set_texture(s->ep_input[i], tex ? tex :
+				(s->channel_named[i] || s->channel_types[i] == 2 ? s->dummy_texture : NULL));
 	}
 
 	/* Apply Audio Metadata Bindings with Dynamics */
@@ -4386,7 +4400,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 		for (size_t i = 0; i < s->metadata_rc->meta.num && i < s->meta_audio_count; i++) {
 			struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
 
-			if (m->audio_tag && m->cached_param) {
+			if (m->audio_tag && m->cached_param && !hs_named_input_owns(&s->metadata_rc->meta, m->name)) {
 				float target = 0.0f;
 				const char *tag = m->audio_tag;
 				if (hs_strcasecmp(tag, "bass") == 0)
@@ -4469,7 +4483,7 @@ static void graph_bind_controls(struct hypershader_data *s)
 		return;
 	for (size_t i = 0; i < s->metadata_rc->meta.num; i++) {
 		struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
-		if (!m->name || !m->cached_param || is_builtin_uniform(m->name))
+		if (!m->name || !m->cached_param || hs_runtime_uniform(s, m->name))
 			continue;
 		struct gs_effect_param_info info;
 		gs_effect_get_param_info(m->cached_param, &info);

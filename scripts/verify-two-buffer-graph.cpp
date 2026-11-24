@@ -114,8 +114,10 @@ static void drain_ui() {
 
 int main(int argc,char** argv) {
  if(argc<4||argc>6)return 2;
- const std::string mode=argc>=5?argv[4]:"default";
- if(mode=="channels"&&argc!=6)return 2;
+ const std::string requestedMode=argc>=5?argv[4]:"default";
+ const bool namedSource=requestedMode=="named-live-source";
+ const std::string mode=namedSource?"live-source":requestedMode;
+ if((mode=="channels"||mode=="named")&&argc!=6)return 2;
  if(!obs_startup("en-US",nullptr,nullptr))return 1;
  obs_set_ui_task_handler(queue_ui);
  obs_video_info info{};
@@ -154,9 +156,10 @@ int main(int argc,char** argv) {
   obs_data_set_string(data,"channel0_source",obs_source_get_name(live));
   obs_data_set_string(data,"channel0_uuid",obs_source_get_uuid(live));
  }
- if(mode=="channels"){
+ if(mode=="channels"||mode=="named"){
   obs_data_set_int(data,"channel0_type",1);
   obs_data_set_string(data,"channel0_file",argv[5]);
+  if(mode=="named"){obs_data_set_int(data,"channel2_type",1);obs_data_set_string(data,"channel2_file",argv[5]);}
  }
  if(mode=="live-source"){
   obs_data_set_int(data,"source_width",W);
@@ -168,7 +171,7 @@ int main(int argc,char** argv) {
  if(mode!="live-source")obs_source_filter_add(source,filter);
  obs_source_inc_showing(mode=="live-source"?filter:source);
  auto fixed=make_frame(30);
- if(mode=="channels"||mode=="live"||mode=="live-source"){
+ if(mode=="channels"||mode=="named"||mode=="live"||mode=="live-source"){
   auto check=[&](int expected){
    size_t valid=0;
    for(int i=0;i<40;i++){
@@ -187,6 +190,14 @@ int main(int argc,char** argv) {
   };
   if(mode=="live"||mode=="live-source"){
    size_t present=check(255);
+   bool labels=true;
+   if(namedSource){
+    auto* props=obs_source_properties(filter);
+    auto* group=obs_properties_get(props,"channel0_group");
+    labels=group&&obs_property_visible(group)&&std::string(obs_property_description(group))=="Displacement Map"
+      &&!obs_properties_get(props,"param_displacementMap_resolution")&&!obs_properties_get(props,"param_displacementMap_time");
+    obs_properties_destroy(props);
+   }
    fill(liveData,191,64,128,60,34);
    size_t changed=check(191);
    obs_source_dec_showing(live);
@@ -234,7 +245,7 @@ int main(int argc,char** argv) {
    size_t removed=check(64);
    obs_source_dec_showing(live);
    obs_source_release(live);
-   bool pass=present==19&&changed==19&&hidden==19&&shown==19&&self==19&&cycle==19&&scene==19&&restored==19&&removed==19;
+   bool pass=present==19&&changed==19&&hidden==19&&shown==19&&self==19&&cycle==19&&scene==19&&restored==19&&removed==19&&labels;
    obs_source_dec_showing(owner);
    if(mode!="live-source")obs_source_filter_remove(source,filter);
    if(mode=="live-source")obs_source_remove(filter);
@@ -249,6 +260,19 @@ int main(int argc,char** argv) {
    return pass?0:1;
   }
   size_t present=check(255);
+  bool labels=true;
+  if(mode=="named"){
+   auto* props=obs_source_properties(filter);
+   auto* a=obs_properties_get(props,"channel0_group");
+   auto* b=obs_properties_get(props,"channel2_group");
+   auto* unused=obs_properties_get(props,"channel1_group");
+   labels=a&&b&&unused&&obs_property_visible(a)&&obs_property_visible(b)&&!obs_property_visible(unused)
+      &&std::string(obs_property_description(a))=="Normal Map"
+      &&std::string(obs_property_description(b))=="Roughness Map"
+      &&!obs_properties_get(props,"param_normalMap_resolution")
+      &&!obs_properties_get(props,"param_normalMap_time");
+   obs_properties_destroy(props);
+  }
   auto* opts=obs_source_get_settings(filter);
   obs_data_set_int(opts,"channel0_type",0);
   obs_source_update(filter,opts);obs_data_release(opts);
@@ -258,10 +282,31 @@ int main(int argc,char** argv) {
   obs_data_set_string(opts,"channel0_file",argv[5]);
   obs_source_update(filter,opts);obs_data_release(opts);
   size_t restored=check(255);
-  bool pass=present==19&&absent==19&&restored==19;
+  size_t retained=19, switched=19;
+  bool resetLabels=true;
+  if(mode=="named"){
+   auto choose=[&](const char* file){
+    auto* settings=obs_source_get_settings(filter);
+    std::string path=std::string(argv[2])+"/shaders/tests/"+file;
+    obs_data_set_string(settings,"shader_file",path.c_str());
+    obs_source_update(filter,settings);obs_data_release(settings);
+   };
+   choose("two_buffer_named_invalid.effect");
+   retained=check(255);
+   choose("two_buffer_channel_graph.effect");
+   switched=check(255);
+   auto* props=obs_source_properties(filter);
+   auto* a=obs_properties_get(props,"channel0_group");
+   auto* b=obs_properties_get(props,"channel2_group");
+   resetLabels=a&&b&&obs_property_visible(a)&&!obs_property_visible(b)
+      &&std::string(obs_property_description(a))=="Texture Input 0";
+   obs_properties_destroy(props);
+  }
+  bool pass=present==19&&absent==19&&restored==19&&labels&&retained==19&&switched==19&&resetLabels;
+  if(mode=="named")std::cout<<"TWO_BUFFER_NAMED_RELOAD retained="<<retained<<" switched="<<switched<<" reset_labels="<<resetLabels<<" PASS="<<pass<<"\n";
   obs_source_dec_showing(source);obs_source_filter_remove(source,filter);
   obs_source_release(filter);obs_source_release(source);drain_ui();obs_shutdown();
-  std::cout<<"TWO_BUFFER_CHANNELS present="<<present<<" absent="<<absent<<" restored="<<restored<<" PASS="<<pass<<"\n";
+  std::cout<<"TWO_BUFFER_CHANNELS present="<<present<<" absent="<<absent<<" restored="<<restored<<" labels="<<labels<<" PASS="<<pass<<"\n";
   std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<pass<<"\n";
   return pass?0:1;
  }

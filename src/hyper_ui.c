@@ -275,7 +275,7 @@ void properties_add_shader_params(obs_properties_t *props, struct hypershader_da
 		if (!name || !name[0])
 			continue;
 
-		if (is_builtin_uniform(name))
+		if (hs_runtime_uniform(s, name))
 			continue;
 
 		/* Skip parameters controlled by audio mappings */
@@ -746,7 +746,7 @@ void properties_add_input_settings(obs_properties_t *props, struct hypershader_d
 
         /* Referenced textures are optional user-supplied inputs, not
          * necessarily active sources; never mark None as "Active". */
-        bool used = (s && s->channel_required[i]);
+        bool used = false;
 
 		char key_group[64];
 		char key_type[64];
@@ -758,6 +758,21 @@ void properties_add_input_settings(obs_properties_t *props, struct hypershader_d
 		snprintf(key_file, sizeof(key_file), "channel%d_file", i);
 		snprintf(key_src, sizeof(key_src), "channel%d_source", i);
 		snprintf(label, sizeof(label), "Texture Input %d", i);
+        if (s) {
+            pthread_mutex_lock(&s->mutex);
+            used = s->channel_required[i];
+            if (s->metadata_rc) {
+                for (size_t m = 0; m < s->metadata_rc->meta.num; ++m) {
+                    const struct shader_param_meta *meta = &s->metadata_rc->meta.array[m];
+                    if (meta->input_slot == i + 1) {
+                        snprintf(label, sizeof(label), "%s", meta->label ? meta->label : meta->name);
+                        break;
+                    }
+                }
+            }
+            pthread_mutex_unlock(&s->mutex);
+        }
+
 
 		/* Create a sub-properties container and add it as a collapsible group */
 		obs_properties_t *ch_props = obs_properties_create();
@@ -783,7 +798,7 @@ void properties_add_input_settings(obs_properties_t *props, struct hypershader_d
         obs_property_t *group = obs_properties_add_group(
             props, key_group, label, OBS_GROUP_NORMAL, ch_props);
         obs_property_set_long_description(group,
-            "Optional texture input for hs_input0..hs_input3. Select an image,"
+            "Optional shader texture input. Select an image,"
             " OBS video source or audio spectrum, or leave None for no texture."
             " Live video inputs must already be showing; hidden, removed and"
             " self-referential sources are unavailable. Live capture is supported"

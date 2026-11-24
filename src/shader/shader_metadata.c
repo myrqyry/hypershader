@@ -197,6 +197,31 @@ static void metadata_scan_channel_use(const char *line, bool *in_block_comment,
     }
 }
 
+/* Explicit inline @input N annotation, outside quoted label strings.
+ * Zero is absent, positive is slot+1, negative is malformed. */
+static int metadata_input_slot(const char *comment)
+{
+    int slot = 0;
+    bool quoted = false;
+    for (const char *p = comment; p && *p; ++p) {
+        if (*p == '"' && (p == comment || p[-1] != '\\'))
+            quoted = !quoted;
+        if (quoted || strncmp(p, "@input", 6) != 0 ||
+            (isalnum((unsigned char)p[6]) || p[6] == '_'))
+            continue;
+        if (slot || !isspace((unsigned char)p[6]))
+            return -1;
+        const char *value = p + 6;
+        while (*value && isspace((unsigned char)*value))
+            ++value;
+        if (*value < '0' || *value > '3' ||
+            (value[1] && !isspace((unsigned char)value[1])))
+            return -1;
+        slot = *value - '0' + 1;
+    }
+    return slot;
+}
+
 void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int depth, bool *channel_usage,
 				    struct shader_capabilities *capabilities, char **include_guard,
 				    size_t *guard_count, size_t max_guard)
@@ -264,6 +289,7 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
     bool in_channel_block_comment = false;
 
 	while (fgets(line, sizeof(line), f)) {
+        const bool started_in_block = in_channel_block_comment;
         metadata_scan_channel_use(line, &in_channel_block_comment, channel_usage);
 
 		char *inc = metadata_include_directive(line, &in_include_block_comment);
@@ -359,6 +385,22 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 
 		struct shader_param_meta m = {0};
 		m.name = name;
+        /* Named bindings must be attached to a real, single-line uniform
+         * declaration, not a comment or inherited preceding annotation. */
+        const char *active = line;
+        while (isspace((unsigned char)*active)) ++active;
+        if (!started_in_block && uni == active && comment_ptr &&
+            comment_ptr > p && !in_channel_block_comment &&
+            !strstr(line, "/*"))
+        {
+            m.input_slot = metadata_input_slot(comment_ptr);
+            const char *type = active + 7;
+            while (isspace((unsigned char)*type)) ++type;
+            if (m.input_slot && (strncmp(type, "texture2d", 9) != 0 ||
+                                 !isspace((unsigned char)type[9])))
+                m.input_slot = -1;
+        }
+
 		m.min = 0.0f;
 		m.max = 1.0f;
 		m.step = 0.01f;
