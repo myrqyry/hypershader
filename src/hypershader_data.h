@@ -295,6 +295,8 @@ struct hypershader_data {
 	uint32_t graph_divisor[2]; /* immutable shader-declared 1, 2, 4 or 8 */
 	bool graph_float16[2];
 	bool graph_config_valid;
+	uint32_t graph_budget_mib;
+	bool graph_budget_rejected;
 	gs_eparam_t *ep_graph_buffer_resolution[2], *ep_graph_output_resolution;
 
 	unsigned graph_write_idx;
@@ -655,6 +657,7 @@ static inline bool is_builtin_uniform(const char *name)
 	if (strcmp(name, "iPreviousFrame") == 0)
 		return true;
 	if (strcmp(name, "iGraphFrame") == 0 || strcmp(name, "iGraphOutputResolution") == 0 ||
+	    strcmp(name, "iGraphBudgetMiB") == 0 ||
 	    strncmp(name, "iBufferA", 8) == 0 ||
 	    strncmp(name, "iBufferB", 8) == 0)
 		return true;

@@ -21,6 +21,9 @@ run_case() {
     grep -q '^TWO_BUFFER_RUNTIME_PASS=1' "$log"
     if [[ "$mode" == invalid ]]; then
         grep -q 'Invalid graph buffer A descriptor' "$log"
+    elif [[ "$mode" == budget ]]; then
+        grep -q 'Graph resource budget exceeded' "$log"
+        test "$(grep -c 'Graph resource budget exceeded' "$log")" -eq 2
     else
         grep -q 'Two-buffer graph enabled: A -> B -> Draw' "$log"
     fi
@@ -31,4 +34,5 @@ else
     run_case "$data/shaders/tests/two_buffer_graph.effect" default
     run_case "$data/shaders/tests/two_buffer_scaled_graph.effect" scaled
     run_case "$data/shaders/tests/two_buffer_invalid_graph.effect" invalid
+    run_case "$data/shaders/tests/two_buffer_budget_graph.effect" budget
 fi

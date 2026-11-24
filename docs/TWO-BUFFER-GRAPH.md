@@ -70,6 +70,34 @@ BufferB contain 648,000 pixels in total per history pair, versus
 memory depends on format and full-resolution capture/output allocations.
 It is not an end-to-end performance benchmark.
 
+## Resource allocation budget
+
+Graph color-target payload is capped per filter instance at 512 MiB.
+The optional shader declaration `uniform int iGraphBudgetMiB = 64;`
+can request a smaller cap (integer 1 through 512). This is immutable
+metadata, not a live control. The calculation reserves the full-size
+input capture, both full-size compositor surfaces, a transparent pixel,
+and both ping-pong textures for each intermediate buffer using its
+actual format and rounded dimensions. Integer arithmetic rejects overflow.
+
+The cap is a conservative logical texture-payload estimate, not a GPU
+VRAM measurement or global limit. Driver allocation overhead, input
+channels, ML resources, other filters and OBS's output target are not
+included. An over-budget graph releases its graph targets and passes the
+upstream image through without silently changing its resolution or
+precision. Logging occurs once per rejection episode. When the source
+size fits again, fresh histories are allocated; old state is not reused.
+Existing full-resolution 4K SDR and RGBA16F graphs fit the default
+budget; some 8K graphs now require smaller intermediate buffers.
+
+The budget calculator also has a dependency-free C test:
+
+    cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-graph-budget.c -o /tmp/hs-graph-budget-test
+    /tmp/hs-graph-budget-test
+
+The native graph runner checks rejection, recovery, repeat rejection,
+and clean reset after resizing with a deliberately small 1 MiB budget.
+
 ## Included native effect
 data/shaders/root/ink_reaction_buffers.effect demonstrates a
 Gray-Scott-inspired reaction and diffusion state in BufferA and a
@@ -109,4 +137,4 @@ the requested allocation. Graph mode remains intentionally opt-in.
 - Graph-enabled effects with external channels or per-pass audio
   control need dedicated hardware/integration regression coverage.
 
-- Divisors and two histories bound the number of allocations; explicit GPU memory budgeting is still planned.
+- The budget is per-filter logical graph color payload only; aggregate VRAM admission and backend-specific overhead are not accounted for.

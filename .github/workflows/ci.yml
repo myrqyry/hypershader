@@ -31,6 +31,10 @@ jobs:
         run: python3 .github/scripts/test-ci-sdk-contract.py
       - name: Verify candidate source export boundary
         run: python3 scripts/test-stage-release-source.py
+      - name: Verify graph allocation budget
+        run: |
+          cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-graph-budget.c -o "$RUNNER_TEMP/hs-graph-budget-test"
+          "$RUNNER_TEMP/hs-graph-budget-test"
       - name: Verify shader settings contracts
         run: node --test scripts/test-verify-settings.js && node scripts/verify-settings.js
       - name: Verify Linux installer layouts

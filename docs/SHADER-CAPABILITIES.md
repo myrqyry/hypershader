@@ -44,8 +44,17 @@ signed and above-one history values, last-texel addressing, per-instance
 isolation, user controls and compositing, odd-dimension resizing and invalid descriptors.
 See [the graph contract](TWO-BUFFER-GRAPH.md). HDR input/output behavior,
 other platforms, dynamic scaling, and end-to-end performance are not
-yet qualified. Named resource descriptors and a general scheduler with
-explicit memory budgets remain next.
+yet qualified. Named resource descriptors and a general scheduler remain next.
+
+## Qualified third slice: resource admission
+
+The native graph has a default 512 MiB logical color-target payload cap
+per instance, with a shader-declared lower limit. It counts the capture,
+persistent buffers and conservative compositor reserve using overflow-safe
+arithmetic. Oversized graphs release their render targets and bypass
+until the source fits again; recovery starts with clean history.
+Verified in the real Linux graph with repeated reject/recover cycles.
+This is not an aggregate GPU memory manager or driver allocation estimate.
 
 ## Capability matrix
 
@@ -55,8 +64,8 @@ explicit memory budgets remain next.
 | Texture inputs | Four input channels, source image, auxiliary signals | Named resource descriptors, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
-| Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph and explicit memory budget for filter/source/transition |
-| Temporal state | Previous output and two persistent buffers with sized initial histories and resize reset | Named history, lifetime and memory budgets |
+| Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph for filter/source/transition; aggregate resource admission |
+| Temporal state | Previous output and two persistent buffers with sized initial histories and resize reset | Named history, lifetime and aggregate memory budgets |
 | Scene buffers | Sight depth, flow, matte and tracking; estimated, not engine G-buffer | Unified sampling contract with valid/fresh/provenance and camera-space metadata |
 | Geometry | Fullscreen draw and shader-side helpers | Subdivided planes, mesh vertex attributes, transforms, depth and instance drawing |
 | Materials | Lighting/material helper files, not a general pipeline | Common surface record, light evaluation, normal/tangent conventions |
@@ -71,8 +80,9 @@ explicit memory budgets remain next.
    descriptions aligned.
 2. Independent pass dimensions/formats, resource-resolution uniforms
    and resize tests are implemented for the two-buffer filter.
-   Add explicit resource budgets and generalize the scheduler from
-   that verified contract.
+   Per-instance logical graph allocation budget is implemented.
+   Generalize the scheduler from that verified contract; aggregate GPU
+   admission remains planned.
 3. Expose scene inputs through one provider-independent API. Never label
    monocular estimated depth, optical flow or derived normals as genuine
    game-engine geometry. Missing/stale inputs must be explicit.

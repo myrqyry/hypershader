@@ -58,6 +58,8 @@ static inline int hs_access_exists(const char *path)
 #include "interop/sight_subject_stats.h"
 #include "interop/sight_gpu.h"
 #include "interop/sight_flow_step.h"
+#include "shader/graph-budget.h"
+#include <inttypes.h>
 
 /* Clear all two-buffer histories after resize, shader switch or teardown.
  * Caller must be inside the OBS graphics context. */
@@ -77,6 +79,21 @@ static void graph_reset(struct hypershader_data *s)
 	s->graph_flow_announced = false;
 	s->graph_width = s->graph_height = 0;
 	s->graph_valid = false;
+}
+
+/* Release only the graph's render targets. Shared effect, channels and
+ * non-graph assets have independent lifetimes. */
+static void graph_release_targets(struct hypershader_data *s)
+{
+	graph_reset(s);
+	gs_texrender_t **targets[] = {&s->feedback_input, &s->output_composite_fx,
+				       &s->output_composite_base};
+	for (unsigned i = 0; i < 3; i++) {
+		if (*targets[i]) {
+			gs_texrender_destroy(*targets[i]);
+			*targets[i] = NULL;
+		}
+	}
 }
 
 /* Read immutable resource descriptors once, on successful shader replacement.
@@ -114,6 +131,15 @@ static bool graph_read_descriptor(gs_effect_t *effect, const char *name, int fal
 
 static bool graph_configure(struct hypershader_data *s)
 {
+	int budget;
+	if (!graph_read_descriptor(s->effect, "iGraphBudgetMiB", HS_GRAPH_MAX_MIB, &budget) ||
+	    budget < 1 || budget > HS_GRAPH_MAX_MIB) {
+		blog(LOG_ERROR, "[HyperShader] Invalid graph resource budget: expected int 1..%d MiB",
+		     HS_GRAPH_MAX_MIB);
+		return false;
+	}
+	s->graph_budget_mib = (uint32_t)budget;
+
 	const char *divisor_names[] = {"iBufferADivisor", "iBufferBDivisor"};
 	const char *format_names[] = {"iBufferAFormat", "iBufferBFormat"};
 	const char *resolution_names[] = {"iBufferAResolution", "iBufferBResolution"};
@@ -146,11 +172,6 @@ static bool graph_configure(struct hypershader_data *s)
 	return true;
 }
 
-static uint32_t graph_extent(uint32_t full, uint32_t divisor)
-{
-	return full / divisor + (full % divisor != 0);
-}
-
 static void graph_set_resolution(gs_eparam_t *param, uint32_t width, uint32_t height)
 {
 	if (param) {
@@ -165,8 +186,8 @@ static void graph_bind_resolutions(struct hypershader_data *s, uint32_t width, u
 {
 	for (unsigned i = 0; i < 2; ++i)
 		graph_set_resolution(s->ep_graph_buffer_resolution[i],
-				     graph_extent(width, s->graph_divisor[i]),
-				     graph_extent(height, s->graph_divisor[i]));
+				     hs_graph_extent(width, s->graph_divisor[i]),
+				     hs_graph_extent(height, s->graph_divisor[i]));
 	graph_set_resolution(s->ep_graph_output_resolution, width, height);
 }
 
@@ -3310,7 +3331,11 @@ static void shader_load_complete_task(void *param)
 		gs_effect_get_technique(s->effect, "Draw") &&
 		s->ep_iBufferA && s->ep_iBufferB &&
 		s->ep_iBufferAPrevious && s->ep_iBufferBPrevious;
-		graph_reset(s);
+		if (s->graph_enabled)
+			graph_release_targets(s);
+		else
+			graph_reset(s);
+		s->graph_budget_rejected = false;
 		s->graph_config_valid = !s->graph_enabled || graph_configure(s);
 		if (s->graph_enabled && s->graph_config_valid)
 			blog(LOG_INFO, "[HyperShader] Two-buffer graph enabled: A -> B -> Draw");
@@ -4723,17 +4748,43 @@ static bool output_render_composited_filter(struct hypershader_data *s,
     return fx && output_draw_composited(s, base, fx, width, height, format);
 }
 
+/* Preflight the complete logical allocation before touching the GPU graph.
+ * Never silently downscale or lower precision; that changes shader semantics. */
+static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint32_t height,
+				enum gs_color_format format)
+{
+	const uint32_t output_bpp = format == GS_RGBA16F ? 8 : 4;
+	const uint32_t buffer_bpp[2] = {
+		s->graph_float16[0] ? 8 : output_bpp,
+		s->graph_float16[1] ? 8 : output_bpp
+	};
+	const uint64_t limit = (uint64_t)s->graph_budget_mib * HS_GRAPH_MIB;
+	uint64_t bytes = 0;
+	const bool valid = hs_graph_budget_bytes(width, height, output_bpp,
+						s->graph_divisor, buffer_bpp, &bytes);
+	if (!valid || bytes > limit) {
+		if (!s->graph_budget_rejected) {
+			graph_release_targets(s);
+			blog(LOG_WARNING, "[HyperShader] Graph resource budget exceeded (%ux%u, bytes=%" PRIu64
+			     ", limit=%" PRIu64 ", overflow=%d); passing upstream source",
+			     width, height, bytes, limit, !valid);
+			s->graph_budget_rejected = true;
+		}
+		return false;
+	}
+	if (s->graph_budget_rejected) {
+		s->graph_budget_rejected = false;
+		blog(LOG_INFO, "[HyperShader] Graph resource budget recovered (%ux%u)", width, height);
+	}
+	return true;
+}
+
 static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target,
 				uint32_t width, uint32_t height, enum gs_color_format format)
 {
 	if (s->graph_width != width || s->graph_height != height ||
 	    s->graph_format != format) {
-		graph_reset(s);
-		/* Captured inputs also need a matching color format. */
-		if (s->feedback_input) {
-			gs_texrender_destroy(s->feedback_input);
-			s->feedback_input = NULL;
-		}
+		graph_release_targets(s);
 		s->graph_width = width;
 		s->graph_height = height;
 		s->graph_format = format;
@@ -4801,8 +4852,8 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 		for (unsigned i = 0; i < 2; ++i) {
 			gs_texrender_t *history = s->graph_history[i][read];
 			gs_texrender_reset(history);
-			if (!gs_texrender_begin(history, graph_extent(width, s->graph_divisor[i]),
-						graph_extent(height, s->graph_divisor[i])))
+			if (!gs_texrender_begin(history, hs_graph_extent(width, s->graph_divisor[i]),
+						hs_graph_extent(height, s->graph_divisor[i])))
 				return false;
 			gs_clear(GS_CLEAR_COLOR, &black, 0.0f, 0);
 			gs_texrender_end(history);
@@ -4815,8 +4866,8 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 	/* The declared resolution must match the actual resource, even on frame 0. */
 	gs_texture_t *previous[] = {previous_a, previous_b};
 	for (unsigned i = 0; i < 2; ++i) {
-		if (gs_texture_get_width(previous[i]) != graph_extent(width, s->graph_divisor[i]) ||
-		    gs_texture_get_height(previous[i]) != graph_extent(height, s->graph_divisor[i]) ||
+		if (gs_texture_get_width(previous[i]) != hs_graph_extent(width, s->graph_divisor[i]) ||
+		    gs_texture_get_height(previous[i]) != hs_graph_extent(height, s->graph_divisor[i]) ||
 		    gs_texture_get_color_format(previous[i]) != (s->graph_float16[i] ? GS_RGBA16F : format))
 			return false;
 	}
@@ -4827,8 +4878,8 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 	gs_texture_t *current_a = NULL, *current_b = NULL;
 	for (unsigned pass = 0; pass < 2; pass++) {
 		gs_texrender_t *destination = s->graph_history[pass][write];
-		const uint32_t pass_width = graph_extent(width, s->graph_divisor[pass]);
-		const uint32_t pass_height = graph_extent(height, s->graph_divisor[pass]);
+		const uint32_t pass_width = hs_graph_extent(width, s->graph_divisor[pass]);
+		const uint32_t pass_height = hs_graph_extent(height, s->graph_divisor[pass]);
 		gs_texrender_reset(destination);
 		if (!gs_texrender_begin(destination, pass_width, pass_height))
 			return false;
@@ -5004,7 +5055,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 	}
 
 	if (s->graph_enabled) {
-		if (!s->graph_config_valid) {
+		if (!s->graph_config_valid || !graph_budget_allows(s, width, height, format)) {
 			obs_source_skip_video_filter(s->context);
 			return;
 		}

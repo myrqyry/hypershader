@@ -137,6 +137,53 @@ int main(int argc,char** argv) {
  obs_source_filter_add(source,filter);
  obs_source_inc_showing(source);
  auto fixed=make_frame(30);
+ if(mode=="budget"){
+  obs_enter_graphics();
+  gs_texture_set_image(primary->texture,fixed.data(),W*4,false);
+  obs_leave_graphics();
+  size_t bypass=0;
+  for(int i=0;i<40;i++){
+   auto out=render(source);drain_ui();
+   if(i>20&&diff(out,fixed)==0)++bypass;
+   std::this_thread::sleep_for(50ms);
+  }
+  obs_enter_graphics();
+  primary->width=W/2;primary->height=H/2;
+  obs_leave_graphics();
+  const size_t center=4*(H/4*W+W/4);
+  int seed=-1,mature=-1;
+  size_t valid=0;
+  for(int i=0;i<30;i++){
+   auto out=render(source);drain_ui();
+   if(out.size()==W*H*4){
+    if(i==0)seed=out[center];
+    mature=out[center];
+    if(out[center+2]<=3)++valid;
+   }
+   std::this_thread::sleep_for(50ms);
+  }
+  obs_enter_graphics();
+  primary->width=W;primary->height=H;
+  obs_leave_graphics();
+  size_t again=0;
+  for(int i=0;i<8;i++){
+   auto out=render(source);drain_ui();
+   if(diff(out,fixed)==0)++again;
+   std::this_thread::sleep_for(50ms);
+  }
+  obs_enter_graphics();
+  primary->width=W/2;primary->height=H/2;
+  obs_leave_graphics();
+  auto restarted=render(source);drain_ui();
+  int reset=restarted.size()==W*H*4?restarted[center]:999;
+  bool pass=bypass==19&&seed>=0&&seed<15&&mature>seed+20&&valid==30&&again==8&&reset<15;
+  obs_source_dec_showing(source);obs_source_filter_remove(source,filter);
+  obs_source_release(filter);obs_source_release(source);drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_BUDGET bypass="<<bypass<<" seed="<<seed<<" mature="<<mature<<" valid="<<valid
+           <<" bypass_again="<<again<<" reset="<<reset<<" PASS="<<pass<<"\n";
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<pass<<"\n";
+  return pass?0:1;
+ }
  if(mode=="invalid"){
   size_t unchanged=0;
   obs_enter_graphics();
