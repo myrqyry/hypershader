@@ -1,0 +1,39 @@
+// HyperShaderFX shared native compositor.
+// Two independently transparent layers: incoming/base and effect output.
+// This is a postprocess; it never mutates temporal shader feedback history.
+uniform float4x4 ViewProj;
+uniform texture2d baseImage;
+uniform texture2d effectImage;
+uniform float baseOpacity;
+uniform float effectOpacity;
+uniform int blendMode;
+sampler_state layerSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+ VertData o;o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float3 blendColor(float3 base,float3 effect) {
+ if(blendMode==1)return base+effect;
+ if(blendMode==2)return 1.0-(1.0-base)*(1.0-effect);
+ if(blendMode==3)return base*effect;
+ if(blendMode==4) {
+   return lerp(2.0*base*effect,1.0-2.0*(1.0-base)*(1.0-effect),step(0.5,base));
+ }
+ if(blendMode==5)return abs(base-effect);
+ return effect;
+}
+float4 PSComposite(VertData v):TARGET {
+ float4 base=baseImage.Sample(layerSampler,v.uv);
+ float4 effect=effectImage.Sample(layerSampler,v.uv);
+ float baseA=saturate(base.a*baseOpacity);
+ float effectA=saturate(effect.a*effectOpacity);
+ float3 combined=blendColor(base.rgb,effect.rgb);
+ // When the base is transparent, preserve effect RGB rather than blending
+ // it against a fictitious black background.
+ float3 effectBlended=lerp(effect.rgb,combined,baseA);
+ float3 premul=base.rgb*baseA*(1.0-effectA)+effectBlended*effectA;
+ float alpha=baseA+effectA*(1.0-baseA);
+ float3 rgb=alpha>0.00001?premul/alpha:float3(0,0,0);
+ return float4(rgb,alpha);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSComposite(v);}}

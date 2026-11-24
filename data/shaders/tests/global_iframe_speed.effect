@@ -1,0 +1,15 @@
+// Deliberate regression fixture: animation must advance through iFrame ONLY.
+// The host must bind the right native int uniform and scale it with speed.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform int iFrame;
+sampler_state pointSample { Filter=Point;AddressU=Clamp;AddressV=Clamp;};
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+ VertData o; o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float4 PSMain(VertData v):TARGET {
+ float phase=frac(float(iFrame)*0.017);
+ return float4(phase,0.2+phase*0.4,1.0-phase,1.0);
+}
+technique Draw { pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);} }

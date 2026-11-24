@@ -1,0 +1,38 @@
+// @label "Sight Matte Interop Probe"
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSegmentation;
+uniform float iSightMattePresent;
+uniform float iSightSubjectPresent;
+uniform float4 iSightSubjectBounds;
+uniform float2 iSightSubjectCenter;
+uniform float iSightSubjectCoverage;
+sampler_state sourceSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+    VertData o; o.pos=mul(float4(v.pos.xyz,1),ViewProj); o.uv=v.uv; return o;
+}
+float4 PSMain(VertData v):TARGET {
+    if (iSightMattePresent<0.5) {
+        // A stale subject uniform must not survive invalidation.
+        if (iSightSubjectPresent>0.5 || dot(abs(iSightSubjectBounds),float4(1,1,1,1))>0 ||
+            dot(abs(iSightSubjectCenter),float2(1,1))>0 || iSightSubjectCoverage>0)
+            return float4(0,1,0,1);
+        return image.Sample(sourceSampler,v.uv);
+    }
+    // Encode each geometry component independently in a small top strip.
+    if (v.uv.y<0.04) {
+        float value=0;
+        if (v.uv.x<0.125) value=iSightSubjectBounds.x;
+        else if (v.uv.x<0.25) value=iSightSubjectBounds.y;
+        else if (v.uv.x<0.375) value=iSightSubjectBounds.z;
+        else if (v.uv.x<0.5) value=iSightSubjectBounds.w;
+        else if (v.uv.x<0.625) value=iSightSubjectCenter.x;
+        else if (v.uv.x<0.75) value=iSightSubjectCenter.y;
+        else if (v.uv.x<0.875) value=iSightSubjectCoverage;
+        else value=iSightSubjectPresent;
+        return float4(value,1,0,1);
+    }
+    return float4(iSegmentation.Sample(sourceSampler,v.uv).r,0,1,1);
+}
+technique Draw { pass { vertex_shader=VSDefault(v); pixel_shader=PSMain(v); } }

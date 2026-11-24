@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail_condition="never"
+mode="format"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --fail-*)
+      fail_condition="${1#--fail-}"
+      shift
+      ;;
+    --check)
+      mode="check"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if ! command -v clang-format >/dev/null 2>&1; then
+  echo "clang-format executable not found in PATH" >&2
+  exit 127
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "No files provided" >&2
+  exit 2
+fi
+
+rc=0
+if [[ "${mode}" == "check" ]]; then
+  for f in "$@"; do
+    if ! clang-format --dry-run --Werror "$f"; then
+      rc=1
+    fi
+  done
+else
+  for f in "$@"; do
+    clang-format -i "$f"
+  done
+fi
+
+if [[ $rc -ne 0 ]]; then
+  case "${fail_condition}" in
+    never)
+      echo "clang-format check failed (non-fatal: --fail-never)" >&2
+      exit 0
+      ;;
+    error|warning)
+      exit $rc
+      ;;
+    *)
+      echo "Unknown fail condition: ${fail_condition}" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+exit 0

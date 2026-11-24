@@ -1,0 +1,35 @@
+// @label "Sight: Text Scramble"
+// @description "Replace recognized text areas with opaque black or animated synthetic signal noise. Best-effort, not guaranteed redaction."
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSightTextMask;
+uniform float iSightTextPresent;
+uniform int iSightTextCount;
+uniform float3 iResolution;
+uniform float iTime;
+uniform int treatment; // @label "Treatment (0 Noise, 1 Black, 2 Mask)" @min 0 @max 2 @step 1 @default 0 @group "Text"
+uniform float block_size; // @label "Noise Block Size" @min 2 @max 48 @step 1 @default 8 @group "Text"
+uniform float rate; // @label "Noise Updates / Second" @min 0 @max 30 @step 1 @default 12 @group "Text"
+uniform float4 noise_color; // @label "Noise Color" @default "0.15,0.85,1.0,1.0" @group "Text"
+sampler_state sourceSampler {Filter=Linear;AddressU=Clamp;AddressV=Clamp;};
+sampler_state maskSampler {Filter=Point;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v) {
+    VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
+}
+float4 PSMain(VertData v):TARGET {
+    float4 original=image.Sample(sourceSampler,v.uv);
+    if(iSightTextPresent<0.5)return original;
+    float m=iSightTextMask.Sample(maskSampler,v.uv).r;
+    if(treatment==2)return float4(m,m,m,1);
+    if(iSightTextCount==0||m<0.5)return original;
+    if(treatment==1)return float4(0,0,0,1);
+    // Generate replacement pixels. Do not resample the underlying glyphs.
+    float2 p=floor(v.uv*max(iResolution.xy,float2(1,1))/max(block_size,1.0));
+    float t=floor(iTime*max(rate,0.0));
+    float n=frac(sin(dot(p+float2(t*1.13,t*2.37),float2(12.9898,78.233)))*43758.5453);
+    float strip=step(0.72,frac(sin(p.y*39.43+t*18.17)*43758.5453));
+    float value=0.08+0.92*step(0.55,n)*(0.45+0.55*strip);
+    return float4(saturate(noise_color.rgb*value),1);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

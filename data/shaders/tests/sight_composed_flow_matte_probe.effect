@@ -1,0 +1,19 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSegmentation;
+uniform float iSightMattePresent;
+uniform texture2d iSightFlow;
+uniform float iSightFlowPresent;
+uniform float iSightFlowCoverage;
+sampler_state pointSampler {Filter=Point;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v){VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;}
+float4 PSMain(VertData v):TARGET {
+    // Header encodes per-signal availability; remaining rows verify actual textures.
+    if(v.uv.y<0.04)return float4(iSightMattePresent,iSightFlowPresent,iSightFlowCoverage,1);
+    float matte=0,confidence=0;
+    if(iSightMattePresent>0.5)matte=iSegmentation.Sample(pointSampler,v.uv).r;
+    if(iSightFlowPresent>0.5)confidence=iSightFlow.Sample(pointSampler,v.uv).b;
+    return float4(matte,confidence,1,1);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

@@ -1,0 +1,44 @@
+// @label "Topographic Etching"
+// @description "Real Sight depth becomes engraved contour ink across the original camera image. No depth signal means exact pass-through."
+// Original first-party HyperShaderFX artwork. Requires a separate LLL.sight Depth Camera producer.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSightDepth;
+uniform float iSightDepthPresent;
+uniform float3 iResolution;
+uniform float audio_beat;
+uniform float audio_envelope;
+uniform float contour_count; // @min 5 @max 90 @step 1 @default 30 @label "Contour Lines" @group "Terrain"
+uniform float stroke_width; // @min 0.002 @max 0.10 @step 0.002 @default 0.025 @label "Line Width (Depth Units)" @group "Terrain"
+uniform float edge_weight; // @min 0 @max 3 @step 0.05 @default 1.0 @label "Crease Contrast" @group "Terrain"
+uniform float audio_response; // @min 0 @max 2 @step 0.05 @default 0.50 @label "Audio Excitation" @group "Motion"
+uniform float effect_mix; // @min 0 @max 1 @step 0.01 @default 0.75 @label "Ink Mix" @group "Appearance"
+uniform float3 ink_color; // @default "0.12,0.19,0.17" @label "Contour Ink" @group "Palette"
+uniform float3 paper_tint; // @default "0.89,0.85,0.76" @label "Paper Tint" @group "Palette"
+sampler_state inkSampler {Filter=Linear;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v){
+    VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
+}
+float depthRead(float2 uv){return saturate(iSightDepth.Sample(inkSampler,uv).r);}
+float4 PSMain(VertData v):TARGET{
+    float2 uv=v.uv;
+    float4 src=image.Sample(inkSampler,uv);
+    if(iSightDepthPresent<0.5||effect_mix<=0.0||src.a<=0.0001)return src;
+    float d=depthRead(uv);
+    float2 px=1.0/max(iResolution.xy,float2(1.0,1.0));
+    float dx=abs(depthRead(uv+float2(px.x,0))-depthRead(uv-float2(px.x,0)));
+    float dy=abs(depthRead(uv+float2(0,px.y))-depthRead(uv-float2(0,px.y)));
+    float crease=saturate(length(float2(dx,dy))*edge_weight*5.0);
+    // Depth is relative; quantize its scalar value, never pretend it's meters.
+    float phase=frac(d*max(5,contour_count));
+    float bands=min(phase,1.0-phase);
+    float audio=saturate(audio_beat+0.35*audio_envelope)*audio_response;
+    float line=1.0-smoothstep(stroke_width*0.35,stroke_width+0.013,bands);
+    line=saturate(line*(0.8+audio)+crease*0.45);
+    float gray=dot(src.rgb,float3(0.2126,0.7152,0.0722));
+    float3 washed=lerp(src.rgb,paper_tint*(0.46+gray*0.62),0.52);
+    float3 etched=lerp(washed,ink_color,line*0.94);
+    return float4(lerp(src.rgb,etched,saturate(effect_mix)),src.a);
+}
+technique Draw{pass{vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

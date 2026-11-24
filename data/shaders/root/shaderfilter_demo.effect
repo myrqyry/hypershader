@@ -1,0 +1,38 @@
+// --- SHADERFILTER CONVERSION DEMO ---
+// Demonstrates how to bring obs-shaderfilter shaders into HyperShader's native structure.
+//
+// HOW TO USE THIS DEMO:
+// 1. Add the compat include if needed.
+// 2. Keep the final wrapper as HYPERSHADER_MAINIMAGE_WRAPPER.
+
+#include "../../stdlib/shaderfilter_compat.glsl"
+
+// This shader uses obs-shaderfilter-style variable names
+// which are automatically mapped by the compat layer
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    float time = elapsed_time;
+    vec2 resolution = uv_size;
+
+    vec2 uv = fragCoord / resolution;
+    uv.y = 1.0 - uv.y;
+
+    vec2 center = vec2(0.5);
+    float dist = distance(uv, center);
+
+    float ripple = sin(dist * 30.0 - time * 5.0) * 0.5 + 0.5;
+    ripple *= smoothstep(0.5, 0.0, dist);
+
+    float sparkle = step(0.99, rand_f * dist);
+
+    float pixel_scale = length(uv_pixel_interval) * 500.0;
+
+    vec3 col = vec3(0.1, 0.2, 0.4);
+    col += ripple * vec3(0.0, 0.5, 1.0);
+    col += sparkle * vec3(1.0);
+
+    fragColor = vec4(col, 1.0);
+}
+
+HYPERSHADER_MAINIMAGE_WRAPPER

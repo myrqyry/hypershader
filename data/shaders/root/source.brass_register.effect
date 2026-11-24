@@ -1,0 +1,66 @@
+// @label "Brass Register"
+// @description "An eight-reed mechanical score. FFT bands bend individual reeds; kick energy excites brass bells and fine engraving."
+// Original native HyperShaderFX instrument, authored for this collection.
+// One reed per measured band; no synthetic additional frequency channels.
+#include "../../stdlib/hypershader_standard.glsl"
+
+uniform float spacing; // @min 0.11 @max 0.24 @step 0.005 @default 0.17 @label "Reed Spacing" @group "Geometry"
+uniform float motion_gain; // @min 0 @max 8 @step 0.1 @default 3.0 @label "Audio Deflection" @group "Motion"
+uniform float drift_rate; // @min 0 @max 3 @step 0.05 @default 0.55 @label "Slow Mechanical Drift" @group "Motion"
+uniform float bell_radius; // @min 0.018 @max 0.09 @step 0.002 @default 0.042 @label "Bell Radius" @group "Geometry"
+uniform float engraving; // @min 0 @max 1 @step 0.01 @default 0.85 @label "Engraving Detail" @group "Appearance"
+uniform float3 paper_color; // @default "0.087,0.102,0.13" @label "Background Ink" @group "Palette"
+uniform float3 metal_color; // @default "0.86,0.64,0.37" @label "Brass" @group "Palette"
+uniform float3 bright_color; // @default "0.92,0.89,0.76" @label "Ivory Highlights" @group "Palette"
+
+float readBand(int index) {
+    if(index==0)return audio_band0;
+    if(index==1)return audio_band1;
+    if(index==2)return audio_band2;
+    if(index==3)return audio_band3;
+    if(index==4)return audio_band4;
+    if(index==5)return audio_band5;
+    if(index==6)return audio_band6;
+    return audio_band7;
+}
+float lineMask(float dist,float halfWidth,float pixel) {
+    return 1.0-smoothstep(halfWidth,halfWidth+pixel,abs(dist));
+}
+void mainImage(out vec4 fragColor,in vec2 fragCoord) {
+    float2 size=max(iResolution.xy,float2(1,1));
+    float2 uv=fragCoord/size;
+    float aspect=size.x/size.y;
+    float2 p=float2((uv.x-0.5)*aspect,uv.y);
+    float aa=1.2/size.y;
+    float grain=frac(sin(dot(floor(fragCoord),float2(41.13,17.37)))*43758.5453);
+    float3 bg=paper_color*(0.93+grain*0.09);
+    float3 ink=bg;
+    // Paired ruled lines and corner registration marks.
+    float ruled=lineMask(p.y-0.12,0.001,aa)+lineMask(p.y-0.90,0.001,aa);
+    ink+=metal_color*ruled*0.28*engraving;
+    for(int i=0;i<8;i++){
+        float n=float(i),x=(n-3.5)*spacing;
+        float band=saturate(readBand(i)*motion_gain);
+        float bend=(0.006+0.047*band)*sin(iTime*drift_rate*(0.7+0.08*n)+n*1.27);
+        float tipY=0.36+0.04*sin(n*1.7)+band*0.11;
+        float stem=(p.y-0.52)/(0.80-0.52);
+        float center=x+bend*saturate(1.0-stem);
+        float reedWindow=smoothstep(0.20,0.25,p.y)*(1.0-smoothstep(0.81,0.84,p.y));
+        float stemStroke=lineMask(p.x-center,0.0018,aa)*reedWindow;
+        float fine=lineMask(p.x-center+0.010,0.0007,aa)*reedWindow*engraving*0.4;
+        ink+=metal_color*(stemStroke*0.70+fine*0.35);
+        float2 bell=(p-float2(x+bend,tipY))*float2(1.0,1.14);
+        float radius=length(bell);
+        float ring=lineMask(radius-bell_radius*(1.0+0.23*band),0.0015,aa);
+        float disk=1.0-smoothstep(bell_radius*0.58,bell_radius*0.75,radius);
+        float core=1.0-smoothstep(0.007,0.013,radius);
+        ink=lerp(ink,metal_color*0.67+bg*0.38,disk*0.7);
+        ink+=metal_color*ring*0.65+bright_color*core*(0.40+0.55*band+0.15*saturate(audio_kick));
+        float tick=lineMask(p.y-0.855-n*0.0015,0.0008,aa)
+                  *(1.0-smoothstep(0.025,0.035,abs(p.x-x)));
+        ink+=bright_color*tick*0.40*engraving;
+    }
+    float centerGlow=exp(-dot(p-float2(0.0,0.45),p-float2(0.0,0.45))*2.5)*0.06;
+    fragColor=float4(saturate(ink+metal_color*centerGlow),1.0);
+}
+HYPERSHADER_MAINIMAGE_WRAPPER

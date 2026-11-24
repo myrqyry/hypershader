@@ -1,0 +1,71 @@
+// @label "Vidicon Afterglow"
+// @description "Temporal phosphor retention and second-buffer soft halation."
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iBufferA;
+uniform texture2d iBufferB;
+uniform texture2d iBufferAPrevious;
+uniform texture2d iBufferBPrevious;
+uniform float3 iResolution;
+uniform int iGraphFrame;
+uniform float phosphor_decay; // @min 0.70 @max 0.995 @step 0.005 @default 0.965 @label "Phosphor Retention" @group "Persistence"
+uniform float bloom_retention; // @min 0.50 @max 0.99 @step 0.01 @default 0.87 @label "Halation Retention" @group "Persistence"
+uniform float highlight_threshold; // @min 0.05 @max 0.80 @step 0.01 @default 0.23 @label "Phosphor Threshold" @group "Exposure"
+uniform float bloom_radius; // @min 1.0 @max 8.0 @step 0.25 @default 3.0 @label "Halation Radius" @group "Optics"
+uniform float bloom_strength; // @min 0.0 @max 2.0 @step 0.05 @default 1.15 @label "Warm Halation" @group "Optics"
+uniform float color_warmth; // @min 0.0 @max 1.0 @step 0.01 @default 0.8 @label "Phosphor Warmth" @group "Color"
+uniform float scanline_strength; // @min 0.0 @max 0.4 @step 0.01 @default 0.1 @label "Scanline Softness" @group "Optics"
+uniform float effect_mix; // @min 0.0 @max 1.0 @step 0.01 @default 0.82 @label "Effect Mix" @group "Output"
+sampler_state fieldSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION;float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+    VertData o; o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float luminance(float3 rgb) { return dot(rgb,float3(0.2126,0.7152,0.0722)); }
+float4 PSPhosphor(VertData v):TARGET {
+    float2 uv=v.uv;
+    float3 camera=image.Sample(fieldSampler,uv).rgb;
+    // Vintage phosphors respond to saturated channel peaks as well as luma.
+    float l=max(luminance(camera),max(camera.r,max(camera.g,camera.b))*0.88);
+    float excitation=saturate((l-highlight_threshold)/max(0.01,1.0-highlight_threshold));
+    float prior=iGraphFrame==0 ? 0.0 : iBufferAPrevious.Sample(fieldSampler,uv).r;
+    float emission=max(excitation,prior*phosphor_decay);
+    return float4(emission,excitation,l,1.0);
+}
+float4 PSHalation(VertData v):TARGET {
+    float2 uv=v.uv;
+    float2 px=bloom_radius/max(iResolution.xy,float2(1,1));
+    float sum=iBufferA.Sample(fieldSampler,uv).r*0.20;
+    sum+=iBufferA.Sample(fieldSampler,uv+float2(px.x,0)).r*0.15;
+    sum+=iBufferA.Sample(fieldSampler,uv-float2(px.x,0)).r*0.15;
+    sum+=iBufferA.Sample(fieldSampler,uv+float2(0,px.y)).r*0.15;
+    sum+=iBufferA.Sample(fieldSampler,uv-float2(0,px.y)).r*0.15;
+    sum+=iBufferA.Sample(fieldSampler,uv+px).r*0.05;
+    sum+=iBufferA.Sample(fieldSampler,uv-px).r*0.05;
+    sum+=iBufferA.Sample(fieldSampler,uv+float2(px.x,-px.y)).r*0.05;
+    sum+=iBufferA.Sample(fieldSampler,uv+float2(-px.x,px.y)).r*0.05;
+    float previous=iGraphFrame==0 ? 0.0 : iBufferBPrevious.Sample(fieldSampler,uv).r;
+    float pooled=max(sum,previous*bloom_retention);
+    float slow=lerp(previous,sum,0.1);
+    return float4(saturate(pooled),saturate(slow),0,1);
+}
+float4 PSDisplay(VertData v):TARGET {
+    float2 uv=v.uv;
+    float4 camera=image.Sample(fieldSampler,uv);
+    float3 lit=iBufferA.Sample(fieldSampler,uv).rgb;
+    float2 halo=iBufferB.Sample(fieldSampler,uv).rg;
+    float3 phosphorColor=lerp(float3(0.58,0.78,1.0),
+                              float3(1.0,0.52,0.23),color_warmth);
+    float3 halationColor=lerp(float3(0.38,0.6,1.0),
+                              float3(1.0,0.3,0.09),color_warmth);
+    float3 coated=camera.rgb*0.77 + phosphorColor*lit.r*0.60
+                  + halationColor*halo.r*bloom_strength*0.42
+                  + halationColor*halo.g*0.09;
+    float softLine=1.0-scanline_strength*0.5*
+                   (1.0-cos(uv.y*iResolution.y*3.14159265));
+    coated*=softLine;
+    return float4(lerp(camera.rgb,saturate(coated),effect_mix),camera.a);
+}
+technique BufferA { pass {vertex_shader=VSDefault(v);pixel_shader=PSPhosphor(v);} }
+technique BufferB { pass {vertex_shader=VSDefault(v);pixel_shader=PSHalation(v);} }
+technique Draw    { pass {vertex_shader=VSDefault(v);pixel_shader=PSDisplay(v);} }

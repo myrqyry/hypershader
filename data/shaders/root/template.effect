@@ -1,0 +1,39 @@
+// @label "HyperShader Template"
+// @min 0.0 @max 1.0 @label "Speed"
+uniform float speed;
+
+// @min 0.0 @max 1.0 @label "Feedback Decay"
+uniform float decay;
+
+#include "../../stdlib/hypershader_standard.glsl"
+
+// This uniform is automatically populated if declared!
+uniform sampler2D iPreviousFrame;
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = fragCoord / iResolution.xy;
+    
+    // 1. Current Video Input
+    vec3 video = texture(image, uv).rgb;
+    
+    // 2. Previous Frame (Feedback)
+    // Zoom in slightly to create an "infinite tunnel" feedback loop
+    vec2 prevUV = (uv - 0.5) * 0.98 + 0.5;
+    vec3 prev = texture(iPreviousFrame, prevUV).rgb;
+    
+    // 3. Generate some plasma overlay based on time and speed
+    float t = iTime * speed * 2.0;
+    float plasma = sin(uv.x * 10.0 + t) + cos(uv.y * 8.0 - t);
+    vec3 color = 0.5 + 0.5 * cos(t + plasma + vec3(0,2,4));
+    
+    // 4. Mix it all
+    // Video cuts through the feedback
+    vec3 final = mix(prev * decay, video, 0.1);
+    
+    // Add plasma tint
+    final += color * 0.05;
+    
+    fragColor = vec4(final, 1.0);
+}
+
+HYPERSHADER_MAINIMAGE_WRAPPER

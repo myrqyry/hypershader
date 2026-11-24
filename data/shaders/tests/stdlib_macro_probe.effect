@@ -1,0 +1,10 @@
+// Compatibility macros must compile after native token normalization.
+#include "../../stdlib/shaderfilter_compat.glsl"
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = fragCoord / iResolution.xy;
+    float used = float(current_time_sec + current_time_min + current_time_hour + current_time_ms) * 0.00001;
+    used += rand_f * 0.00001 + local_time * 0.000010001;
+    vec4 src = image.Sample(textureSampler, uv);
+    fragColor = vec4(src.rgb * 0.75 + used, src.a);
+}
+HYPERSHADER_MAINIMAGE_WRAPPER

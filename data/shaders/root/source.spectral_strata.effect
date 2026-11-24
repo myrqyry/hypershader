@@ -1,0 +1,59 @@
+// @label "Spectral Strata"
+// @description "Live FFT-frequency history preserved as translucent spectral sediment. Native audio texture + GPU output feedback, no video source required."
+// Spectrum is measured in the existing 512-bin audio texture; the
+// horizontal history exists in previous GPU output, not in shader time.
+#include "../../stdlib/hypershader_standard.glsl"
+uniform texture2d iPreviousFrame;
+
+uniform float spectrum_gain; // @min 1.0 @max 96.0 @step 1.0 @default 36.0 @label "Spectrum Sensitivity" @group "Audio"
+uniform float exposure;      // @min 0.25 @max 2.0 @step 0.05 @default 0.75 @label "Contrast Curve" @group "Audio"
+uniform float scroll_rate;   // @min 1.0 @max 6.0 @step 1.0 @default 2.0 @label "History Pixels Per Frame" @group "History"
+uniform float hold_history;  // @min 0.0 @max 1.0 @step 1.0 @default 0.0 @label "Hold History" @group "History"
+uniform float erase_history; // @min 0.0 @max 1.0 @step 1.0 @default 0.0 @label "Erase History" @group "History"
+uniform float opacity;       // @min 0.0 @max 1.0 @step 0.02 @default 1.0 @label "Opacity" @group "Appearance"
+uniform float3 bass_color;   // @default "0.91,0.63,0.36" @label "Low Frequency Color" @group "Appearance"
+uniform float3 treble_color; // @default "0.43,0.67,0.70" @label "High Frequency Color" @group "Appearance"
+
+sampler_state strataSampler {
+    Filter = Point;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    float2 size = max(iResolution.xy, float2(1.0,1.0));
+    float2 uv = fragCoord / size;
+    if (erase_history > 0.5) {
+        fragColor = float4(0.0,0.0,0.0,0.0);
+        return;
+    }
+    if (hold_history > 0.5) {
+        fragColor = iPreviousFrame.Sample(strataSampler, uv);
+        return;
+    }
+
+    float pixels = clamp(floor(scroll_rate + 0.5), 1.0, size.x);
+    float insertedX = 1.0 - pixels / size.x;
+    if (uv.x < insertedX) {
+        float2 fromUV = float2(min(0.9999, uv.x + pixels / size.x), uv.y);
+        fragColor = iPreviousFrame.Sample(strataSampler, fromUV);
+        return;
+    }
+
+    // A logarithmic frequency coordinate allocates more vertical space to
+    // low frequencies. 512 bins are measured; rows are interpolated visual
+    // resampling only, not additional independent frequency measurements.
+    float high = 1.0 - uv.y;
+    float linearBin = (exp2(high * 8.0) - 1.0) / 255.0;
+    float2 audioUV = float2(clamp(linearBin, 0.001, 0.999), 0.25);
+    float measured = iChannel0.Sample(strataSampler, audioUV).r;
+    float amplitude = pow(saturate(measured * spectrum_gain), max(0.05, exposure));
+    // The deposited column is the current spectrum; all older columns are
+    // sampled from the actual history texture and survive subsequent silence.
+    float3 pigment = lerp(bass_color, treble_color, high);
+    float alpha = amplitude * opacity;
+    fragColor = float4(pigment * alpha, alpha);
+}
+
+HYPERSHADER_MAINIMAGE_WRAPPER

@@ -1,0 +1,68 @@
+// @label "Audio Spectrum Orbit"
+// @description "Transparent native 8-band spectrum orbiter. Additional spokes interpolate the eight measured bands; they are not separate FFT bins."
+// Original HyperShaderFX artwork. Inspired by the modulation separation in CaYatur/SoundVisualizer (MIT), not a source port.
+// OBS-native source: audio_band0..7 and audio_level are populated by HyperShaderFX's audio worker.
+#include "../../stdlib/hypershader_standard.glsl"
+
+// All controls are independent of FFT configuration and work in native source mode.
+uniform float ring_radius; // @min 0.12 @max 0.42 @step 0.005 @default 0.27 @label "Inner Radius" @group "Shape"
+uniform float bar_length;  // @min 0.03 @max 0.30 @step 0.005 @default 0.15 @label "Spectrum Reach" @group "Shape"
+uniform float bar_fill;    // @min 0.20 @max 0.98 @step 0.01 @default 0.68 @label "Spoke Width" @group "Shape"
+uniform float spoke_count; // @min 16 @max 96 @step 8 @default 48 @label "Spokes (Interpolated)" @group "Shape"
+uniform float gain;        // @min 0.1 @max 8.0 @step 0.1 @default 2.2 @label "Audio Gain" @group "Response"
+uniform float glow;        // @min 0.0 @max 1.0 @step 0.02 @default 0.36 @label "Soft Halo" @group "Appearance"
+uniform float opacity;     // @min 0.0 @max 1.0 @step 0.02 @default 1.0 @label "Opacity" @group "Appearance"
+uniform float3 low_color;  // @default "0.89,0.55,0.30" @label "Bass / Amber" @group "Palette"
+uniform float3 high_color; // @default "0.68,0.81,0.72" @label "Treble / Sage" @group "Palette"
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    float2 uv = fragCoord / max(iResolution.xy, float2(1.0, 1.0));
+    float aspect = iResolution.x / max(1.0, iResolution.y);
+    float2 p = (uv - 0.5) * float2(aspect, 1.0);
+    float r = length(p);
+
+    // One bar per angle cell. 16-96 spokes are an aesthetic interpolation
+    // of eight measured FFT bands, never falsely represented as 96 bands.
+    float angle = atan2(p.y, p.x);
+    float azimuth = frac((angle + 3.14159265) / 6.28318530);
+    float bars = max(16.0, floor(spoke_count + 0.5));
+    float phase = azimuth * bars;
+    float cell = floor(phase);
+    float localAngle = frac(phase);
+    float f = cell / max(bars - 1.0, 1.0) * 7.0;
+    float energy = 0.0;
+    if (f < 1.0) energy = lerp(audio_band0, audio_band1, f);
+    else if (f < 2.0) energy = lerp(audio_band1, audio_band2, f - 1.0);
+    else if (f < 3.0) energy = lerp(audio_band2, audio_band3, f - 2.0);
+    else if (f < 4.0) energy = lerp(audio_band3, audio_band4, f - 3.0);
+    else if (f < 5.0) energy = lerp(audio_band4, audio_band5, f - 4.0);
+    else if (f < 6.0) energy = lerp(audio_band5, audio_band6, f - 5.0);
+    else energy = lerp(audio_band6, audio_band7, saturate(f - 6.0));
+    // In silence, the baseline ring remains; amplitude comes from captured audio.
+    float magnitude = saturate(energy * gain);
+    float inside = ring_radius;
+    float outside = inside + 0.013 + bar_length * magnitude;
+    float pixel = 1.5 / max(iResolution.y, 1.0);
+    float radial = smoothstep(inside - pixel, inside + pixel, r)
+                 * (1.0 - smoothstep(outside - pixel, outside + pixel, r));
+    float wedge = 1.0 - smoothstep(bar_fill * 0.5 - 0.015,
+                                   bar_fill * 0.5 + 0.015,
+                                   abs(localAngle - 0.5));
+    float bar = radial * wedge;
+
+    // Soft edge light stays local to each spoke, never fills the canvas.
+    float haloRadius = max(pixel * 2.0, 0.018);
+    float envelope = min(abs(r - inside), abs(r - outside));
+    float halo = exp(-envelope * envelope / (haloRadius * haloRadius));
+    halo *= wedge * glow * 0.16;
+    // Avoid a bright halo inside the circle: transparent background is the default.
+    halo *= smoothstep(inside - haloRadius, inside, r);
+
+    float3 pigment = lerp(low_color, high_color, cell / max(1.0, bars - 1.0));
+    float a = saturate((bar * (0.68 + 0.32 * magnitude) + halo) * opacity);
+    // Premultiplied RGB for OBS's source compositor.
+    fragColor = float4(pigment * a, a);
+}
+
+HYPERSHADER_MAINIMAGE_WRAPPER

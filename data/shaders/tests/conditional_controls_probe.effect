@@ -1,0 +1,18 @@
+// @label "Conditional Controls Probe"
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform bool reveal; // @default false @label "Show Details" @group "Options"
+uniform float detail; // @min 0 @max 1 @default 0.7 @label "Detail" @group "Options" @show_if "reveal"
+uniform int mode; // @list "Basic,Advanced" @default 1 @label "Mode" @group "Options"
+uniform float advanced; // @min 0 @max 1 @default 0.3 @label "Advanced" @group "Options" @show_if "mode == 1"
+uniform float missing; // @min 0 @max 1 @default 0.5 @label "Missing Control" @group "Options" @show_if "nonexistent"
+uniform float always; // @min 0 @max 1 @default 0.5 @label "Always" @group "Options"
+struct VertData {float4 pos: POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v){VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;}
+float4 PSMain(VertData v):TARGET {
+  float k=detail+advanced+missing+always;
+  if (reveal) k += 1.0;
+  if (mode == 1) k += 1.0;
+  return float4(k*0.01,k*0.01,k*0.01,1.0);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

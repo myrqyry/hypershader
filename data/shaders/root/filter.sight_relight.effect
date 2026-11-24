@@ -1,0 +1,169 @@
+// @label "Sight: Depth Relighting"
+// @description "Move colored virtual lights across real Sight relative depth, with edge-aware normals, optional contact shadows, ambient occlusion and matte isolation."
+// Reconstructs an approximate visible height field; not metric geometry or intrinsic albedo.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSightDepth;
+uniform float iSightDepthPresent;
+uniform texture2d iSegmentation;
+uniform float iSightMattePresent;
+uniform float3 iResolution;
+
+uniform int light_mode; // @label "Key Light Type" @list "Directional,Point" @default 1 @group "Key Light"
+uniform float light_x; // @label "Light X" @min -1 @max 2 @step 0.01 @default 0.18 @group "Key Light"
+uniform float light_y; // @label "Light Y" @min -1 @max 2 @step 0.01 @default 0.22 @group "Key Light"
+uniform float light_height; // @label "Light Elevation" @min 0.05 @max 2 @step 0.01 @default 0.45 @group "Key Light"
+uniform float light_radius; // @label "Point Light Radius" @min 0.05 @max 3 @step 0.01 @default 1.1 @group "Key Light" @show_if "light_mode == 1"
+uniform float key_strength; // @label "Key Intensity" @min 0 @max 3 @step 0.01 @default 1.0 @group "Key Light"
+uniform float3 key_color; // @label "Key Color" @default "1.0,0.83,0.67" @group "Key Light"
+uniform float ambient; // @label "Ambient / Original Light" @min 0 @max 1.5 @step 0.01 @default 0.70 @group "Fill & Rim"
+uniform float fill_strength; // @label "Opposing Fill" @min 0 @max 2 @step 0.01 @default 0.25 @group "Fill & Rim"
+uniform float3 fill_color; // @label "Fill Color" @default "0.65,0.78,1.0" @group "Fill & Rim"
+uniform float rim_strength; // @label "Rim Intensity" @min 0 @max 2 @step 0.01 @default 0.0 @group "Fill & Rim"
+uniform float3 rim_color; // @label "Rim Color" @default "0.85,0.92,1.0" @group "Fill & Rim"
+uniform float specular_strength; // @label "Specular Intensity" @min 0 @max 0.7 @step 0.01 @default 0.0 @group "Surface"
+uniform float specular_power; // @label "Specular Tightness" @min 2 @max 128 @step 1 @default 24 @group "Surface"
+uniform float relief; // @label "Depth Relief" @min 0 @max 2 @step 0.01 @default 0.55 @group "Surface"
+uniform float normal_radius; // @label "Normal Sample Radius (px)" @min 1 @max 48 @step 1 @default 12 @group "Surface"
+uniform float edge_tolerance; // @label "Depth Edge Tolerance" @min 0.01 @max 0.4 @step 0.005 @default 0.10 @group "Surface"
+uniform float shadow_strength; // @label "Contact Shadow Strength" @min 0 @max 1 @step 0.01 @default 0 @group "Occlusion"
+uniform float shadow_radius; // @label "Shadow Reach (px)" @min 4 @max 192 @step 1 @default 48 @group "Occlusion" @show_if "shadow_strength > 0"
+uniform float shadow_softness; // @label "Shadow Softness" @min 0.005 @max 0.15 @step 0.005 @default 0.035 @group "Occlusion" @show_if "shadow_strength > 0"
+uniform float shadow_bias; // @label "Shadow Bias" @min 0.002 @max 0.1 @step 0.002 @default 0.015 @group "Occlusion" @show_if "shadow_strength > 0"
+uniform float ao_strength; // @label "Ambient Occlusion Strength" @min 0 @max 1 @step 0.01 @default 0 @group "Occlusion"
+uniform float ao_radius; // @label "Occlusion Radius (px)" @min 2 @max 96 @step 1 @default 24 @group "Occlusion" @show_if "ao_strength > 0"
+uniform float ao_bias; // @label "Occlusion Bias" @min 0.002 @max 0.1 @step 0.002 @default 0.015 @group "Occlusion" @show_if "ao_strength > 0"
+uniform int region; // @label "Light Region" @list "Entire image,Subject only,Background only" @default 0 @group "Region"
+uniform float depth_center; // @label "Depth Center (0 Far, 1 Near)" @min 0 @max 1 @step 0.01 @default 0.5 @group "Region"
+uniform float depth_width; // @label "Depth Band Half Width" @min 0.05 @max 1 @step 0.01 @default 1 @group "Region"
+uniform float effect_mix; // @label "Effect Mix" @min 0 @max 1 @step 0.01 @default 0.75 @group "Output"
+uniform int debug_view; // @label "Preview" @list "Relit image,Surface normals,Depth,Region mask,Key visibility,Ambient visibility" @default 0 @group "Output"
+
+sampler_state linearClamp { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) { VertData o; o.pos=mul(float4(v.pos.xyz,1),ViewProj); o.uv=v.uv; return o; }
+float depthAt(float2 uv) { return saturate(iSightDepth.Sample(linearClamp,uv).r); }
+
+// Reject samples on the far side of depth discontinuities. Use one-sided
+// estimates at silhouettes and borders instead of treating them as steep walls.
+float slope(float center,float minus,float plus,float span,float wm,float wp) {
+    float tolerance=max(edge_tolerance,0.01);
+    wm*=1.0-smoothstep(tolerance*0.5,tolerance,abs(center-minus));
+    wp*=1.0-smoothstep(tolerance*0.5,tolerance,abs(plus-center));
+    return ((center-minus)*wm+(plus-center)*wp)/max(span*max(wm+wp,1.0),0.00001);
+}
+float3 surfaceNormal(float2 uv,float d,float2 res) {
+    float radius=max(normal_radius,1.0);
+    float2 stepUV=radius/res;
+    float dx=slope(d,depthAt(uv-float2(stepUV.x,0)),depthAt(uv+float2(stepUV.x,0)),
+        radius/res.y,step(stepUV.x,uv.x),step(uv.x+stepUV.x,1.0));
+    float dy=slope(d,depthAt(uv-float2(0,stepUV.y)),depthAt(uv+float2(0,stepUV.y)),
+        radius/res.y,step(stepUV.y,uv.y),step(uv.y+stepUV.y,1.0));
+    // UV y increases downward; the lighting space's y axis points up.
+    return normalize(float3(-dx*relief,dy*relief,1.0));
+}
+bool inside(float2 uv) {
+    return uv.x>=0.0&&uv.x<=1.0&&uv.y>=0.0&&uv.y<=1.0;
+}
+
+// Trace the visible height field toward the key. Use the same screen-space
+// units and height scale as surfaceNormal and the light direction. Point
+// rays stop at the light projection, not at a blocker beyond the light.
+float keyVisibility(float2 uv,float d,float2 res,float3 direction) {
+    float horizontal=length(direction.xy);
+    if(horizontal<0.0001||relief<=0.0)return 1.0;
+    float2 axis=float2(direction.x,-direction.y)/horizontal;
+    float reach=max(shadow_radius,4.0);
+    if(light_mode==1)reach=min(reach,horizontal*res.y);
+    float hit=0.0;
+    for(int i=1;i<=12;i++) {
+        float travel=reach*float(i)/12.0;
+        float2 sampleUV=uv+axis*travel/res;
+        if(inside(sampleUV)) {
+            float rayRise=travel/res.y*direction.z/horizontal;
+            float excess=(depthAt(sampleUV)-d)*relief-rayRise;
+            float block=smoothstep(max(shadow_bias,0.002),
+                max(shadow_bias,0.002)+max(shadow_softness,0.005),excess);
+            // Fade the search limit to avoid a hard circular cutoff.
+            block*=1.0-smoothstep(0.75,1.0,travel/max(shadow_radius,4.0));
+            hit=max(hit,block);
+        }
+    }
+    return 1.0-saturate(hit);
+}
+
+// Compare height to the local tangent plane, not simply to the center
+// pixel: a tilted but flat surface should not darken itself.
+float occlusionTap(float2 uv,float d,float2 delta,float2 res,float3 N) {
+    float2 sampleUV=uv+delta/res;
+    if(!inside(sampleUV))return 0.0;
+    float2 offset=float2(delta.x,-delta.y)/res.y;
+    float predicted=-dot(N.xy,offset)/max(N.z,0.05);
+    float excess=(depthAt(sampleUV)-d)*relief-predicted;
+    float bias=max(ao_bias,0.002);
+    return smoothstep(bias,bias+0.075,excess);
+}
+float ambientVisibility(float2 uv,float d,float2 res,float3 N) {
+    if(relief<=0.0)return 1.0;
+    float radius=max(ao_radius,2.0);
+    float occluded=0.0;
+    for(int i=0;i<8;i++) {
+        float angle=float(i)*0.7853981634;
+        float2 axis=float2(cos(angle),sin(angle));
+        float nearHit=occlusionTap(uv,d,axis*radius*0.5,res,N);
+        float farHit=occlusionTap(uv,d,axis*radius,res,N);
+        occluded+=max(nearHit,farHit*0.65);
+    }
+    return 1.0-saturate(occluded*0.20);
+}
+float4 PSMain(VertData v):TARGET {
+    float2 uv=v.uv;
+    float4 src=image.Sample(linearClamp,uv);
+    if(iSightDepthPresent<0.5||effect_mix<=0.0||src.a<=0.0001||
+        (region!=0&&iSightMattePresent<0.5))return src;
+    float2 res=max(iResolution.xy,float2(1,1));
+    float aspect=res.x/res.y;
+    float d=depthAt(uv);
+    float3 N=surfaceNormal(uv,d,res);
+    float band=1.0-smoothstep(max(depth_width,0.05)*0.65,max(depth_width,0.05),abs(d-depth_center));
+    if(region!=0) {
+        float subject=smoothstep(0.08,0.92,iSegmentation.Sample(linearClamp,uv).r);
+        band*=region==1?subject:1.0-subject;
+    }
+    if(debug_view==1)return float4((N*0.5+0.5)*src.a,src.a);
+    if(debug_view==2)return float4(float3(d,d,d)*src.a,src.a);
+    if(debug_view==3)return float4(float3(band,band,band)*src.a,src.a);
+    if(band<=0.0001)return src;
+
+    float3 direction=float3((light_x-0.5)*aspect,0.5-light_y,max(light_height,0.05));
+    float attenuation=1.0;
+    if(light_mode==1) {
+        direction=float3((light_x-uv.x)*aspect,uv.y-light_y,
+            max(light_height,0.05)+(1.0-d)*relief);
+        float r=max(light_radius,0.05);
+        attenuation=1.0/(1.0+dot(direction,direction)/(r*r));
+    }
+    float3 L=normalize(direction);
+    float keyVis=1.0;
+    if(shadow_strength>0.0||debug_view==4)keyVis=keyVisibility(uv,d,res,direction);
+    float ambientVis=1.0;
+    if(ao_strength>0.0||debug_view==5)ambientVis=ambientVisibility(uv,d,res,N);
+    if(debug_view==4)return float4(float3(keyVis,keyVis,keyVis)*src.a,src.a);
+    if(debug_view==5)return float4(float3(ambientVis,ambientVis,ambientVis)*src.a,src.a);
+    float keyShadow=lerp(1.0,keyVis,saturate(shadow_strength));
+    float ambientShade=lerp(1.0,ambientVis,saturate(ao_strength));
+    float diffuse=saturate(dot(N,L))*attenuation*keyShadow;
+    float3 F=normalize(float3(-L.x,-L.y,max(L.z,0.25)));
+    float fill=saturate(dot(N,F));
+    float rim=pow(saturate(1.0-N.z),0.75)*saturate(dot(N,normalize(float3(-L.x,-L.y,0.3))));
+    float3 H=normalize(L+float3(0,0,1));
+    float spec=pow(saturate(dot(N,H)),max(specular_power,2.0))*diffuse;
+
+    // Modulate the photographed RGB, not a guessed albedo. Retain existing
+    // light and texture; these are artistic, relative-depth lighting gains.
+    float3 gain=(float3(ambient,ambient,ambient)+fill_color*(fill_strength*fill))*ambientShade+
+        key_color*(key_strength*diffuse)+rim_color*(rim_strength*rim);
+    float3 lit=src.rgb*gain+key_color*(spec*specular_strength*src.a);
+    return float4(lerp(src.rgb,saturate(lit),saturate(effect_mix)*band),src.a);
+}
+technique Draw { pass { vertex_shader=VSDefault(v); pixel_shader=PSMain(v); } }

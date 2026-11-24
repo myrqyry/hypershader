@@ -1,0 +1,125 @@
+// @label "Sight: Flow Sparks"
+// @description "Motion-seeded glowing tracers transported by Sight's local motion field."
+uniform float4x4 ViewProj;
+uniform float audio_kick; // @audio "kick"
+uniform float audio_snare;
+uniform float audio_beat;
+uniform float audio_band0;
+uniform float audio_flux;
+uniform int music_response; // @label "React to music" @list "Off,Kick / bass hits,Snare / mid-high hits,Beat,Bass energy,Spectral change" @default 0 @group "Music"
+uniform float music_amount; // @label "Music strength" @min 0 @max 1 @step 0.01 @default 0.75 @group "Music"
+
+uniform texture2d image;
+uniform texture2d iBufferA;
+uniform texture2d iBufferB;
+uniform texture2d iBufferAPrevious;
+uniform texture2d iBufferBPrevious;
+uniform texture2d iSightFlow;
+uniform float iSightFlowPresent;
+uniform float iSightFlowStep;
+uniform float iSightFlowInterval;
+uniform texture2d iSegmentation;
+uniform float iSightMattePresent;
+uniform texture2d iSightDepth;
+uniform float iSightDepthPresent;
+uniform float3 iResolution;
+uniform int iGraphFrame;
+uniform float iTimeDelta;
+uniform float retention; // @label "Spark Half-Life (seconds)" @min 0.05 @max 3 @step 0.05 @default 0.65 @group "Sparks"
+uniform float tracking; // @label "Flow Tracking" @min 0 @max 2 @step 0.05 @default 1 @group "Sparks"
+uniform float emission; // @label "Emission" @min 0 @max 1 @step 0.01 @default 0.35 @group "Sparks"
+uniform float spacing; // @label "Spark Spacing (px)" @min 6 @max 64 @step 1 @default 20 @group "Sparks"
+uniform float spark_size; // @label "Spark Radius (px)" @min 1 @max 8 @step 0.25 @default 2 @group "Sparks"
+uniform float speed_threshold; // @label "Minimum Speed (px/sec)" @min 0 @max 300 @step 1 @default 35 @group "Motion"
+uniform int spark_region; // @label "Spark Region (0 All, 1 Subject, 2 Background)" @min 0 @max 2 @step 1 @default 0 @group "Motion"
+uniform bool depth_occlusion; // @label "Depth Occlusion" @default false @group "Depth"
+uniform float spark_depth; // @label "Spark Layer (0 Far, 1 Near)" @min 0 @max 1 @step 0.01 @default 0.55 @group "Depth"
+uniform float depth_softness; // @label "Depth Edge Softness" @min 0.01 @max 0.25 @step 0.01 @default 0.05 @group "Depth"
+uniform float4 spark_color; // @label "Spark Color" @default "0.2,0.9,1.0,1.0" @group "Appearance"
+uniform float effect_mix; // @label "Effect Mix" @min 0 @max 1 @step 0.01 @default 0.85 @group "Output"
+uniform bool clear_history; // @label "Clear Sparks" @default false @group "Output"
+sampler_state fieldSampler {Filter=Linear;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v){
+    VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
+}
+// Two normalized channels retain ~16-bit density even in RGBA8 graph
+// surfaces. Decoding is linear, so bilinear sampling remains meaningful.
+float4 packDensity(float value) {
+    float scaled=saturate(value)*255.0;
+    return float4(floor(scaled)/255.0,frac(scaled),0,1);
+}
+float density(float4 encoded) {return saturate(encoded.r+encoded.g/255.0);}
+float hash21(float2 p) {return frac(sin(dot(p,float2(127.1,311.7)))*43758.5453);}
+bool inactive() {
+    return iSightFlowPresent<0.5||clear_history||effect_mix<=0.0001||
+           (spark_region!=0&&iSightMattePresent<0.5)||
+           (depth_occlusion&&iSightDepthPresent<0.5);
+}
+float regionMask(float2 uv) {
+    if(spark_region==0)return 1.0;
+    float fg=saturate(iSegmentation.Sample(fieldSampler,uv).r);
+    // Use a soft edge, but reject small residual matte values.
+    fg=smoothstep(0.18,0.82,fg);
+    return spark_region==1?fg:1.0-fg;
+}
+float depthMask(float2 uv) {
+    if(!depth_occlusion)return 1.0;
+    float scene=saturate(iSightDepth.Sample(fieldSampler,uv).r);
+    float feather=max(depth_softness,0.01);
+    return 1.0-smoothstep(spark_depth-feather,spark_depth+feather,scene);
+}
+float musicPulse() {
+    float pulse=0.0;
+    if(music_response==1)pulse=audio_kick;
+    else if(music_response==2)pulse=audio_snare;
+    else if(music_response==3)pulse=audio_beat;
+    else if(music_response==4)pulse=audio_band0;
+    else if(music_response==5)pulse=audio_flux;
+    return saturate(pulse)*saturate(music_amount);
+}
+float4 PSSeed(VertData v):TARGET {
+    if(inactive()||iGraphFrame==0||iSightFlowStep<0.5||emission<=0.0||iSightFlowInterval<=0.0)
+        return packDensity(0);
+    float2 resolution=max(iResolution.xy,float2(1,1));
+    float cellSize=max(spacing,6.0);
+    float2 pixel=v.uv*resolution;
+    float2 cell=floor(pixel/cellSize);
+    // Jitter a point inside each cell; clamp radius so the point never
+    // gets clipped by its cell. Hash changes only on a capture step.
+    float radius=min(spark_size,cellSize*0.24);
+    float2 key=cell+float2(float(iGraphFrame%4096)*17.0,3.0);
+    float2 center=(cell+0.5)*cellSize;
+    center+=(float2(hash21(key),hash21(key+float2(19,71)))-0.5)*cellSize*0.44;
+    float4 motion=iSightFlow.Sample(fieldSampler,saturate(center/resolution));
+    float speed=length(motion.xy*resolution)/max(iSightFlowInterval,0.001);
+    float chance=saturate((speed-speed_threshold)/max(speed_threshold,35.0))*saturate(motion.b)*lerp(emission,1.0,musicPulse());
+    if(motion.b<0.35||speed<=speed_threshold||hash21(key+float2(43,13))>=chance)
+        return packDensity(0);
+    float dotShape=1.0-smoothstep(max(0.0,radius-0.75),radius+0.5,length(pixel-center));
+    return packDensity(dotShape*motion.b*regionMask(v.uv)*depthMask(v.uv));
+}
+float4 PSAdvect(VertData v):TARGET {
+    if(inactive()||iGraphFrame==0)return packDensity(0);
+    float born=density(iBufferA.Sample(fieldSampler,v.uv));
+    float2 from=v.uv;
+    if(iSightFlowStep>0.5) {
+        float4 motion=iSightFlow.Sample(fieldSampler,v.uv);
+        from+=motion.xy*saturate(motion.b)*tracking;
+    }
+    if(from.x<0.0||from.y<0.0||from.x>1.0||from.y>1.0)return packDensity(born);
+    float retained=density(iBufferBPrevious.Sample(fieldSampler,from));
+    retained*=exp2(-clamp(iTimeDelta,0.0,0.25)/max(retention,0.05));
+    if(retained<1.0/255.0)retained=0.0;
+    return packDensity(max(born,retained));
+}
+float4 PSDisplay(VertData v):TARGET {
+    float4 fresh=image.Sample(fieldSampler,v.uv);
+    if(inactive())return fresh;
+    float ink=density(iBufferB.Sample(fieldSampler,v.uv))*regionMask(v.uv)*depthMask(v.uv);
+    float3 glow=saturate(spark_color.rgb)*ink*saturate(spark_color.a)*saturate(effect_mix);
+    return float4(fresh.rgb+(1.0-saturate(fresh.rgb))*glow*fresh.a,fresh.a);
+}
+technique BufferA {pass {vertex_shader=VSDefault(v);pixel_shader=PSSeed(v);}}
+technique BufferB {pass {vertex_shader=VSDefault(v);pixel_shader=PSAdvect(v);}}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSDisplay(v);}}

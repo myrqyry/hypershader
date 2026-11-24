@@ -1,0 +1,38 @@
+# Included native shaders
+
+See [shader authoring](SHADERS.md) and [OBS syntax](OBS_SHADER_SYNTAX.md).
+
+- `audio_demo.effect`
+- `filter.afterimage_press.effect`
+- `filter.contact_filaments.effect`
+- `filter.face_mesh_wireframe.effect`
+- `filter.ink_currents.effect`
+- `filter.liquid_light.effect`
+- `filter.reactive_sprite.effect`
+- `filter.ripple_glass.effect`
+- `filter.sight_depth_glass.effect`
+- `filter.sight_flow_echo.effect`
+- `filter.sight_flow_sparks.effect`
+- `filter.sight_flow_warp.effect`
+- `filter.sight_hand_highlights.effect`
+- `filter.sight_hand_ripples.effect`
+- `filter.sight_motion_pulse.effect`
+- `filter.sight_relight.effect`
+- `filter.sight_subject_frame.effect`
+- `filter.sight_text_scramble.effect`
+- `filter.topographic_etch.effect`
+- `filter.vidicon_afterglow.effect`
+- `ink_reaction_buffers.effect`
+- `optical_halation.effect`
+- `pframe_drift.effect`
+- `playground.effect`
+- `shaderfilter_demo.effect`
+- `source.audio_spectrum_orbit.effect`
+- `source.brass_register.effect`
+- `source.paper_tide.effect`
+- `source.phosphor_scope.effect`
+- `source.reactive_sprite.effect`
+- `source.spectral_garden.effect`
+- `source.spectral_strata.effect`
+- `template.effect`
+- `warp_tape.effect`

@@ -1,0 +1,9 @@
+// Missing dependencies must produce a load error, not a silently partial effect.
+#include "../../stdlib/this_library_module_does_not_exist.glsl"
+uniform float4x4 ViewProj;
+uniform texture2d image;
+sampler_state textureSampler { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+struct VertData { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+VertData VSDefault(VertData v_in) { VertData o; o.pos=mul(float4(v_in.pos.xyz,1.0),ViewProj); o.uv=v_in.uv; return o; }
+float4 PSMain(VertData v_in) : TARGET { return float4(1,0,1,1); }
+technique Draw { pass { vertex_shader=VSDefault(v_in); pixel_shader=PSMain(v_in); } }

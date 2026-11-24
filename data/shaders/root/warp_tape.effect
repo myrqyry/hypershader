@@ -1,0 +1,85 @@
+// Warp Tape — a moving-column video time mosaic for HyperShaderFX.
+// Independent single-pass implementation of the strip-tape mechanism.
+//
+// Each frame writes a narrow group of columns from the live OBS source while
+// retaining every other column from iPreviousFrame. The displayed frame IS the
+// tape, so the normal output-feedback path is also the tape's persistent store.
+// This works without a separate history texture, but cannot provide an
+// independently transformed/scrubbed read or clean tape/live blend. Those
+// require a separate GPU storage target.
+//
+// Source alpha is kept per recorded column; fade only affects stored RGB.
+// A fresh filter may begin with a source-frame seed until its first full sweep.
+// Do not call this a general arbitrary-pixel time-displacement engine.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iPreviousFrame;
+uniform float3 iResolution;
+uniform int iFrame;
+
+sampler_state textureSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+struct VertData {
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in) {
+    VertData out_vert;
+    out_vert.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+    out_vert.uv = v_in.uv;
+    return out_vert;
+}
+
+// @min 1.0 @max 128.0 @step 1.0 @default 16.0 @label "Recorded Columns Per Frame" @group "Tape"
+uniform float columns_per_frame = 16.0;
+
+// @min 0.0 @max 1.0 @step 1.0 @default 0.0 @label "Reverse Write Direction" @group "Tape"
+uniform float reverse_tape = 0.0;
+
+// @min 0.0 @max 1.0 @step 1.0 @default 0.0 @label "Hold Tape (Stop Recording)" @group "Tape"
+uniform float hold_tape = 0.0;
+
+// @min 0.0 @max 1.0 @step 1.0 @default 0.0 @label "Erase Tape (While Enabled)" @group "Tape"
+uniform float erase_tape = 0.0;
+
+// @min 0.0 @max 0.2 @step 0.005 @default 0.0 @label "Stored Image Fade / Frame" @group "Tape"
+uniform float tape_fade = 0.0;
+
+float4 PSMain(VertData v_in) : TARGET {
+    float2 uv = v_in.uv;
+    float4 incoming = image.Sample(textureSampler, uv);
+    float4 recorded = iPreviousFrame.Sample(textureSampler, uv);
+    if (erase_tape > 0.5)
+        return float4(0.0, 0.0, 0.0, 0.0);
+    if (hold_tape > 0.5)
+        return recorded;
+
+    float width = max(1.0, iResolution.x);
+    float step_width = clamp(columns_per_frame, 1.0, width);
+    float x = min(width - 1.0, floor(uv.x * width));
+    float head = frac(float(iFrame) * step_width / width) * width;
+
+    // In either direction, exactly step_width cyclic pixel columns are
+    // overwritten. Unwritten columns are one frame older, not resampled.
+    float distance = reverse_tape > 0.5
+        ? frac((head - x + width) / width) * width
+        : frac((x - head + width) / width) * width;
+
+    if (distance < step_width)
+        return incoming;
+
+    recorded.rgb *= 1.0 - saturate(tape_fade);
+    return recorded;
+}
+
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v_in);
+        pixel_shader = PSMain(v_in);
+    }
+}

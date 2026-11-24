@@ -1,0 +1,120 @@
+// HyperShaderFX Playground — native OBS effect, no legacy compatibility layer.
+// Switchable procedural backgrounds, UV distortions, post effects, and color grade.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float3 iResolution;
+uniform float iTime;
+
+uniform int bg_mode;            // @list "Input Video,FBM Noise,Plasma,Solid Color" @default 2 @label "Background Source" @group "Background"
+uniform float4 bg_color;        // @default "0.14,0.28,0.43,1.0" @label "Background Color" @group "Background"
+uniform float bg_noise_scale;   // @min 1.0 @max 16.0 @step 0.1 @default 5.0 @label "Noise Scale" @group "Background"
+uniform int dist_mode;          // @list "None,Twist,Pixelate,Fisheye" @default 0 @label "Distortion Type" @group "Distortion"
+uniform float dist_strength;    // @min 0.0 @max 1.0 @step 0.01 @default 0.35 @label "Strength" @group "Distortion"
+uniform int filter_mode;        // @list "None,Chromatic Aberration,Film Grain,Scanlines" @default 0 @label "Effect Filter" @group "Filter"
+uniform float filter_strength;  // @min 0.0 @max 1.0 @step 0.01 @default 0.4 @label "Intensity" @group "Filter"
+uniform float playground_exposure; // @min 0.0 @max 3.0 @step 0.01 @default 1.0 @label "Exposure" @group "Color"
+uniform float playground_gamma;    // @min 0.25 @max 3.0 @step 0.01 @default 1.0 @label "Gamma" @group "Color"
+
+sampler_state inputSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+struct VertData {
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+VertData VSDefault(VertData v) {
+    VertData o;
+    o.pos = mul(float4(v.pos.xyz, 1.0), ViewProj);
+    o.uv = v.uv;
+    return o;
+}
+float hash21(float2 p) {
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453123);
+}
+float smoothNoise(float2 p) {
+    float2 cell = floor(p), f = frac(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(cell);
+    float b = hash21(cell + float2(1.0, 0.0));
+    float c = hash21(cell + float2(0.0, 1.0));
+    float d = hash21(cell + float2(1.0, 1.0));
+    return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+}
+float fbm5(float2 p) {
+    float total = 0.0, amplitude = 0.5;
+    for (int i = 0; i < 5; i++) {
+        total += amplitude * smoothNoise(p);
+        p = p * 2.03 + float2(13.7, 7.3);
+        amplitude *= 0.5;
+    }
+    return total;
+}
+float2 distortUV(float2 uv) {
+    if (dist_mode == 1) {
+        float2 p = uv - float2(0.5, 0.5);
+        float r = length(p);
+        float a = atan2(p.y, p.x) + dist_strength * 5.0 * (1.0 - saturate(r));
+        return float2(0.5, 0.5) + r * float2(cos(a), sin(a));
+    }
+    if (dist_mode == 2) {
+        float count = max(8.0, 128.0 * (1.1 - dist_strength));
+        return (floor(uv * count) + 0.5) / count;
+    }
+    if (dist_mode == 3) {
+        float2 p = uv * 2.0 - 1.0;
+        p *= 1.0 + dist_strength * dot(p, p);
+        return 0.5 + p * 0.5;
+    }
+    return uv;
+}
+float4 PSMain(VertData v) : TARGET {
+    float2 uv = v.uv;
+    float2 warped = distortUV(uv);
+    float4 src = image.Sample(inputSampler, warped);
+    float3 col = src.rgb;
+    if (bg_mode == 1) {
+        float n = fbm5(warped * bg_noise_scale + iTime * 0.18);
+        col = lerp(bg_color.rgb * 0.25, bg_color.rgb * 2.0, n);
+    } else if (bg_mode == 2) {
+        // Interference of two moving wavefields; designed to remain visible
+        // without needing audio, camera, or a channel texture.
+        float2 pos = (warped - float2(0.5, 0.5)) *
+                     float2(iResolution.x / max(iResolution.y, 1.0), 1.0);
+        float a = sin(pos.x * 11.0 + iTime * 0.9 +
+                      sin(pos.y * 5.0 - iTime * 0.6));
+        float b = cos(pos.y * 9.0 - iTime * 0.8 +
+                      cos(pos.x * 6.0 + iTime * 0.5));
+        float n = saturate(0.5 + 0.25 * (a + b));
+        col = lerp(bg_color.rgb * 0.28,
+                   float3(0.95, 0.70, 0.40), n * n);
+    } else if (bg_mode == 3) {
+        col = bg_color.rgb;
+    }
+
+    if (filter_mode == 1) {
+        float shift = filter_strength * 0.015;
+        float red = image.Sample(inputSampler, warped + float2(shift, 0.0)).r;
+        float blue = image.Sample(inputSampler, warped - float2(shift, 0.0)).b;
+        col = float3(red, col.g, blue);
+    } else if (filter_mode == 2) {
+        float grain = hash21(uv * iResolution.xy + floor(iTime * 24.0));
+        col += (grain - 0.5) * filter_strength * 0.35;
+    } else if (filter_mode == 3) {
+        float line = 0.85 + 0.15 * cos(uv.y * iResolution.y * 3.14159265);
+        col *= lerp(1.0, line, filter_strength);
+    }
+    col *= playground_exposure;
+    col = pow(max(col, float3(0.0, 0.0, 0.0)),
+              float3(1.0 / max(playground_gamma, 0.01),
+                     1.0 / max(playground_gamma, 0.01),
+                     1.0 / max(playground_gamma, 0.01)));
+    return float4(saturate(col), bg_mode == 0 ? src.a : 1.0);
+}
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v);
+        pixel_shader = PSMain(v);
+    }
+}

@@ -1,0 +1,20 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSightDepth;
+uniform float iSightDepthPresent;
+uniform texture2d iSegmentation;
+uniform float iSightMattePresent;
+uniform texture2d iSightFlow;
+uniform float iSightFlowPresent;
+sampler_state pointSampler {Filter=Point;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v){VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;}
+float4 PSMain(VertData v):TARGET {
+    if(v.uv.y<0.04)return float4(iSightDepthPresent,iSightMattePresent,iSightFlowPresent,1);
+    float d=0,m=0,f=0;
+    if(iSightDepthPresent>0.5)d=iSightDepth.Sample(pointSampler,v.uv).r;
+    if(iSightMattePresent>0.5)m=iSegmentation.Sample(pointSampler,v.uv).r;
+    if(iSightFlowPresent>0.5)f=iSightFlow.Sample(pointSampler,v.uv).b;
+    return float4(d,m,f,1);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

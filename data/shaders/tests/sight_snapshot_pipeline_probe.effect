@@ -1,0 +1,25 @@
+// @label "Sight Snapshot Interop Probe"
+// Test-only: demonstrate actual Sight RGBA32F point texture in HyperShader.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSightPoints;
+uniform float iSightPresent;
+uniform int iSightKind;
+uniform int iSightPointCount;
+sampler_state sourceSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+struct VertData { float4 pos:POSITION;float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+    VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
+}
+float4 PSMain(VertData v):TARGET {
+    float4 color=image.Sample(sourceSampler,v.uv);
+    if(iSightPresent<0.5 || iSightPointCount<9 ||
+       iSightKind<1 || iSightKind>3) return color;
+    float4 sample=iSightPoints.Load(int3(8,0,0));
+    return float4(saturate(sample.x),saturate(sample.y),1.0,1.0);
+}
+technique Draw {pass{vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

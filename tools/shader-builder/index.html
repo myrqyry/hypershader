@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperShaderFX Visual Builder</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <h1 class="logo">
+                <span class="logo-icon">⚡</span>
+                HyperShaderFX
+            </h1>
+            <span class="header-subtitle">Visual Builder</span>
+        </div>
+        <div class="header-center">
+            <input type="text" class="shader-name" id="shaderName" value="Untitled Shader" spellcheck="false">
+        </div>
+        <div class="header-right">
+            <button class="btn btn-secondary" id="btnNew" title="New Shader">
+                <span>✨</span> New
+            </button>
+            <button class="btn btn-secondary" id="btnCurate" title="Generate a composed shader with one geometric hero and an optional color look">🎲 Curate</button>
+            <button class="btn btn-secondary" id="btnLoad" title="Load Shader">
+                <span>📂</span> Load
+            </button>
+            <button class="btn btn-secondary" id="btnSave" title="Save Graph">
+                <span>💾</span> Save
+            </button>
+            <button class="btn btn-primary" id="btnExport" title="Export .effect file">
+                <span>🚀</span> Export
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Node Palette Sidebar -->
+        <aside class="sidebar" id="nodePalette">
+            <div class="sidebar-header">
+                <h2>📦 Nodes</h2>
+                <input type="search" class="search-input" id="nodeSearch" placeholder="Search nodes...">
+            </div>
+            <div class="sidebar-content" id="nodeCategories">
+                <!-- Categories populated by JS -->
+            </div>
+        </aside>
+
+        <!-- Graph Canvas -->
+        <div class="canvas-container" id="canvasContainer">
+            <svg class="connections-layer" id="connectionsLayer"></svg>
+            <div class="nodes-layer" id="nodesLayer">
+                <!-- Nodes rendered here -->
+            </div>
+            
+            <!-- Canvas Controls -->
+            <div class="canvas-controls">
+                <button class="canvas-btn" id="btnZoomIn" title="Zoom In">+</button>
+                <span class="zoom-level" id="zoomLevel">100%</span>
+                <button class="canvas-btn" id="btnZoomOut" title="Zoom Out">−</button>
+                <button class="canvas-btn" id="btnFitView" title="Fit to View">⊡</button>
+            </div>
+            
+            <!-- Mini Map -->
+            <div class="minimap" id="minimap">
+                <canvas id="minimapCanvas" width="150" height="100"></canvas>
+            </div>
+
+            <!-- AI Pilot Bar -->
+            <div class="ai-pilot-container">
+                <div class="ai-input-wrapper">
+                    <span class="ai-icon">🪄</span>
+                    <input type="text" id="aiPromptInput" placeholder="Ask AI to build or modify the shader... (e.g., 'Add a pulse effect to the background')">
+                    <button id="btnRunAI" class="ai-submit-btn">Generate</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <aside class="panel-right" id="panelRight">
+            <!-- Preview Section -->
+            <div class="panel-section preview-section">
+                <div class="panel-header">
+                    <h3>👁️ Preview</h3>
+                    <button class="btn-icon" id="btnRefreshPreview" title="Refresh">🔄</button>
+                </div>
+                <div class="preview-container" id="previewContainer">
+                    <canvas id="previewCanvas" width="280" height="158"></canvas>
+                    <div class="preview-overlay" id="previewOverlay">
+                        <span role="status">Add a Final Output node to preview</span>
+                    </div>
+                </div>
+                <p class="preview-note">WebGL2 preview uses a test texture, not a live OBS source. OBS shader validation is separate.</p>
+            </div>
+
+            <!-- Properties Section -->
+            <div class="panel-section properties-section">
+                <div class="panel-header">
+                    <h3>⚙️ Properties</h3>
+                </div>
+                <div class="properties-content" id="propertiesContent">
+                    <p class="placeholder-text">Select a node to edit properties</p>
+                </div>
+            </div>
+            
+            <!-- Code Section -->
+            <div class="panel-section code-section">
+                <div class="panel-header">
+                    <h3>📝 Generated Code</h3>
+                    <button class="btn-icon" id="btnCopyCode" title="Copy to Clipboard">📋</button>
+                </div>
+                <pre class="code-preview" id="codePreview"><code>// Add nodes and connect them to generate shader code</code></pre>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu">
+        <button class="context-item" data-action="delete">🗑️ Delete Node</button>
+        <button class="context-item" data-action="duplicate">📋 Duplicate</button>
+        <hr>
+        <button class="context-item" data-action="disconnect">🔌 Disconnect All</button>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Hidden file input for loading -->
+    <input type="file" id="fileInput" accept=".json,.hsgraph" style="display:none">
+
+    <!-- Scripts -->
+    <script src="engine/graph.js"></script>
+    <script src="nodes/colormap-kernels.js"></script>
+    <script src="engine/codegen.js"></script>
+    <script src="nodes/catalog.js"></script>
+    <script src="nodes/catalog_extended.js"></script>
+    <script src="curated.js"></script>
+    <script src="ai_pilot.js"></script>
+    <script src="preview.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

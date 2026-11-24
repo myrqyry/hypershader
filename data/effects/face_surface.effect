@@ -1,0 +1,29 @@
+// Internal GPU face-surface raster: RG triangle/weights and alpha coverage.
+// R = (triangle index + 0.5)/898, G/B = first two barycentric weights.
+uniform float4x4 ViewProj;
+struct VertData {
+  float4 pos: POSITION;
+  float2 bary: TEXCOORD0;
+  float tri: TEXCOORD1;
+};
+struct PixelData {
+  float4 pos: POSITION;
+  float2 bary: TEXCOORD0;
+  float tri: TEXCOORD1;
+};
+PixelData VSDefault(VertData v) {
+  PixelData outV;
+  outV.pos = mul(float4(v.pos.xyz,1.0), ViewProj);
+  outV.bary = v.bary;
+  outV.tri = v.tri;
+  return outV;
+}
+float4 PSMain(PixelData v): TARGET {
+  return float4(v.tri, v.bary.x, v.bary.y, 1.0);
+}
+technique Draw {
+  pass {
+    vertex_shader = VSDefault(v);
+    pixel_shader = PSMain(v);
+  }
+}

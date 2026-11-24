@@ -1,0 +1,10 @@
+// Standalone OBS source feedback must render after history texture reuse.
+#include "../../stdlib/hypershader_standard.glsl"
+uniform texture2d iPreviousFrame;
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = fragCoord / iResolution.xy;
+    vec4 oldColor = iPreviousFrame.Sample(textureSampler, uv);
+    float pulse = frac(iTime * 0.4);
+    fragColor = vec4(pulse * 0.8 + oldColor.r * 0.02, 0.2, 0.6, 1.0);
+}
+HYPERSHADER_MAINIMAGE_WRAPPER

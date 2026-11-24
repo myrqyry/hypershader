@@ -1,0 +1,79 @@
+// @label "Spectral Garden"
+// @description "Eight flowering stems respond to eight real FFT bands. Kick opens the blossoms; no AI model, frame history or extra audio capture."
+// Original native HyperShaderFX audio instrument.
+// One flower per measured band. The quiet garden remains visible in silence.
+#include "../../stdlib/hypershader_standard.glsl"
+
+uniform float audio_gain; // @min 0 @max 8 @step 0.1 @default 3.0 @label "Music Sensitivity" @group "Growth"
+uniform float blossom_size; // @min 0.008 @max 0.07 @step 0.002 @default 0.026 @label "Blossom Size" @group "Growth"
+uniform float bloom_amount; // @min 0 @max 0.08 @step 0.002 @default 0.039 @label "Audio Bloom" @group "Growth"
+uniform float wind_speed; // @min 0 @max 2 @step 0.05 @default 0.95 @label "Slow Sway" @group "Motion"
+uniform float3 background_color; // @default "0.075,0.106,0.112" @label "Twilight" @group "Palette"
+uniform float3 stem_color; // @default "0.32,0.48,0.36" @label "Foliage" @group "Palette"
+uniform float3 cool_petals; // @default "0.56,0.69,0.65" @label "Cool Blossoms" @group "Palette"
+uniform float3 warm_petals; // @default "0.93,0.58,0.44" @label "Warm Blossoms" @group "Palette"
+
+float gardenBand(int index)
+{
+    if(index==0)return audio_band0;
+    if(index==1)return audio_band1;
+    if(index==2)return audio_band2;
+    if(index==3)return audio_band3;
+    if(index==4)return audio_band4;
+    if(index==5)return audio_band5;
+    if(index==6)return audio_band6;
+    return audio_band7;
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    float2 size = max(iResolution.xy, float2(1.0,1.0));
+    float2 uv = fragCoord / size;
+    float aspect = size.x / size.y;
+    float2 p = float2((uv.x-0.5)*aspect,uv.y);
+    float aa = 1.35 / size.y;
+    float noise = frac(sin(dot(floor(fragCoord),float2(31.7,91.3)))*43758.27);
+    float3 color = background_color*(0.94 + 0.07*uv.y + 0.035*noise);
+    // Ground is a subdued surface, not a second, artificially measured band.
+    float ground = smoothstep(0.85,0.91,uv.y);
+    color = lerp(color,background_color*0.44+stem_color*0.12,ground);
+
+    for(int i=0;i<8;i++) {
+        float index = float(i);
+        float energy = saturate(gardenBand(i)*audio_gain);
+        float kick = saturate(audio_kick);
+        float rootX = (index-3.5)*(aspect/9.0);
+        float rootY = 0.875;
+        float stemHeight = 0.26 + 0.04*sin(index*1.63) + energy*0.105;
+        float flowerY = rootY-stemHeight;
+        float sway = sin(iTime*wind_speed+index*1.73)*0.042*(0.48+energy*0.52);
+        float topX = rootX+sway;
+        float position = saturate((p.y-flowerY)/max(stemHeight,0.01));
+        float stalkX = rootX+sway*(1.0-position)*(1.0-position);
+        float stalk = (1.0-smoothstep(0.002,0.002+aa,abs(p.x-stalkX)))
+                     *step(flowerY,p.y)*step(p.y,rootY);
+        color = lerp(color,stem_color*(0.65+0.3*energy),stalk*0.83);
+
+        // Each leaf is a small, tilted ellipse attached to its real stem.
+        float2 leafA = float2(p.x-(rootX-0.025+sway*0.3),p.y-(rootY-0.11));
+        float2 leafB = float2(p.x-(rootX+0.029+sway*0.6),p.y-(rootY-0.19));
+        float leaf1 = length(float2((leafA.x+leafA.y*0.28)/0.035,leafA.y/0.012));
+        float leaf2 = length(float2((leafB.x-leafB.y*0.31)/0.038,leafB.y/0.012));
+        float foliage = 1.0-smoothstep(0.90,1.12,min(leaf1,leaf2));
+        color = lerp(color,stem_color*(0.86+0.18*energy),foliage*0.85);
+
+        float2 delta = p-float2(topX,flowerY);
+        float r = length(delta);
+        float angle = atan2(delta.y,delta.x);
+        float radius = blossom_size+bloom_amount*energy+kick*0.011;
+        float scallop = 0.85 + 0.15*cos(6.0*angle+index*0.48);
+        float petals = 1.0-smoothstep(radius*scallop-aa,radius*scallop+aa,r);
+        float3 petal = lerp(cool_petals,warm_petals,index/7.0);
+        color = lerp(color,petal*(0.78+0.32*energy+0.20*kick),petals*0.95);
+        float seed = 1.0-smoothstep(radius*0.19,radius*0.24+aa,r);
+        color = lerp(color,float3(0.98,0.83,0.53),seed);
+    }
+
+    fragColor = float4(saturate(color),1.0);
+}
+HYPERSHADER_MAINIMAGE_WRAPPER

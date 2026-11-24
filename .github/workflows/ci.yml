@@ -1,0 +1,76 @@
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux OBS31 build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify deterministic OBS SDK contract
+        run: python3 .github/scripts/test-ci-sdk-contract.py
+      - name: Verify candidate source export boundary
+        run: python3 scripts/test-stage-release-source.py
+      - name: Verify shader settings contracts
+        run: node --test scripts/test-verify-settings.js && node scripts/verify-settings.js
+      - name: Verify Linux installer layouts
+        run: python3 scripts/test-linux-installer.py && python3 scripts/test-obs33-install-layout.py
+      - name: Verify OBS 32/33 image ABI bridge
+        run: python3 scripts/test-obs33-image-abi.py
+      - name: Build plugin
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x86_64
+      - name: Verify Linux payload
+        shell: bash
+        run: |
+          module="$(find release -type f -name 'hyperShaderFX.so' -print -quit)"
+          test -n "$module" && test -s "$module"
+          test -d release/RelWithDebInfo/data
+
+  windows:
+    name: Windows x64 build
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build plugin
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x64
+      - name: Verify Windows payload
+        shell: pwsh
+        run: |
+          $modern = 'release/RelWithDebInfo/hyperShaderFX/hyperShaderFX.dll'
+          $legacy = 'release/RelWithDebInfo/hyperShaderFX/bin/64bit/hyperShaderFX.dll'
+          if (-not (Test-Path $modern)) { throw 'Missing OBS 33 modern-layout hyperShaderFX.dll' }
+          if (-not (Test-Path $legacy)) { throw 'Missing legacy-layout hyperShaderFX.dll' }
+
+  macos:
+    name: macOS universal build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build plugin
+        uses: ./.github/actions/build-plugin
+        with:
+          target: universal
+      - name: Verify macOS payload
+        shell: bash
+        run: |
+          bundle="$(find release -type d -name 'hyperShaderFX.plugin' -print -quit)"
+          test -n "$bundle"
+          test -s "$bundle/Contents/MacOS/hyperShaderFX"

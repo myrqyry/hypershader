@@ -1,0 +1,13 @@
+{
+  "name": "hypershaderfx-dev-tools",
+  "private": true,
+  "scripts": {
+    "verify:settings": "node scripts/verify-settings.js",
+    "verify:mediapipe": "node scripts/verify-mediapipe-wrapper.js",
+    "verify:bloom": "node scripts/verify-postprocess-bloom.js",
+    "verify:bloom:obs": "bash scripts/verify-stdlib-loader.sh",
+    "verify:dock": "node scripts/verify-dock.js",
+    "verify:shader-builder": "node scripts/verify-shader-builder.js",
+    "verify:shader-builder:obs": "bash scripts/verify-shader-builder-obs.sh"
+  }
+}

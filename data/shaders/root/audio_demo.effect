@@ -1,0 +1,26 @@
+// @label "Audio Reactivity Demo"
+// @audio "bass" @gain 5.0 @smooth 0.8
+uniform float bass_level;
+
+// @audio "treble" @gain 3.0
+uniform float treble_level;
+
+#include "../../stdlib/hypershader_standard.glsl"
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = fragCoord / iResolution.xy;
+    
+    // Visualize Bass as a red pulse circle
+    float dist = distance(uv, vec2(0.5));
+    float circle = smoothstep(bass_level * 0.5, bass_level * 0.5 - 0.05, dist);
+    
+    // Visualize Treble as blue noise
+    float noise = frac(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
+    float blue = step(0.95 - treble_level * 0.2, noise);
+    
+    vec3 col = vec3(circle, 0.0, blue);
+    
+    fragColor = vec4(col, 1.0);
+}
+
+HYPERSHADER_MAINIMAGE_WRAPPER

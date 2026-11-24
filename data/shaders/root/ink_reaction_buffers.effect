@@ -1,0 +1,103 @@
+// @label "Ink Reaction / Two-Buffer"
+ // @description "Native two-field Gray-Scott chemistry with a second persistent phosphor field. Requires BufferA -> BufferB -> Draw."
+// The shader has no fake depth/motion sources and works with silence or static input.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iBufferA;
+uniform texture2d iBufferB;
+uniform texture2d iBufferAPrevious;
+uniform texture2d iBufferBPrevious;
+uniform float3 iResolution;
+uniform float iTime;
+uniform int iGraphFrame; // Bound by HyperShaderFX; resets with graph history.
+
+uniform float feed_rate;      // @min 0.015 @max 0.08 @step 0.001 @default 0.037 @label "Feed Rate" @group "Reaction"
+uniform float kill_rate;      // @min 0.03 @max 0.08 @step 0.001 @default 0.060 @label "Kill Rate" @group "Reaction"
+uniform float diffusion_u;    // @min 0.01 @max 0.35 @step 0.01 @default 0.18 @label "U Diffusion" @group "Reaction"
+uniform float diffusion_v;    // @min 0.01 @max 0.25 @step 0.01 @default 0.09 @label "V Diffusion" @group "Reaction"
+uniform float seed_amount;    // @min 0.0 @max 1.0 @step 0.01 @default 0.35 @label "Moving Ink Injection" @group "Input"
+uniform float trail_decay;    // @min 0.75 @max 0.999 @step 0.001 @default 0.975 @label "Phosphor Persistence" @group "Appearance"
+uniform float source_mix;     // @min 0.0 @max 1.0 @step 0.01 @default 0.12 @label "Original Image Mix" @group "Appearance"
+
+sampler_state simSampler {
+    Filter = Linear;
+    AddressU = Wrap;
+    AddressV = Wrap;
+};
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+    VertData o;
+    o.pos = mul(float4(v.pos.xyz,1.0),ViewProj);
+    o.uv = v.uv;
+    return o;
+}
+
+float seedInk(float2 uv, float2 at, float radius) {
+    float aspect = iResolution.x / max(iResolution.y, 1.0);
+    float2 delta = (uv - at) * float2(aspect, 1.0);
+    return 1.0 - smoothstep(radius * 0.45, radius, length(delta));
+}
+
+float4 PSReaction(VertData v):TARGET {
+    float2 uv = v.uv;
+    float2 px = 1.0 / max(iResolution.xy, float2(1.0,1.0));
+    float4 center = iBufferAPrevious.Sample(simSampler, uv);
+    float u = center.r;
+    float chemical = center.g;
+    float2 seedA = float2(0.49 + 0.14 * sin(iTime * 0.37),
+                         0.50 + 0.12 * cos(iTime * 0.23));
+    float2 seedB = float2(0.56 + 0.17 * sin(iTime * 0.29 + 2.0),
+                         0.43 + 0.14 * cos(iTime * 0.31 + 1.2));
+
+    if (iGraphFrame == 0) {
+        // Initialize from known values, never sample an uninitialized buffer.
+        float seeded = max(seedInk(uv, float2(0.48,0.49), 0.16),
+                           seedInk(uv, float2(0.60,0.54), 0.09));
+        return float4(1.0 - seeded * 0.40, seeded * 0.62, 0.0, 1.0);
+    }
+
+    float2 left  = iBufferAPrevious.Sample(simSampler, uv-float2(px.x,0)).rg;
+    float2 right = iBufferAPrevious.Sample(simSampler, uv+float2(px.x,0)).rg;
+    float2 up    = iBufferAPrevious.Sample(simSampler, uv-float2(0,px.y)).rg;
+    float2 down  = iBufferAPrevious.Sample(simSampler, uv+float2(0,px.y)).rg;
+    float2 laplace = left + right + up + down - center.rg * 4.0;
+    float reaction = u * chemical * chemical;
+    float updatedU = u + diffusion_u * laplace.x - reaction + feed_rate * (1.0 - u);
+    float updatedV = chemical + diffusion_v * laplace.y + reaction -
+                     (feed_rate + kill_rate) * chemical;
+
+    // Small moving deposition prevents static scenes from reaching equilibrium.
+    float deposit = max(seedInk(uv, seedA, 0.035), seedInk(uv, seedB, 0.024));
+    updatedV += deposit * seed_amount * 0.035;
+    updatedU -= deposit * seed_amount * 0.015;
+    return float4(saturate(updatedU), saturate(updatedV), 0.0, 1.0);
+}
+
+float4 PSTrails(VertData v):TARGET {
+    float2 uv = v.uv;
+    float currentV = iBufferA.Sample(simSampler,uv).g;
+    float2 history = iBufferBPrevious.Sample(simSampler,uv).rg;
+    // Buffer B evolves independently: decayed peak and smoothed history.
+    float peak = max(currentV, history.r * trail_decay);
+    float slow = lerp(history.g, currentV, 0.085);
+    return float4(peak,slow,0.0,1.0);
+}
+
+float4 PSComposite(VertData v):TARGET {
+    float2 uv=v.uv;
+    float2 chemicals=iBufferA.Sample(simSampler,uv).rg;
+    float2 glow=iBufferB.Sample(simSampler,uv).rg;
+    float ink=saturate(chemicals.y*2.25+glow.x*0.9);
+    float phosphor=saturate(glow.y*2.0);
+    float3 baseColor=float3(0.045,0.035,0.11);
+    float3 inkColor=lerp(float3(0.30,0.13,0.55),
+                         float3(1.0,0.57,0.23),saturate(ink*1.1));
+    float3 finalRgb=baseColor + inkColor * ink + float3(0.13,0.22,0.36)*phosphor;
+    float4 upstream=image.Sample(simSampler,uv);
+    finalRgb=lerp(finalRgb,upstream.rgb,saturate(source_mix));
+    return float4(saturate(finalRgb),upstream.a);
+}
+
+technique BufferA { pass { vertex_shader=VSDefault(v);pixel_shader=PSReaction(v); } }
+technique BufferB { pass { vertex_shader=VSDefault(v);pixel_shader=PSTrails(v); } }
+technique Draw    { pass { vertex_shader=VSDefault(v);pixel_shader=PSComposite(v); } }

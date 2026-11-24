@@ -1,0 +1,78 @@
+// @label "Sight: Depth Glass"
+// @description "Depth-selective animated glass distortion with depth and optional subject boundary protection."
+uniform float4x4 ViewProj;
+uniform float audio_kick; // @audio "kick"
+uniform float audio_snare;
+uniform float audio_beat;
+uniform float audio_band0;
+uniform float audio_flux;
+uniform int music_response; // @label "React to music" @list "Off,Kick / bass hits,Snare / mid-high hits,Beat,Bass energy,Spectral change" @default 0 @group "Music"
+uniform float music_amount; // @label "Music strength" @min 0 @max 1 @step 0.01 @default 0.75 @group "Music"
+
+uniform texture2d image;
+uniform texture2d iSightDepth;
+uniform float iSightDepthPresent;
+uniform texture2d iSegmentation;
+uniform float iSightMattePresent;
+uniform float3 iResolution;
+uniform float iTime;
+uniform float glass_strength; // @label "Refraction (px)" @min 0 @max 48 @step 0.5 @default 12 @group "Glass"
+uniform float wave_length; // @label "Ripple Wavelength (px)" @min 16 @max 256 @step 1 @default 72 @group "Glass"
+uniform float wave_speed; // @label "Ripple Speed (cycles/sec)" @min 0 @max 2 @step 0.05 @default 0.25 @group "Glass"
+uniform float depth_center; // @label "Depth Center (0 Far, 1 Near)" @min 0 @max 1 @step 0.01 @default 0.25 @group "Depth"
+uniform float depth_width; // @label "Depth Band Half Width" @min 0.05 @max 1 @step 0.01 @default 0.4 @group "Depth"
+uniform float edge_tolerance; // @label "Allowed Depth Difference" @min 0.01 @max 0.3 @step 0.01 @default 0.08 @group "Depth"
+uniform bool protect_subject; // @label "Protect Subject" @default false @group "Depth"
+uniform float effect_mix; // @label "Effect Mix" @min 0 @max 1 @step 0.01 @default 1 @group "Output"
+uniform bool debug_band; // @label "Preview Depth Band" @default false @group "Debug"
+sampler_state linearClamp {Filter=Linear;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v){VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;}
+float depthAt(float2 uv){return saturate(iSightDepth.Sample(linearClamp,uv).r);}
+float subjectAt(float2 uv){return saturate(iSegmentation.Sample(linearClamp,uv).r);}
+float musicPulse() {
+    float pulse=0.0;
+    if(music_response==1)pulse=audio_kick;
+    else if(music_response==2)pulse=audio_snare;
+    else if(music_response==3)pulse=audio_beat;
+    else if(music_response==4)pulse=audio_band0;
+    else if(music_response==5)pulse=audio_flux;
+    return saturate(pulse)*saturate(music_amount);
+}
+float4 PSMain(VertData v):TARGET {
+    float2 uv=v.uv;
+    float4 original=image.Sample(linearClamp,uv);
+    if(iSightDepthPresent<0.5||(protect_subject&&iSightMattePresent<0.5)||
+       effect_mix<=0.0001)return original;
+    float d=depthAt(uv);
+    float width=max(depth_width,0.05);
+    float band=1.0-smoothstep(width*0.55,width,abs(d-depth_center));
+    if(protect_subject)band*=1.0-smoothstep(0.08,0.35,subjectAt(uv));
+    if(debug_band)return float4(float3(band,band,band)*original.a,original.a);
+    if(band<=0.0001||glass_strength<=0.0||original.a<=0.0001)return original;
+    float2 res=max(iResolution.xy,float2(1,1));
+    float2 pixel=uv*res;
+    float phase=iTime*wave_speed*6.2831853;
+    float2 wave=float2(sin(pixel.y*6.2831853/max(wave_length,16.0)+phase),
+        0.35*cos(pixel.x*6.2831853/max(wave_length,16.0)+phase));
+    float2 delta=wave*clamp(glass_strength*(1.0+2.0*musicPulse()),0.0,48.0)*band/res;
+    float2 dest=uv+delta;
+    if(dest.x<0.0||dest.x>1.0||dest.y<0.0||dest.y>1.0)return original;
+    // Four bounded path taps catch discontinuities that endpoint-only
+    // comparisons miss. This is conservative, not a full occlusion raycast.
+    float diff=0.0;
+    float foreground=0.0;
+    for(int i=1;i<=4;i++){
+        float2 p=uv+delta*(float(i)*0.25);
+        diff=max(diff,abs(depthAt(p)-d));
+        if(protect_subject)foreground=max(foreground,subjectAt(p));
+    }
+    float tolerance=max(edge_tolerance,0.01);
+    float weight=1.0-smoothstep(tolerance*0.5,tolerance,diff);
+    if(protect_subject)weight*=1.0-smoothstep(0.08,0.35,foreground);
+    float4 warped=image.Sample(linearClamp,dest);
+    // Do not borrow RGB from a substantially different alpha surface.
+    weight*=1.0-smoothstep(0.01,0.04,abs(warped.a-original.a));
+    return float4(lerp(original.rgb,warped.rgb,weight*saturate(effect_mix)),original.a);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

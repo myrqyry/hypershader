@@ -1,0 +1,51 @@
+// @label "Sight: Subject Frame"
+// @description "Frame the detected foreground union with corner brackets, its centroid, and a coverage indicator."
+// Uses the source-local Sight Subject Cutout matte; no second model.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float3 iResolution;
+uniform float iSightSubjectPresent;
+uniform float4 iSightSubjectBounds;
+uniform float2 iSightSubjectCenter;
+uniform float iSightSubjectCoverage;
+uniform float line_width; // @label "Line Width" @group "Subject Frame" @min 1 @max 8 @step 0.5 @default 2
+uniform float frame_opacity; // @label "Opacity" @group "Subject Frame" @min 0 @max 1 @step 0.01 @default 0.9
+uniform float4 frame_color; // @label "Marker Color" @group "Subject Frame" @default "0.14,0.92,0.80,1.0"
+uniform bool show_center; // @label "Centroid" @group "Subject Frame" @default true
+uniform bool show_coverage; // @label "Coverage Indicator" @group "Subject Frame" @default true
+sampler_state sourceSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+    VertData o; o.pos=mul(float4(v.pos.xyz,1),ViewProj); o.uv=v.uv; return o;
+}
+float rectangle(float2 delta, float2 half_size) {
+    float2 distance=abs(delta)-half_size;
+    return 1.0-smoothstep(0.0,1.0,max(distance.x,distance.y));
+}
+float4 PSMain(VertData v):TARGET {
+    float4 original=image.Sample(sourceSampler,v.uv);
+    if (iSightSubjectPresent<0.5 || frame_opacity<=0.0) return original;
+    float2 size=max(iResolution.xy,float2(1,1));
+    float2 p=v.uv*size;
+    float2 lo=clamp(iSightSubjectBounds.xy*size,float2(0.5,0.5),size-0.5);
+    float2 hi=clamp(iSightSubjectBounds.zw*size,float2(0.5,0.5),size-0.5);
+    float2 span=max(hi-lo,float2(1,1));
+    float2 corner=min(clamp(span*0.14,4.0,32.0),span*0.5);
+    float2 edge=min(abs(p-lo),abs(p-hi));
+    float half_width=max(line_width*0.5,0.5);
+    float a=rectangle(edge,float2(corner.x,half_width));
+    a=max(a,rectangle(edge,float2(half_width,corner.y)));
+    if (show_center) {
+        float2 c=p-iSightSubjectCenter*size;
+        a=max(a,rectangle(c,float2(7,half_width)));
+        a=max(a,rectangle(c,float2(half_width,7)));
+    }
+    if (show_coverage) {
+        float bar_len=span.x*saturate(iSightSubjectCoverage);
+        if (bar_len>0.0)
+            a=max(a,rectangle(p-float2(lo.x+bar_len*0.5,max(lo.y+2.0,hi.y-6.0)),
+                              float2(bar_len*0.5,half_width)));
+    }
+    return float4(lerp(original.rgb,frame_color.rgb,saturate(a*frame_opacity*frame_color.a)),original.a);
+}
+technique Draw { pass { vertex_shader=VSDefault(v); pixel_shader=PSMain(v); } }

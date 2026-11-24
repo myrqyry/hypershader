@@ -1,0 +1,26 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iSightTextMask;
+uniform texture2d iSightTextBounds;
+uniform float iSightTextPresent;
+uniform int iSightTextCount;
+sampler_state samplePoint {Filter=Point;AddressU=Clamp;AddressV=Clamp;};
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v) {
+    VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
+}
+float4 PSMain(VertData v):TARGET {
+    if(iSightTextPresent<0.5) {
+        if(iSightTextCount!=0)return float4(0,1,0,1);
+        return image.Sample(samplePoint,v.uv);
+    }
+    if(v.uv.y<0.04) {
+        float i=floor(v.uv.x*8.0);
+        float4 b=iSightTextBounds.Sample(samplePoint,float2((floor(i/4.0)+0.5)/512.0,0.5));
+        float c=i-4.0*floor(i/4.0);
+        float value=c<0.5?b.x:c<1.5?b.y:c<2.5?b.z:b.w;
+        return float4(value,1,0,1);
+    }
+    return float4(iSightTextMask.Sample(samplePoint,v.uv).r,float(iSightTextCount)/255.0,1,1);
+}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

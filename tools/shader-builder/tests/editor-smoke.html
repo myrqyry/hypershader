@@ -1,0 +1,43 @@
+<!doctype html><html><body><output id="result">PENDING</output>
+<iframe src="../index.html" width="1100" height="750"></iframe>
+<script>
+const frame = document.querySelector('iframe');
+frame.onload = () => setTimeout(() => {
+    const output = document.getElementById('result');
+    try {
+        const view = frame.contentWindow;
+        const app = view.app;
+        if (!app || !app.graph.getOutputNode()) throw Error('Editor demo did not initialize');
+        if (!app.previewRenderer || !app.previewRenderer.program) {
+            throw Error('Preview not compiled: ' + app.elements.previewOverlay.textContent);
+        }
+        const gl = app.previewRenderer.gl;
+        app.previewRenderer.renderFrame(1000);
+        const pixels = new Uint8Array(4);
+        gl.readPixels(50, 50, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        if (pixels[3] !== 255 || (pixels[0] === 0 && pixels[1] === 0 && pixels[2] === 0)) {
+            throw Error('Editor preview did not render meaningful pixels: ' + pixels);
+        }
+        if (!app.elements.previewOverlay.classList.contains('hidden')) {
+            throw Error('Editor overlay hides good preview: ' + app.elements.previewOverlay.textContent);
+        }
+        const nativeOnly = app.graph.addNode('noise_value', {x:500,y:300}, app.catalog);
+        if (!app.previewRenderer.program || !app.elements.previewOverlay.classList.contains('hidden')) {
+            throw Error('Disconnected native-only node must not disable preview');
+        }
+        if (!app.graph.connect(nativeOnly.id, 'result', app.graph.getOutputNode().id, 'color')) {
+            throw Error('Failed to connect native-only node');
+        }
+        if (app.elements.previewOverlay.classList.contains('hidden') ||
+            !app.elements.previewOverlay.textContent.includes('native-only') ||
+            app.previewRenderer.program) {
+            throw Error('Native-only node did not disable unsupported browser preview');
+        }
+        app.graph.removeNode(nativeOnly.id);
+        if (!app.previewRenderer.program || !app.elements.previewOverlay.classList.contains('hidden')) {
+            throw Error('Browser preview did not recover after removing native-only node');
+        }
+        output.textContent = 'PASS: editor demo rendered real pixels and handled native-only fallback/recovery: ' + Array.from(pixels);
+    } catch (error) { output.textContent = 'FAIL: ' + (error.stack || error); }
+}, 1200);
+</script></body></html>

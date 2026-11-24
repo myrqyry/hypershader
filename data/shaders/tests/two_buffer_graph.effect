@@ -1,0 +1,31 @@
+// Two independently persistent simulation channels. Native libobs effect.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iBufferA;
+uniform texture2d iBufferB;
+uniform texture2d iBufferAPrevious;
+uniform texture2d iBufferBPrevious;
+uniform float output_gain; // @min 0.0 @max 1.0 @step 0.01 @default 1.0 @label "Output Gain"
+sampler_state simSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+ VertData o; o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float4 PSA(VertData v):TARGET {
+ float value=iBufferAPrevious.Sample(simSampler,v.uv).r;
+ float inputLevel=image.Sample(simSampler,v.uv).r;
+ return float4(min(value+0.008+inputLevel*0.01,0.85),0,0,1);
+}
+float4 PSB(VertData v):TARGET {
+ float a=iBufferA.Sample(simSampler,v.uv).r;
+ float history=iBufferBPrevious.Sample(simSampler,v.uv).g;
+ return float4(0,min(history+0.006+a*0.008,0.7),0,1);
+}
+float4 PSFinal(VertData v):TARGET {
+ float a=iBufferA.Sample(simSampler,v.uv).r;
+ float b=iBufferB.Sample(simSampler,v.uv).g;
+ return float4(a*output_gain,b*output_gain,0,1);
+}
+technique BufferA { pass {vertex_shader=VSDefault(v);pixel_shader=PSA(v);} }
+technique BufferB { pass {vertex_shader=VSDefault(v);pixel_shader=PSB(v);} }
+technique Draw { pass {vertex_shader=VSDefault(v);pixel_shader=PSFinal(v);} }

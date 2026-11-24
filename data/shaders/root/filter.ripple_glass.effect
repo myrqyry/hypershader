@@ -1,0 +1,87 @@
+// @label "Ripple Glass"
+// @description "Persistent two-step wave equation, dispersive video refraction and energy caustics."
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iBufferA;
+uniform texture2d iBufferB;
+uniform texture2d iBufferAPrevious;
+uniform texture2d iBufferBPrevious;
+uniform float3 iResolution;
+uniform float iTime;
+uniform int iGraphFrame;
+uniform float wave_speed; // @min 0.02 @max 0.24 @step 0.01 @default 0.19 @label "Wave Propagation" @group "Waves"
+uniform float wave_damping; // @min 0.90 @max 0.999 @step 0.001 @default 0.985 @label "Wave Persistence" @group "Waves"
+uniform float ripple_sensitivity; // @min 0.0 @max 2.0 @step 0.05 @default 1.15 @label "Video Motion Response" @group "Waves"
+uniform float ambient_ripples; // @min 0.0 @max 1.0 @step 0.01 @default 0.27 @label "Ambient Disturbance" @group "Waves"
+uniform float distortion; // @min 0.0 @max 3.0 @step 0.05 @default 1.9 @label "Refraction Strength" @group "Glass"
+uniform float chromatic_fringe; // @min 0.0 @max 2.0 @step 0.05 @default 0.7 @label "Chromatic Dispersion" @group "Glass"
+uniform float caustic_persistence; // @min 0.5 @max 0.995 @step 0.005 @default 0.975 @label "Caustic Memory" @group "Glass"
+uniform float effect_mix; // @min 0.0 @max 1.0 @step 0.01 @default 0.87 @label "Effect Mix" @group "Output"
+
+sampler_state glassSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
+VertData VSDefault(VertData v) {
+    VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
+}
+float lum(float3 c) {return dot(c,float3(0.2126,0.7152,0.0722));}
+float4 PSWave(VertData v):TARGET {
+    float2 uv=v.uv;
+    float2 px=1.0/max(iResolution.xy,float2(1,1));
+    float brightness=lum(image.Sample(glassSampler,uv).rgb);
+    if (iGraphFrame==0) {
+        float2 q=(uv-float2(0.53,0.49))*float2(iResolution.x/max(iResolution.y,1),1);
+        float disturbance=exp(-dot(q,q)*90.0)*0.14;
+        return float4(0.5+disturbance,0.5,brightness,1);
+    }
+    float4 previous=iBufferAPrevious.Sample(glassSampler,uv);
+    float h=previous.r-0.5;
+    float old=previous.g-0.5;
+    float neighbors=iBufferAPrevious.Sample(glassSampler,uv+float2(px.x,0)).r+
+                    iBufferAPrevious.Sample(glassSampler,uv-float2(px.x,0)).r+
+                    iBufferAPrevious.Sample(glassSampler,uv+float2(0,px.y)).r+
+                    iBufferAPrevious.Sample(glassSampler,uv-float2(0,px.y)).r;
+    float lap=neighbors-4.0*previous.r;
+    float impulse=(brightness-previous.b)*ripple_sensitivity*0.12;
+    float2 q=uv-float2(0.5+0.3*sin(iTime*0.41),0.5+0.2*cos(iTime*0.34));
+    impulse+=ambient_ripples*0.003*exp(-dot(q,q)*320.0);
+    float next=clamp(((2.0*h-old)+wave_speed*lap+impulse)*wave_damping,-0.45,0.45);
+    return float4(0.5+next,previous.r,brightness,1);
+}
+float4 PSCaustic(VertData v):TARGET {
+    float2 uv=v.uv;
+    float2 px=1.0/max(iResolution.xy,float2(1,1));
+    float h=iBufferA.Sample(glassSampler,uv).r;
+    float hx=iBufferA.Sample(glassSampler,uv+float2(px.x,0)).r-
+             iBufferA.Sample(glassSampler,uv-float2(px.x,0)).r;
+    float hy=iBufferA.Sample(glassSampler,uv+float2(0,px.y)).r-
+             iBufferA.Sample(glassSampler,uv-float2(0,px.y)).r;
+    float energy=saturate(length(float2(hx,hy))*8.0+abs(h-0.5)*1.4);
+    float2 previous=iGraphFrame==0 ? float2(0,0) :
+        iBufferBPrevious.Sample(glassSampler,uv).rg;
+    float highlight=max(energy,previous.r*caustic_persistence);
+    float soft=lerp(previous.g,energy,0.07);
+    return float4(saturate(highlight),saturate(soft),0,1);
+}
+float4 PSGlass(VertData v):TARGET {
+    float2 uv=v.uv;
+    float4 original=image.Sample(glassSampler,uv);
+    float2 px=1.0/max(iResolution.xy,float2(1,1));
+    float gx=iBufferA.Sample(glassSampler,uv+float2(px.x,0)).r-
+             iBufferA.Sample(glassSampler,uv-float2(px.x,0)).r;
+    float gy=iBufferA.Sample(glassSampler,uv+float2(0,px.y)).r-
+             iBufferA.Sample(glassSampler,uv-float2(0,px.y)).r;
+    float2 bend=float2(gx,gy)*distortion*2.5;
+    float2 chromatic=bend*chromatic_fringe*0.5;
+    float red=image.Sample(glassSampler,uv+bend+chromatic).r;
+    float green=image.Sample(glassSampler,uv+bend).g;
+    float blue=image.Sample(glassSampler,uv+bend-chromatic).b;
+    float2 rays=iBufferB.Sample(glassSampler,uv).rg;
+    float3 refracted=float3(red,green,blue);
+    float3 glassColor=saturate(refracted*0.85+
+        float3(0.34,0.64,0.9)*rays.r*0.52+
+        float3(0.8,0.88,1.0)*rays.g*0.27);
+    return float4(lerp(original.rgb,glassColor,effect_mix),original.a);
+}
+technique BufferA {pass {vertex_shader=VSDefault(v);pixel_shader=PSWave(v);}}
+technique BufferB {pass {vertex_shader=VSDefault(v);pixel_shader=PSCaustic(v);}}
+technique Draw {pass {vertex_shader=VSDefault(v);pixel_shader=PSGlass(v);}}

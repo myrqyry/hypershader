@@ -1,0 +1,86 @@
+// Optical Halation — Soft Highlight Bloom
+// Native single-pass OBS filter. Diffuses actual bright scene pixels into
+// soft, warm halos; no procedural glare sprites, noise or fake lens ghosts.
+// A true bloom pyramid would require multiple host-controlled render passes.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float3 iResolution;
+
+// @min 0.0 @max 3.0 @step 0.05 @default 0.85 @label "Bloom Intensity" @group "Light"
+uniform float bloom_intensity;
+// @min 0.0 @max 1.5 @step 0.02 @default 0.72 @label "Luma Threshold" @group "Light"
+uniform float bloom_threshold;
+// @min 0.0 @max 0.6 @step 0.01 @default 0.18 @label "Soft Knee" @group "Light"
+uniform float bloom_knee;
+// @min 0.5 @max 12.0 @step 0.5 @default 3.5 @label "Bloom Radius (px)" @group "Optics"
+uniform float bloom_radius;
+// @min 0.0 @max 1.0 @step 0.05 @default 0.45 @label "Halation Warmth" @group "Optics"
+uniform float halation_warmth;
+// @min 1.0 @max 5.0 @step 0.25 @default 2.5 @label "Halo Spread" @group "Optics"
+uniform float halo_spread;
+
+sampler_state textureSampler {
+    Filter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+struct VertData {
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+VertData VSDefault(VertData v) {
+    VertData out_v;
+    out_v.pos = mul(float4(v.pos.xyz, 1.0), ViewProj);
+    out_v.uv = v.uv;
+    return out_v;
+}
+float3 bright_part(float3 c) {
+    float luma = dot(c, float3(0.2126, 0.7152, 0.0722));
+    float knee = max(0.0001, bloom_knee);
+    // Ramp continuously through the soft knee; never divide by zero.
+    float coverage = saturate((luma - bloom_threshold + knee) / (2.0 * knee));
+    return c * coverage;
+}
+float4 bloom_tap(float2 uv, float spatial_weight) {
+    float3 bright = bright_part(image.Sample(textureSampler, uv).rgb);
+    float y = dot(bright, float3(0.2126, 0.7152, 0.0722));
+    float w = spatial_weight / (1.0 + y);
+    return float4(bright * w, w);
+}
+float3 gather13(float2 uv, float2 delta) {
+    float4 sum = bloom_tap(uv, 0.125);
+    sum += bloom_tap(uv + float2(-2.0, 0.0) * delta, 0.0625);
+    sum += bloom_tap(uv + float2( 2.0, 0.0) * delta, 0.0625);
+    sum += bloom_tap(uv + float2( 0.0,-2.0) * delta, 0.0625);
+    sum += bloom_tap(uv + float2( 0.0, 2.0) * delta, 0.0625);
+    sum += bloom_tap(uv + float2(-2.0,-2.0) * delta, 0.03125);
+    sum += bloom_tap(uv + float2( 2.0,-2.0) * delta, 0.03125);
+    sum += bloom_tap(uv + float2(-2.0, 2.0) * delta, 0.03125);
+    sum += bloom_tap(uv + float2( 2.0, 2.0) * delta, 0.03125);
+    sum += bloom_tap(uv + float2(-1.0,-1.0) * delta, 0.125);
+    sum += bloom_tap(uv + float2( 1.0,-1.0) * delta, 0.125);
+    sum += bloom_tap(uv + float2(-1.0, 1.0) * delta, 0.125);
+    sum += bloom_tap(uv + float2( 1.0, 1.0) * delta, 0.125);
+    return sum.rgb / max(sum.a, 0.0001);
+}
+float4 PSMain(VertData v) : TARGET {
+    float4 source = image.Sample(textureSampler, v.uv);
+    if (bloom_intensity < 0.0001) return source;
+    float2 resolution = max(iResolution.xy, float2(1.0, 1.0));
+    float2 pixel = max(bloom_radius, 0.5) / resolution;
+    float3 near_glow = gather13(v.uv, pixel);
+    float3 far_glow = gather13(v.uv, pixel * max(halo_spread, 1.0));
+    float3 neutral = 0.55 * near_glow + 0.45 * far_glow;
+    // The warm component is extracted from actual nearby highlights.
+    float3 red_orange = far_glow * float3(1.0, 0.39, 0.18);
+    float3 light = lerp(neutral, neutral * 0.65 + red_orange * 0.35,
+                        saturate(halation_warmth));
+    // Keep the source image and alpha; do not crush shadows or synthesize grain.
+    return float4(saturate(source.rgb + light * bloom_intensity), source.a);
+}
+technique Draw {
+    pass {
+        vertex_shader = VSDefault(v);
+        pixel_shader = PSMain(v);
+    }
+}
