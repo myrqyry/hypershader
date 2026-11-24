@@ -29,6 +29,24 @@ Verified on Linux libobs/OpenGL; Windows/macOS, explicit mip levels and
 mipmapped resource sampling are not yet qualified. No change to existing
 native effects or the old translation of mod; use hsFloorMod explicitly.
 
+## Qualified second slice: independent native render targets
+
+The existing two-buffer filter graph supports immutable shader-declared
+divisors (1, 2, 4, 8) and explicit RGBA16F intermediate data formats.
+The full input remains available to each pass; current-pass, per-buffer
+and output resolutions have separate built-in uniforms. Histories are
+initialized at the actual sizes and reset on resize or shader replacement.
+Existing effects that omit declarations use the original full-size/source
+format defaults. Invalid allocation descriptors bypass the effect.
+
+Linux libobs/OpenGL tests qualified default and half/quarter graphs,
+signed and above-one history values, last-texel addressing, per-instance
+isolation, user controls and compositing, odd-dimension resizing and invalid descriptors.
+See [the graph contract](TWO-BUFFER-GRAPH.md). HDR input/output behavior,
+other platforms, dynamic scaling, and end-to-end performance are not
+yet qualified. Named resource descriptors and a general scheduler with
+explicit memory budgets remain next.
+
 ## Capability matrix
 
 | Primitive | Current boundary | Next |
@@ -37,8 +55,8 @@ native effects or the old translation of mod; use hsFloorMod explicitly.
 | Texture inputs | Four input channels, source image, auxiliary signals | Named resource descriptors, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
-| Render passes | Fixed BufferA, BufferB, Draw; filter only | Independent resolution/format, then named dependency graph for filter/source/transition |
-| Temporal state | Previous output and two persistent buffers | Named history, reset/resize semantics, lifetime and memory budgets |
+| Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph and explicit memory budget for filter/source/transition |
+| Temporal state | Previous output and two persistent buffers with sized initial histories and resize reset | Named history, lifetime and memory budgets |
 | Scene buffers | Sight depth, flow, matte and tracking; estimated, not engine G-buffer | Unified sampling contract with valid/fresh/provenance and camera-space metadata |
 | Geometry | Fullscreen draw and shader-side helpers | Subdivided planes, mesh vertex attributes, transforms, depth and instance drawing |
 | Materials | Lighting/material helper files, not a general pipeline | Common surface record, light evaluation, normal/tangent conventions |
@@ -51,9 +69,10 @@ native effects or the old translation of mod; use hsFloorMod explicitly.
    facilities where actual backend behavior permits it. Keep shader
    authoring controls, texture declarations and builder capability
    descriptions aligned.
-2. Extend the existing two-buffer renderer with independent pass sizes,
-   formats, input/output dimension uniforms, and budget/resize tests.
-   Generalize the scheduler only once that contract is established.
+2. Independent pass dimensions/formats, resource-resolution uniforms
+   and resize tests are implemented for the two-buffer filter.
+   Add explicit resource budgets and generalize the scheduler from
+   that verified contract.
 3. Expose scene inputs through one provider-independent API. Never label
    monocular estimated depth, optical flow or derived normals as genuine
    game-engine geometry. Missing/stale inputs must be explicit.

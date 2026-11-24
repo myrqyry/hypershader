@@ -9,7 +9,7 @@ Opt-in fixed three-stage sequence, executed by the production HyperShaderFX filt
 5. Swap both history targets only after successful rendering.
 
 Existing one-pass effects keep their existing Draw and iPreviousFrame paths.
-There is no generic graph JSON, configurable pass order, or independent per-pass resolution yet.
+BufferA and BufferB support independent bounded resolutions and optional RGBA16F storage. There is no generic graph JSON or configurable pass order yet.
 
 ## Contract
 A graph effect must declare all four texture uniforms iBufferA,
@@ -22,7 +22,7 @@ In Draw, iBufferA and iBufferB refer to current frame buffers.
 In all stages, iBufferAPrevious and iBufferBPrevious refer to the prior frame.
 
 On the first frame after a shader change or resize, prior textures are
-known black, never uninitialized GPU contents. Optional int iGraphFrame
+initialized to opaque black at their actual configured sizes and formats, never uninitialized GPU contents or a one-pixel substitute. Optional int iGraphFrame
 starts at 0, resets on shader replacement or render-target resize,
 and increases only after a successful graph frame. This is separate from OBS iFrame.
 
@@ -30,6 +30,45 @@ The same original input image is bound into all three stages. Per-shader
 metadata controls are rebound before each stage because effect parameters
 can be reset by OBS technique loops. A real libobs test checks that
 a saved output-gain control actually changes the final rendered pixels.
+
+## Independent buffer size and precision
+
+The following optional shader declarations are allocation descriptors, not
+user controls. They are read once at shader load, before allocating graph
+resources, and never from saved slider values.
+
+```hlsl
+uniform int iBufferADivisor = 2; // half width and height
+uniform int iBufferBDivisor = 4; // quarter width and height
+uniform int iBufferAFormat = 1;  // RGBA16F signed/HDR data
+uniform int iBufferBFormat = 1;
+uniform float3 iResolution;
+uniform float3 iBufferAResolution;
+uniform float3 iBufferBResolution;
+uniform float3 iGraphOutputResolution;
+```
+
+Divisors must be 1, 2, 4 or 8. The default is 1; each dimension is
+rounded up independently. Format 0 (default) follows the upstream
+capture format; 1 explicitly uses RGBA16F. Invalid descriptor types,
+missing initializers or values cause the graph to pass the upstream
+source through with a logged diagnostic. The final Draw stage remains
+full resolution and uses the source/output format. The original image
+remains full resolution in every stage.
+
+All resolution vectors contain width, height and aspect ratio. Within
+BufferA/B, iResolution is that pass's actual target size; within Draw it
+is the full output size. The other three resolution uniforms retain
+their respective resource dimensions across all stages, including the
+first initialized history. Use those sizes for integer texel fetches
+and texel offsets rather than assuming the viewport and all textures
+are equal. Shader replacement and source resize reset the history.
+
+Example: on a 1920 x 1080 input, half-size BufferA and quarter-size
+BufferB contain 648,000 pixels in total per history pair, versus
+4,147,200 at full resolution. This is 84.375% fewer buffer pixels;
+memory depends on format and full-resolution capture/output allocations.
+It is not an end-to-end performance benchmark.
 
 ## Included native effect
 data/shaders/root/ink_reaction_buffers.effect demonstrates a
@@ -52,8 +91,12 @@ output from a user parameter. The example test separately verifies
 that the real artist-facing shader compiles, loads, binds parameters,
 and produces varying pixels.
 
-Existing shader picker, P-frame, stdlib loader, source feedback and
-Graph mode is intentionally opt-in.
+The default graph test runner now also exercises the half/quarter
+RGBA16F graph, previous-history access in Draw, exact last-texel access,
+negative and greater-than-one data across frames, opacity changes without
+losing history, odd-dimension resize and invalid descriptor pass-through. All use the real native renderer.
+The runtime checks actual texture dimensions and format, not only
+the requested allocation. Graph mode remains intentionally opt-in.
 
 ## Current limits
 - Not wired to the standalone source or transition lanes.
@@ -61,7 +104,9 @@ Graph mode is intentionally opt-in.
   use iBufferAPrevious / iBufferBPrevious.
 - Real-time full-resolution performance, HDR correctness on other
   GPU drivers, and Windows/macOS were not established by Mesa tests.
-- No arbitrary pass graph, adaptive per-pass resolution, general
+- No arbitrary pass graph, dynamic/adaptive per-pass resolution, general
   compute shaders, or spatial ML input integration yet.
 - Graph-enabled effects with external channels or per-pass audio
   control need dedicated hardware/integration regression coverage.
+
+- Divisors and two histories bound the number of allocations; explicit GPU memory budgeting is still planned.

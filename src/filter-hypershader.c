@@ -79,6 +79,97 @@ static void graph_reset(struct hypershader_data *s)
 	s->graph_valid = false;
 }
 
+/* Read immutable resource descriptors once, on successful shader replacement.
+ * Never use mutable controls to allocate resources on the render path. */
+static bool graph_read_descriptor(gs_effect_t *effect, const char *name, int fallback, int *out)
+{
+	*out = fallback;
+	gs_eparam_t *param = gs_effect_get_param_by_name(effect, name);
+	if (!param)
+		return true;
+	struct gs_effect_param_info info;
+	gs_effect_get_param_info(param, &info);
+	/* OBS 32's effect parser stores integer defaults as C long (8 bytes
+	 * on LP64, 4 on Windows). Accept both encodings without truncation. */
+	const size_t size = gs_effect_get_default_val_size(param);
+	if (info.type != GS_SHADER_PARAM_INT || (size != sizeof(int) && size != sizeof(long)))
+		return false;
+	void *value = gs_effect_get_default_val(param);
+	if (!value)
+		return false;
+	long decoded;
+	if (size == sizeof(long)) {
+		memcpy(&decoded, value, sizeof(long));
+	} else {
+		int narrow;
+		memcpy(&narrow, value, sizeof(int));
+		decoded = narrow;
+	}
+	bfree(value);
+	if (decoded < INT_MIN || decoded > INT_MAX)
+		return false;
+	*out = (int)decoded;
+	return true;
+}
+
+static bool graph_configure(struct hypershader_data *s)
+{
+	const char *divisor_names[] = {"iBufferADivisor", "iBufferBDivisor"};
+	const char *format_names[] = {"iBufferAFormat", "iBufferBFormat"};
+	const char *resolution_names[] = {"iBufferAResolution", "iBufferBResolution"};
+	for (unsigned i = 0; i < 2; ++i) {
+		int divisor, format;
+		if (!graph_read_descriptor(s->effect, divisor_names[i], 1, &divisor) ||
+		    (divisor != 1 && divisor != 2 && divisor != 4 && divisor != 8) ||
+		    !graph_read_descriptor(s->effect, format_names[i], 0, &format) ||
+		    (format != 0 && format != 1)) {
+			blog(LOG_ERROR, "[HyperShader] Invalid graph buffer %c descriptor: expected int divisor 1/2/4/8 and format 0/1", 'A' + i);
+			return false;
+		}
+		s->graph_divisor[i] = (uint32_t)divisor;
+		s->graph_float16[i] = format == 1;
+		s->ep_graph_buffer_resolution[i] = gs_effect_get_param_by_name(s->effect, resolution_names[i]);
+	}
+	s->ep_graph_output_resolution = gs_effect_get_param_by_name(s->effect, "iGraphOutputResolution");
+	gs_eparam_t *resolutions[] = {s->ep_graph_buffer_resolution[0], s->ep_graph_buffer_resolution[1],
+				      s->ep_graph_output_resolution};
+	for (unsigned i = 0; i < 3; ++i) {
+		if (resolutions[i]) {
+			struct gs_effect_param_info info;
+			gs_effect_get_param_info(resolutions[i], &info);
+			if (info.type != GS_SHADER_PARAM_VEC3) {
+				blog(LOG_ERROR, "[HyperShader] Graph resolution uniforms must be float3");
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+static uint32_t graph_extent(uint32_t full, uint32_t divisor)
+{
+	return full / divisor + (full % divisor != 0);
+}
+
+static void graph_set_resolution(gs_eparam_t *param, uint32_t width, uint32_t height)
+{
+	if (param) {
+		struct vec3 resolution;
+		vec3_set(&resolution, (float)width, (float)height,
+			 height ? (float)width / (float)height : 1.0f);
+		gs_effect_set_vec3(param, &resolution);
+	}
+}
+
+static void graph_bind_resolutions(struct hypershader_data *s, uint32_t width, uint32_t height)
+{
+	for (unsigned i = 0; i < 2; ++i)
+		graph_set_resolution(s->ep_graph_buffer_resolution[i],
+				     graph_extent(width, s->graph_divisor[i]),
+				     graph_extent(height, s->graph_divisor[i]));
+	graph_set_resolution(s->ep_graph_output_resolution, width, height);
+}
+
 /* Helper to convert float array to vec4 */
 static inline void vec4_from_float4(struct vec4 *dst, float *src)
 {
@@ -3220,7 +3311,8 @@ static void shader_load_complete_task(void *param)
 		s->ep_iBufferA && s->ep_iBufferB &&
 		s->ep_iBufferAPrevious && s->ep_iBufferBPrevious;
 		graph_reset(s);
-		if (s->graph_enabled)
+		s->graph_config_valid = !s->graph_enabled || graph_configure(s);
+		if (s->graph_enabled && s->graph_config_valid)
 			blog(LOG_INFO, "[HyperShader] Two-buffer graph enabled: A -> B -> Draw");
 		s->ep_iSegmentation = gs_effect_get_param_by_name(s->effect, "iSegmentation");
 		s->ep_iSightMattePresent = gs_effect_get_param_by_name(s->effect, "iSightMattePresent");
@@ -4653,7 +4745,7 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 		for (int frame = 0; frame < 2; frame++)
 			if (!s->graph_history[buffer][frame])
 				s->graph_history[buffer][frame] =
-					gs_texrender_create(format, GS_ZS_NONE);
+					gs_texrender_create(s->graph_float16[buffer] ? GS_RGBA16F : format, GS_ZS_NONE);
 
 	if (!s->feedback_input)
 		return false;
@@ -4700,12 +4792,34 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
     const bool flow_step=s->graph_valid&&hs_sight_flow_step(s->graph_flow_sequence,flow_sequence,flow);
 	const unsigned write = s->graph_write_idx;
 	const unsigned read = write ^ 1U;
-	gs_texture_t *previous_a = s->graph_valid ?
-		gs_texrender_get_texture(s->graph_history[0][read]) : s->dummy_texture;
-	gs_texture_t *previous_b = s->graph_valid ?
-		gs_texrender_get_texture(s->graph_history[1][read]) : s->dummy_texture;
+	/* A 1x1 fallback is not sufficient for integer texel access. Initialize
+	 * each actual history allocation to opaque black before its first read,
+	 * preserving the existing initial color/alpha contract. */
+	if (!s->graph_valid) {
+		struct vec4 black;
+		vec4_set(&black, 0.0f, 0.0f, 0.0f, 1.0f);
+		for (unsigned i = 0; i < 2; ++i) {
+			gs_texrender_t *history = s->graph_history[i][read];
+			gs_texrender_reset(history);
+			if (!gs_texrender_begin(history, graph_extent(width, s->graph_divisor[i]),
+						graph_extent(height, s->graph_divisor[i])))
+				return false;
+			gs_clear(GS_CLEAR_COLOR, &black, 0.0f, 0);
+			gs_texrender_end(history);
+		}
+	}
+	gs_texture_t *previous_a = gs_texrender_get_texture(s->graph_history[0][read]);
+	gs_texture_t *previous_b = gs_texrender_get_texture(s->graph_history[1][read]);
 	if (!previous_a || !previous_b)
 		return false;
+	/* The declared resolution must match the actual resource, even on frame 0. */
+	gs_texture_t *previous[] = {previous_a, previous_b};
+	for (unsigned i = 0; i < 2; ++i) {
+		if (gs_texture_get_width(previous[i]) != graph_extent(width, s->graph_divisor[i]) ||
+		    gs_texture_get_height(previous[i]) != graph_extent(height, s->graph_divisor[i]) ||
+		    gs_texture_get_color_format(previous[i]) != (s->graph_float16[i] ? GS_RGBA16F : format))
+			return false;
+	}
 
 	gs_eparam_t *image = gs_effect_get_param_by_name(s->effect, "image");
 	gs_effect_set_texture(s->ep_iBufferAPrevious, previous_a);
@@ -4713,13 +4827,15 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 	gs_texture_t *current_a = NULL, *current_b = NULL;
 	for (unsigned pass = 0; pass < 2; pass++) {
 		gs_texrender_t *destination = s->graph_history[pass][write];
+		const uint32_t pass_width = graph_extent(width, s->graph_divisor[pass]);
+		const uint32_t pass_height = graph_extent(height, s->graph_divisor[pass]);
 		gs_texrender_reset(destination);
-		if (!gs_texrender_begin(destination, width, height))
+		if (!gs_texrender_begin(destination, pass_width, pass_height))
 			return false;
 		gs_projection_push();
 		gs_matrix_push();
 		gs_matrix_identity();
-		gs_ortho(0, (float)width, 0, (float)height, -100, 100);
+		gs_ortho(0, (float)pass_width, 0, (float)pass_height, -100, 100);
 		struct vec4 clear;
 		vec4_zero(&clear);
 		gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
@@ -4733,7 +4849,8 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 		gs_effect_set_texture(s->ep_iBufferA, pass == 0 ? previous_a : current_a);
 		gs_effect_set_texture(s->ep_iBufferB, previous_b);
 		graph_bind_controls(s);
-		graph_bind_builtins(s, width, height, flow, flow_step, flow_selected);
+		graph_bind_builtins(s, pass_width, pass_height, flow, flow_step, flow_selected);
+		graph_bind_resolutions(s, width, height);
         /* Graph buffers store simulation data, not premultiplied output.
          * Alpha blending destroyed private alpha state (e.g. Datamosh's
          * temporal accumulator) when the first frame started at alpha=0.
@@ -4741,13 +4858,15 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
         gs_blend_state_push();
         gs_enable_blending(false);
         while (gs_effect_loop(s->effect, pass == 0 ? "BufferA" : "BufferB"))
-            gs_draw_sprite(input, 0, width, height);
+            gs_draw_sprite(input, 0, pass_width, pass_height);
         gs_blend_state_pop();
 		gs_matrix_pop();
 		gs_projection_pop();
 		gs_texrender_end(destination);
 		gs_texture_t *output = gs_texrender_get_texture(destination);
-		if (!output)
+		if (!output || gs_texture_get_width(output) != pass_width ||
+		    gs_texture_get_height(output) != pass_height ||
+		    gs_texture_get_color_format(output) != (s->graph_float16[pass] ? GS_RGBA16F : format))
 			return false;
 		if (pass == 0)
 			current_a = output;
@@ -4759,8 +4878,11 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 		gs_effect_set_texture(image, input);
 	gs_effect_set_texture(s->ep_iBufferA, current_a);
 	gs_effect_set_texture(s->ep_iBufferB, current_b);
+	gs_effect_set_texture(s->ep_iBufferAPrevious, previous_a);
+	gs_effect_set_texture(s->ep_iBufferBPrevious, previous_b);
 	graph_bind_controls(s);
     graph_bind_builtins(s, width, height, flow, flow_step, flow_selected);
+    graph_bind_resolutions(s, width, height);
     if (output_composition_enabled(s)) {
         gs_texture_t *fx = output_render_effect(s, input, width, height, format);
         if (!fx || !output_draw_composited(s, input, fx, width, height, format))
@@ -4882,6 +5004,10 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 	}
 
 	if (s->graph_enabled) {
+		if (!s->graph_config_valid) {
+			obs_source_skip_video_filter(s->context);
+			return;
+		}
 		if (!graph_render_filter(s, target, width, height, format)) {
 			blog(LOG_WARNING, "[HyperShader] Two-buffer render failed; passing upstream source");
 			obs_source_skip_video_filter(s->context);

@@ -12,10 +12,11 @@
 #include <chrono>
 #include <iostream>
 #include <cstring>
+#include <mutex>
 using namespace std::chrono_literals;
 constexpr unsigned W=240,H=136;
 using Frame=std::vector<uint8_t>;
-struct TestSource {gs_texture_t* texture=nullptr;};
+struct TestSource {gs_texture_t* texture=nullptr;uint32_t width=W,height=H;};
 TestSource* active=nullptr;
 Frame make_frame(int x){
  Frame pixels(W*H*4);
@@ -30,8 +31,8 @@ Frame make_frame(int x){
  return pixels;
 }
 const char* source_name(void*){return "Temporary moving video fixture";}
-uint32_t source_width(void*){return W;}
-uint32_t source_height(void*){return H;}
+uint32_t source_width(void* data){return static_cast<TestSource*>(data)->width;}
+uint32_t source_height(void* data){return static_cast<TestSource*>(data)->height;}
 void* source_create(obs_data_t*,obs_source_t*){
  auto* s=new TestSource;
  auto frame=make_frame(10);
@@ -48,7 +49,7 @@ void source_destroy(void* data){
 }
 void source_render(void* data,gs_effect_t*){
  auto* s=(TestSource*)data;
- if(s->texture)obs_source_draw(s->texture,0,0,W,H,false);
+ if(s->texture)obs_source_draw(s->texture,0,0,s->width,s->height,false);
 }
 obs_source_info source_info{
  .id="hyper_pframe_test_source",
@@ -94,9 +95,28 @@ size_t diff(const Frame& a,const Frame& b) {
  return total;
 }
 
+struct UiTask {obs_task_t task;void* param;};
+static std::mutex ui_mutex;
+static std::vector<UiTask> ui_tasks;
+static void queue_ui(obs_task_t task,void* param,bool wait) {
+ if(wait){task(param);return;}
+ std::lock_guard<std::mutex> lock(ui_mutex);
+ ui_tasks.push_back({task,param});
+}
+static void drain_ui() {
+ for(;;){
+  std::vector<UiTask> pending;
+  {std::lock_guard<std::mutex> lock(ui_mutex);pending.swap(ui_tasks);}
+  if(pending.empty())return;
+  for(auto &item:pending)item.task(item.param);
+ }
+}
+
 int main(int argc,char** argv) {
- if(argc!=4)return 2;
+ if(argc!=4&&argc!=5)return 2;
+ const std::string mode=argc==5?argv[4]:"default";
  if(!obs_startup("en-US",nullptr,nullptr))return 1;
+ obs_set_ui_task_handler(queue_ui);
  obs_video_info info{};
  info.graphics_module="libobs-opengl";
  info.fps_num=30;info.fps_den=1;
@@ -108,6 +128,7 @@ int main(int argc,char** argv) {
  int open=obs_open_module(&module,argv[1],argv[2]);
  if(open!=MODULE_SUCCESS||!obs_init_module(module)){obs_shutdown();return 1;}
  auto* source=obs_source_create("hyper_pframe_test_source","Buffer fixture",nullptr,nullptr);
+ auto* primary=active;
  auto* data=obs_data_create();
  obs_data_set_string(data,"shader_file",argv[3]);
  auto* filter=obs_source_create("hypershader_filter","Two buffers",data,nullptr);
@@ -116,16 +137,39 @@ int main(int argc,char** argv) {
  obs_source_filter_add(source,filter);
  obs_source_inc_showing(source);
  auto fixed=make_frame(30);
+ if(mode=="invalid"){
+  size_t unchanged=0;
+  obs_enter_graphics();
+  gs_texture_set_image(primary->texture,fixed.data(),W*4,false);
+  obs_leave_graphics();
+  for(int i=0;i<40;i++){
+   auto pixels=render(source);drain_ui();
+   if(i>20&&diff(pixels,fixed)==0)++unchanged;
+   std::this_thread::sleep_for(50ms);
+  }
+  bool pass=unchanged==19;
+  obs_source_dec_showing(source);
+  obs_source_filter_remove(source,filter);
+  obs_source_release(filter);obs_source_release(source);
+  drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_INVALID unchanged="<<unchanged<<" PASS="<<pass<<"\n";
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<pass<<"\n";
+  return pass?0:1;
+ }
+
  int firstA=-1, firstB=-1, lastA=-1,lastB=-1, samples=0;
- int risingA=0, risingB=0;
+ int risingA=0, risingB=0, badPixels=0;
  for(int i=0;i<78;i++){
   obs_enter_graphics();
   if(active&&active->texture)gs_texture_set_image(active->texture,fixed.data(),W*4,false);
   obs_leave_graphics();
-  auto pixels=render(source);
+  auto pixels=render(source);drain_ui();
   if(pixels.size()==W*H*4&&i>=28){
    size_t pos=4*(H/2*W+W/2);
    int a=pixels[pos],b=pixels[pos+1];
+   bool bad=false;
+   for(size_t j=2;j<pixels.size();j+=4)if(pixels[j]>3){bad=true;break;}
+   if(bad)++badPixels;
    if(samples==0){firstA=a;firstB=b;}
    if(samples>0){if(a>lastA+1)risingA++;if(b>lastB+1)risingB++;}
    lastA=a;lastB=b;samples++;
@@ -134,9 +178,9 @@ int main(int argc,char** argv) {
  }
  std::cout<<"TWO_BUFFER_OBS samples="<<samples<<" first_A="<<firstA<<" last_A="<<lastA
           <<" first_B="<<firstB<<" last_B="<<lastB
-          <<" rising_A="<<risingA<<" rising_B="<<risingB<<"\n";
+          <<" rising_A="<<risingA<<" rising_B="<<risingB<<" bad_contract_frames="<<badPixels<<"\n";
  bool pass=samples>20&&firstA>5&&firstB>5&&lastA>firstA+15&&lastB>firstB+10
-            &&risingA>2&&risingB>2&&lastA>lastB;
+            &&risingA>2&&risingB>2&&lastA>lastB&&badPixels==0;
  auto* source2=obs_source_create("hyper_pframe_test_source","Independent buffer fixture",nullptr,nullptr);
  auto* settings2=obs_data_create();
  obs_data_set_string(settings2,"shader_file",argv[3]);
@@ -148,7 +192,7 @@ int main(int argc,char** argv) {
   obs_source_filter_add(source2,filter2);
   obs_source_inc_showing(source2);
   for(int n=0;n<16;n++){
-   auto out=render(source2);
+   auto out=render(source2);drain_ui();
    if(n==15 && out.size()==W*H*4) {
     size_t pos=4*(H/2*W+W/2);
     freshA=out[pos];freshB=out[pos+1];
@@ -171,7 +215,7 @@ int main(int argc,char** argv) {
  obs_data_release(changed);
  int mutedA=999,mutedB=999;
  for(int n=0;n<14;n++){
-  auto out=render(source);
+  auto out=render(source);drain_ui();
   if(n==13 && out.size()==W*H*4){
    size_t pos=4*(H/2*W+W/2);
    mutedA=out[pos];mutedB=out[pos+1];
@@ -182,10 +226,64 @@ int main(int argc,char** argv) {
  pass=pass&&muted;
  std::cout<<"TWO_BUFFER_CONTROL muted_A="<<mutedA
           <<" muted_B="<<mutedB<<" PASS="<<muted<<"\n";
+ if(mode=="scaled"){
+  auto* restored=obs_source_get_settings(filter);
+  obs_data_set_double(restored,"param_output_gain",1.0);
+  obs_data_set_double(restored,"compose_effect_opacity",0.0);
+  obs_source_update(filter,restored);obs_data_release(restored);
+  size_t passthrough=0;
+  for(int n=0;n<8;n++){
+   auto out=render(source);drain_ui();
+   if(diff(out,fixed)==0)++passthrough;
+   std::this_thread::sleep_for(50ms);
+  }
+  auto* visible=obs_source_get_settings(filter);
+  obs_data_set_double(visible,"compose_effect_opacity",1.0);
+  obs_source_update(filter,visible);obs_data_release(visible);
+  size_t oldCenter=4*(H/2*W+W/2);
+  int resumedA=-1;
+  size_t resumedFrames=0;
+  for(int n=0;n<12;n++){
+   auto out=render(source);drain_ui();
+   if(out.size()==W*H*4){
+    resumedA=out[oldCenter];
+    if(resumedA>lastA&&out[oldCenter+2]<=3)++resumedFrames;
+   }
+   std::this_thread::sleep_for(50ms);
+  }
+  // OBS delivers property updates asynchronously. Require multiple visible
+  // frames with mature history, not a synchronous first post-update draw.
+  bool composited=passthrough>=6&&resumedFrames>=8;
+  pass=pass&&composited;
+  std::cout<<"TWO_BUFFER_COMPOSITE passthrough="<<passthrough
+           <<" resumed_A="<<resumedA<<" resumed_frames="<<resumedFrames
+           <<" PASS="<<composited<<"\n";
+  // Resize to odd extents. History must reset rather than sample old sizes.
+  obs_enter_graphics();
+  primary->width=W-3;primary->height=H-3;
+  obs_leave_graphics();
+  auto first=render(source);drain_ui();
+  size_t center=4*((H-3)/2*W+(W-3)/2);
+  int reset=first.size()==W*H*4?first[center]:999;
+  int blue=first.size()==W*H*4?first[center+2]:999;
+  int later=-1;
+  for(int n=0;n<18;n++){
+   auto out=render(source);drain_ui();
+   if(out.size()==W*H*4){
+    later=out[center];
+    blue=std::max(blue,int(out[center+2]));
+   }
+   std::this_thread::sleep_for(50ms);
+  }
+  bool resized=reset<15&&later>reset+15&&blue<=3;
+  pass=pass&&resized;
+  std::cout<<"TWO_BUFFER_RESIZE reset_A="<<reset<<" later_A="<<later<<" blue="<<blue<<" PASS="<<resized<<"\n";
+ }
  obs_source_dec_showing(source);
  obs_source_filter_remove(source,filter);
  obs_source_release(filter);
  obs_source_release(source);
+ drain_ui();
  obs_shutdown();
  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<(pass?1:0)<<"\n";
  return pass?0:1;

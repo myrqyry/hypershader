@@ -136,6 +136,18 @@ return lerp(current, prev, 0.9); // 90% trail
 
 ---
 
+### Multi-resolution feedback
+
+Native filter effects with BufferA, BufferB and Draw techniques can
+request independent internal buffer sizes using integer default uniforms
+`iBufferADivisor` and `iBufferBDivisor` (1, 2, 4 or 8).
+Use `iBufferAFormat = 1` or `iBufferBFormat = 1` for RGBA16F state.
+The shader's `iResolution` is the active pass size; the float3
+`iBufferAResolution`, `iBufferBResolution` and `iGraphOutputResolution`
+describe each respective resource. These are runtime bindings, not
+controls. See the [two-buffer graph contract](../../docs/TWO-BUFFER-GRAPH.md)
+for declarations, defaults, reset behavior and verification scope.
+
 ## 6. Standard Library
 
 You can include helper functions from `data/stdlib/` (source effects live in `data/shaders/root/`):

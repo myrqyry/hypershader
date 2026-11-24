@@ -11,7 +11,7 @@ include f6717a7a5c271f850b5fb8047cd2f116a20490b2 data/shaders/OBS_SHADER_SYNTAX.
 include fcc6575df5b690ee9b9ec42835a04c73ce1b31ca data/shaders/OPTICAL_HALATION.md
 include e8fa27ff088a005c354bf3c03cb993467c7126be data/shaders/PFRAME_DRIFT.md
 include 0a2fc6b1d100da055b092351b01a16d3b23bdfd2 data/shaders/README.md
-include e59cb0161e742eb9c91965324872726f3cabf5ac data/shaders/SHADERS.md
+include e70e88fe72bb60144f18114bd41e1c22ab0d94d6 data/shaders/SHADERS.md
 include e2ced610b2410c4887523a6304703d87595b2af0 data/shaders/root/audio_demo.effect
 include 0cbae2e868727bac9bee80a4fb5ed522e3ca12a3 data/shaders/root/filter.afterimage_press.effect
 include 35635222b9017064f974284477da0b8397840960 data/shaders/root/filter.contact_filaments.effect
@@ -73,6 +73,8 @@ include 2b224dc91bae8e7b25d356939e8b2c0c59f53885 data/shaders/tests/stdlib_scala
 include 580f754041eca7e60167882fcfdb55ef9b36b9d3 data/shaders/tests/stdlib_vector_probe.effect
 include 3ba72baef076eae339aae45c93acb7eb6cf4e24b data/shaders/tests/stdlib_wrapper_probe.effect
 include 96c4b5367415c3b162cfdd1de0e32be16b5c8063 data/shaders/tests/two_buffer_graph.effect
+include 4a12701fb40580d61834e91261cbf84d13ac3365 data/shaders/tests/two_buffer_invalid_graph.effect
+include 247b3379a104ded0a4b5dc04cb417d9a9b9f05d9 data/shaders/tests/two_buffer_scaled_graph.effect
 include 2dae58db355d5761325e00793b231602cbd23418 data/stdlib/COLORMAPS-LICENSE.txt
 include 293ad379dea5b5de55b5123da8000f1abbf6a6a0 data/stdlib/animation.glsl
 include 9a152612bdd7ac6192cd8a97e08bf206baba9b68 data/stdlib/blur.glsl
