@@ -99,4 +99,14 @@ assert "clock_gettime(" not in audio_processor
 compat = (root / "src/platform_compat.h").read_text()
 for required in ("_fullpath", "_stricmp", "strtok_s", "S_ISDIR", "S_ISREG"):
     assert required in compat, f"Windows compatibility helper missing {required}"
+# The curated repository uses main, not the development repository's master.
+for candidate in (workflow, obs33_workflow):
+    assert candidate.count("branches: [main, master]") == 2, "CI must cover the default branch for pushes and PRs"
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in candidate
+    assert "persist-credentials: false" in candidate
+    assert "cancel-in-progress: true" in candidate
+    assert "github.sha" not in candidate, "Concurrency must cancel superseded runs on the same ref"
+assert "check_readme_links.py" in workflow
+assert "test-readme-links.py" in workflow
+
 print("PASS: HyperShaderFX CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")

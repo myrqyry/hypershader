@@ -22,6 +22,23 @@ porting paths, not the underlying runtime architecture.
 > target. Windows and macOS are not yet qualified. This is a conservative initial
 > source snapshot with a reduced native preset collection.
 
+## Original instruments
+
+| Brass Register | Paper Tide | Spectral Garden |
+| :---: | :---: | :---: |
+| ![Brass Register GPU preview](data/shaders/root/previews/source.brass_register-6debfcdf90fc8998.png) | ![Paper Tide GPU preview](data/shaders/root/previews/source.paper_tide-f7583740dbad11dd.png) | ![Spectral Garden GPU preview](data/shaders/root/previews/source.spectral_garden-cf7d442d507f4ab5.png) |
+| Audio-reactive source | Audio-reactive source | Audio-reactive source |
+
+| Topographic Etching | Contact Filaments | Afterimage Press |
+| :---: | :---: | :---: |
+| ![Topographic Etching GPU preview](data/shaders/root/previews/filter.topographic_etch-08d662f0c54acdf7.png) | ![Contact Filaments GPU preview](data/shaders/root/previews/filter.contact_filaments-2d84498f690eb47b.png) | ![Afterimage Press GPU preview](data/shaders/root/previews/filter.afterimage_press-2eb1a96190462a85.png) |
+| Sight depth filter | Sight hand-tracking filter | GPU feedback filter |
+
+*Existing libobs/OpenGL fixture renders, not new live-camera captures.*
+[Instrument setup and render verification](docs/original-instruments.md).
+
+[Install locally](#build-and-install) · [Build checks](https://github.com/myrqyry/hypershader/actions) · [Distribution scope](docs/INITIAL-SNAPSHOT.md)
+
 ## What it can do
 
 ### Native OBS effect types
@@ -227,7 +244,7 @@ relative inverse depth. **Sight: Depth Glass** offers depth-band ripple
 refraction with discontinuity checks and optional subject protection.
 Flow Sparks optionally uses a chosen depth layer
 with silhouette gating. Signals are independently fresh, not
-frame-synchronized. No second model is started. See [the shared matte contract](docs/SHADER-INTEROP-CREATIVE-2026-10-30.md#source-local-sight-subject-mattes-2026-11-17)
+frame-synchronized. No second model is started. See [the shared matte contract](docs/sight-matte-contract.md)
 for geometry, freshness and verification details.
 
 The bridge has been exercised in isolated **real OBS/libobs/OpenGL** sessions
@@ -243,10 +260,10 @@ installation, activation, or model transfer is performed.
 | Area | Current state |
 | --- | --- |
 | Linux | Primary development and real libobs/OpenGL verification target |
-| Windows | CI build/package coverage; not every shader path has equivalent runtime validation |
-| macOS | CI universal build coverage; not every shader path has equivalent runtime validation |
+| Windows | Build/package workflow configured; no hosted result for this curated repository yet |
+| macOS | Universal build workflow configured; no hosted result for this curated repository yet |
 | OBS 31 / 32 | Main development compatibility baseline |
-| OBS 33 | Compatibility work includes the changed image-file API and dedicated runtime/build verification |
+| OBS 33 | Image API compatibility bridge and dedicated build workflow; curated hosted result pending |
 | HDR / 4K / diverse GPUs | Not comprehensively characterized yet |
 
 Generated platform variants are currently local-only pending review. Their previously documented direct-load include limitations remain unresolved.
@@ -413,6 +430,16 @@ The core shader runtime does not require the heavier optional integrations.
 These paths are intentionally opt-in or dependency-detected and have different verification depth from the base shader runtime.
 
 ## Verification
+
+[Build and test](.github/workflows/ci.yml) checks README links, the pinned
+OBS SDK contract, shader metadata, installer behavior, source-export
+fixtures and the platform-specific build payloads.
+[OBS 33 compatibility](.github/workflows/obs33-compatibility.yml) is a
+separate build gate on Ubuntu 26.04. Both workflows cover main and master,
+use read-only repository permissions and pin checkout to a reviewed
+commit. No hosted runs of this curated repository have been established
+yet; passing local contract tests is not a platform qualification.
+
 
 HyperShaderFX has accumulated a fairly large set of deterministic and real-renderer checks because shader code that merely compiles is not enough.
 
