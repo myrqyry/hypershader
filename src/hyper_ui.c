@@ -785,6 +785,9 @@ void properties_add_input_settings(obs_properties_t *props, struct hypershader_d
         obs_property_set_long_description(group,
             "Optional texture input for iChannel0..iChannel3. Select an image,"
             " OBS video source or audio spectrum, or leave None for no texture."
+            " Live video inputs must already be showing; hidden, removed and"
+            " self-referential sources are unavailable. Live capture is supported"
+            " by filters and standalone sources, not transitions."
             " This is separate from the base video/compositing controls.");
         obs_property_set_visible(group, used);
 		obs_property_set_visible(obs_properties_get(ch_props, key_file), used && s && s->channel_types[i] == 1);

@@ -85,8 +85,32 @@ shader clock rather than a media decoder clock.
 The native test loads a generated 3x2 image, verifies every output pixel
 after sampling the channel in all three passes, clears the input, and
 restores it. This qualifies static file input and live replacement in
-the graph on Linux/OpenGL. Live OBS source capture, audio textures, GIF
-animation and other backends still need graph-specific verification.
+the graph on Linux/OpenGL. Live OBS source and independent scene capture are now also verified
+in the graph and standalone source lanes on Linux/OpenGL. Audio textures,
+GIF animation and other backends still need graph-specific verification.
+
+### Live source channels
+
+Select OBS Source in an existing channel slot. The source must already be
+showing and enabled, with a nonzero size. The native capture renders the
+selected source (including its normal OBS render path) into an on-demand
+texture, preserving its actual dimensions. It does not activate hidden
+media sources, route audio, or retain a strong reference to another scene.
+Self/parent selection and scenes containing the consumer are rejected;
+reentrant capture is guarded. Arbitrary nested cross-shader cycles and
+capture while an effect technique is already active are not supported.
+Missing or rejected resources report zero logical dimensions and use
+the black fallback. Captures are limited to 128 MiB logical color
+payload per slot, separate from the graph's 512 MiB allocation limit.
+This is not a global VRAM limit. Transition channels retain their distinct
+A/B contract; live capture in transitions is not qualified.
+
+The live-source tests cover a changing synthetic OBS source, source resize,
+hide/show, self/parent and containing-scene rejection, independent scene
+capture, explicit UUID selection, restoration and removal. They verify
+every output pixel in all three graph passes and in a standalone source.
+Hardware camera/media behavior, HDR sampling, arbitrary graph cycles and
+hidden-source activation remain to be qualified.
 There are still only four user-configurable input slots; independent
 named resources are a future extension, not provided by this change.
 
@@ -154,7 +178,7 @@ the requested allocation. Graph mode remains intentionally opt-in.
   GPU drivers, and Windows/macOS were not established by Mesa tests.
 - No arbitrary pass graph, dynamic/adaptive per-pass resolution, general
   compute shaders, or spatial ML input integration yet.
-- Graph-enabled live-source/audio/animated channels and per-pass audio
+- Graph-enabled audio/animated channels and per-pass audio
   controls need dedicated integration regression coverage.
 
 - The budget is per-filter logical graph color payload only; aggregate VRAM admission and backend-specific overhead are not accounted for.

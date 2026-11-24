@@ -130,23 +130,49 @@ int main(int argc,char** argv) {
  if(open!=MODULE_SUCCESS||!obs_init_module(module)){obs_shutdown();return 1;}
  auto* source=obs_source_create("hyper_pframe_test_source","Buffer fixture",nullptr,nullptr);
  auto* primary=active;
+ obs_source_t* live=nullptr;
+ TestSource* liveData=nullptr;
+ auto fill=[&](TestSource* fixture,uint8_t r,uint8_t g,uint8_t b,unsigned w,unsigned h){
+  Frame pixels(W*H*4);
+  for(size_t i=0;i<pixels.size();i+=4){pixels[i]=r;pixels[i+1]=g;pixels[i+2]=b;pixels[i+3]=255;}
+  obs_enter_graphics();
+  fixture->width=w;fixture->height=h;
+  gs_texture_set_image(fixture->texture,pixels.data(),W*4,false);
+  obs_leave_graphics();
+ };
+ if(mode=="live"||mode=="live-source"){
+  live=obs_source_create("hyper_pframe_test_source","Live texture fixture",nullptr,nullptr);
+  liveData=active;
+  if(!live||!liveData)return 1;
+  fill(liveData,64,128,191,120,68);
+  obs_source_inc_showing(live);
+ }
  auto* data=obs_data_create();
  obs_data_set_string(data,"shader_file",argv[3]);
+ if(mode=="live"||mode=="live-source"){
+  obs_data_set_int(data,"channel0_type",2);
+  obs_data_set_string(data,"channel0_source",obs_source_get_name(live));
+  obs_data_set_string(data,"channel0_uuid",obs_source_get_uuid(live));
+ }
  if(mode=="channels"){
   obs_data_set_int(data,"channel0_type",1);
   obs_data_set_string(data,"channel0_file",argv[5]);
  }
- auto* filter=obs_source_create("hypershader_filter","Two buffers",data,nullptr);
+ if(mode=="live-source"){
+  obs_data_set_int(data,"source_width",W);
+  obs_data_set_int(data,"source_height",H);
+ }
+ auto* filter=obs_source_create(mode=="live-source"?"hypershader_source":"hypershader_filter","Two buffers",data,nullptr);
  obs_data_release(data);
  if(!source||!filter){obs_shutdown();return 1;}
- obs_source_filter_add(source,filter);
- obs_source_inc_showing(source);
+ if(mode!="live-source")obs_source_filter_add(source,filter);
+ obs_source_inc_showing(mode=="live-source"?filter:source);
  auto fixed=make_frame(30);
- if(mode=="channels"){
+ if(mode=="channels"||mode=="live"||mode=="live-source"){
   auto check=[&](int expected){
    size_t valid=0;
    for(int i=0;i<40;i++){
-    auto out=render(source);drain_ui();
+    auto out=render(mode=="live-source"?filter:source);drain_ui();
     if(i>20&&out.size()==W*H*4){
      bool match=true;
      for(size_t j=0;j<out.size();j+=4){
@@ -159,6 +185,69 @@ int main(int argc,char** argv) {
    }
    return valid;
   };
+  if(mode=="live"||mode=="live-source"){
+   size_t present=check(255);
+   fill(liveData,191,64,128,60,34);
+   size_t changed=check(191);
+   obs_source_dec_showing(live);
+   size_t hidden=check(64);
+   obs_source_inc_showing(live);
+   size_t shown=check(191);
+   auto select=[&](obs_source_t* selected){
+    auto* opts=obs_source_get_settings(filter);
+    std::string id="hs-source:v1:";
+    id+=obs_source_get_uuid(selected);
+    obs_data_set_string(opts,"channel0_source",id.c_str());
+    obs_data_set_string(opts,"channel0_uuid",obs_source_get_uuid(selected));
+    obs_source_update(filter,opts);obs_data_release(opts);
+   };
+   auto* owner=mode=="live-source"?filter:source;
+   select(owner);
+   size_t self=check(64);
+   // A scene containing the consumer must also be rejected.
+   auto* recursiveScene=obs_scene_create("Recursive scene fixture");
+   auto* recursiveSource=obs_scene_get_source(recursiveScene);
+   auto* recursiveItem=obs_scene_add(recursiveScene,owner);
+   obs_source_inc_showing(recursiveSource);
+   select(recursiveSource);
+   size_t cycle=check(64);
+   obs_source_dec_showing(recursiveSource);
+   obs_sceneitem_remove(recursiveItem);
+   obs_source_remove(recursiveSource);
+   obs_scene_release(recursiveScene);
+   // A distinct scene is a real composite source and can be captured.
+   auto* otherScene=obs_scene_create("Independent scene fixture");
+   auto* otherSource=obs_scene_get_source(otherScene);
+   fill(liveData,128,191,64,W,H);
+   auto* otherItem=obs_scene_add(otherScene,live);
+   obs_source_inc_showing(otherSource);
+   select(otherSource);
+   size_t scene=check(128);
+   obs_source_dec_showing(otherSource);
+   obs_sceneitem_remove(otherItem);
+   obs_source_remove(otherSource);
+   obs_scene_release(otherScene);
+   fill(liveData,191,64,128,60,34);
+   select(live);
+   size_t restored=check(191);
+   obs_source_remove(live);
+   size_t removed=check(64);
+   obs_source_dec_showing(live);
+   obs_source_release(live);
+   bool pass=present==19&&changed==19&&hidden==19&&shown==19&&self==19&&cycle==19&&scene==19&&restored==19&&removed==19;
+   obs_source_dec_showing(owner);
+   if(mode!="live-source")obs_source_filter_remove(source,filter);
+   if(mode=="live-source")obs_source_remove(filter);
+   obs_source_remove(source);
+   obs_source_release(filter);obs_source_release(source);drain_ui();
+   obs_wait_for_destroy_queue();
+   std::printf("TWO_BUFFER_LIVE present=%zu resized=%zu hidden=%zu shown=%zu self=%zu cycle=%zu scene=%zu restored=%zu removed=%zu PASS=%d\n",
+               present,changed,hidden,shown,self,cycle,scene,restored,removed,int(pass));
+   std::printf("TWO_BUFFER_RUNTIME_PASS=%d\n",int(pass));
+   std::fflush(stdout);
+   obs_shutdown();
+   return pass?0:1;
+  }
   size_t present=check(255);
   auto* opts=obs_source_get_settings(filter);
   obs_data_set_int(opts,"channel0_type",0);

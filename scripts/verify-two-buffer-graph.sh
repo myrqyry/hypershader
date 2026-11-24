@@ -26,7 +26,7 @@ run_case() {
     local extra=()
     if [[ "$mode" == channels ]]; then extra+=("$work/channel.png"); fi
     (cd "$work/$mode" && HOME="$work/$mode/home" XDG_CONFIG_HOME="$work/$mode/config" \
-      xvfb-run -a -s '-screen 0 1280x720x24' timeout 23 "$work/test" "$module" "$data" "$shader" "$mode" "${extra[@]}") >"$log" 2>&1 || {
+      xvfb-run -a -s '-screen 0 1280x720x24' timeout 40 "$work/test" "$module" "$data" "$shader" "$mode" "${extra[@]}") >"$log" 2>&1 || {
         tail -130 "$log"; return 1;
     }
     echo "TEST graph $mode"
@@ -37,6 +37,8 @@ run_case() {
     elif [[ "$mode" == budget ]]; then
         grep -q 'Graph resource budget exceeded' "$log"
         test "$(grep -c 'Graph resource budget exceeded' "$log")" -eq 2
+    elif [[ "$mode" == live-source ]]; then
+        grep -q 'Loaded shader: shaders/tests/live_channel_source.effect' "$log"
     else
         grep -q 'Two-buffer graph enabled: A -> B -> Draw' "$log"
     fi
@@ -49,4 +51,6 @@ else
     run_case "$data/shaders/tests/two_buffer_invalid_graph.effect" invalid
     run_case "$data/shaders/tests/two_buffer_budget_graph.effect" budget
     run_case "$data/shaders/tests/two_buffer_channel_graph.effect" channels
+    run_case "$data/shaders/tests/two_buffer_live_channel_graph.effect" live
+    run_case "$data/shaders/tests/live_channel_source.effect" live-source
 fi

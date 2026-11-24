@@ -1,0 +1,31 @@
+// Live source channel must be current in all three passes.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d iChannel0;
+uniform float4 iChannelResolution0;
+uniform float iChannelTime0;
+sampler_state simSampler { Filter=Point; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+ VertData o; o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float channelStatus(float2 uv) {
+ float4 c=iChannel0.Sample(simSampler,uv);
+ if(length(iChannelResolution0.xy-float2(120.0,68.0))<0.01 &&
+    length(c.rgb-float3(0.25,0.5,0.75))<0.04 && iChannelTime0>0.0)
+  return 1.0;
+ if(length(iChannelResolution0.xy-float2(60.0,34.0))<0.01 &&
+    length(c.rgb-float3(0.75,0.25,0.5))<0.04 && iChannelTime0>0.0)
+  return 0.75;
+ if(length(iChannelResolution0.xy-float2(240.0,136.0))<0.01 &&
+    length(c.rgb-float3(0.5,0.75,0.25))<0.04 && iChannelTime0>0.0)
+  return 0.5;
+ if(length(iChannelResolution0.xy)<0.01 && length(c.rgb)<0.01)
+  return 0.25;
+ return 0.0;
+}
+float4 PSFinal(VertData v):TARGET {
+ float value=channelStatus(v.uv);
+ return float4(value,value,value,1);
+}
+technique Draw { pass {vertex_shader=VSDefault(v);pixel_shader=PSFinal(v);} }

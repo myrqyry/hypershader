@@ -84,6 +84,7 @@ photographs are committed to this repository.
 - **Four optional texture channels** backed by images, OBS sources, or audio spectrum data where supported.
 - **Audio reactivity** with bass, mid, treble, and level bindings.
 - **Previous-frame feedback** through `iPreviousFrame`.
+- **Live source textures** from already-showing OBS sources and independent scenes, with real capture dimensions.
 - **Native two-buffer graphs** with independent A/B history, configurable per-buffer resolution and optional RGBA16F data storage, and bounded per-instance graph allocations for multi-stage temporal effects.
 - **Source compositing** and host-level blend modes without forcing every shader to reimplement them.
 - **Typed controls** for scalar, boolean, vector, and enumerated shader parameters.

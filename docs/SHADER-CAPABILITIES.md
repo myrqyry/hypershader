@@ -63,15 +63,27 @@ clock are rebound for every graph stage. Missing resources have an
 opaque-black fallback and zero logical dimensions. A real image channel
 pixel test failed before the fix and now passes for present, removed
 and restored states. This does not yet expand the number of texture
-slots, implement arbitrary named bindings, or establish live OBS source
-capture. See [the graph contract](TWO-BUFFER-GRAPH.md).
+slots or implement arbitrary named bindings. See [the graph contract](TWO-BUFFER-GRAPH.md).
+
+## Qualified fifth slice: live OBS source textures
+
+Existing channel slots can capture already-showing independent OBS
+sources and scenes using the native renderer, in the filter graph
+and standalone source. Weak references, source-removal checks,
+self/parent/containing-scene rejection and reentry guards prevent the
+tested stale-resource and recursive-render paths. Each slot is capped
+at 128 MiB logical color payload. This is separate from the graph
+budget. Tests cover image pixels, true capture sizes, hide/show, source
+identity changes and removal. Hidden-source activation, transition
+capture, arbitrary cross-shader cycles and HDR/platform parity are
+not qualified.
 
 ## Capability matrix
 
 | Primitive | Current boundary | Next |
 | --- | --- | --- |
 | Scalar/vector math, timing, UV, controls | Existing; portable sampling qualified | Audit actual library functions and portable intrinsics, verify numerical parity |
-| Texture inputs | Four input channels, source image, auxiliary signals; graph image rebind verified | Named resource descriptors, type/size/format/color-space declarations |
+| Texture inputs | Four input channels, source image, auxiliary signals; graph image rebind and showing-source/scene capture verified | Named resource descriptors, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
 | Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph for filter/source/transition; aggregate resource admission |

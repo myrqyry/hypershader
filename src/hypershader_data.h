@@ -224,7 +224,8 @@ struct hypershader_data {
 	char *audio_source; /* optional; reserved for Audio mode */
 
 	/* Channel Inputs */
-	obs_source_t *channel_sources[4]; /* The active source object for each channel */
+	obs_weak_source_t *channel_sources[4]; /* Weak source identities; never own another scene */
+	bool channel_capture_active;
 	char *channel_source_names[4];    /* The name of the selected source (saved setting) */
 	char *channel_source_uuids[4];    /* UUID of the selected source (more reliable than name) */
 	char *channel_files[4];           /* The path to the selected image file (saved setting) */

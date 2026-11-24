@@ -1632,7 +1632,7 @@ static void filter_destroy(void *data)
 	/* 5. Channel cleanup */
 	for (int i = 0; i < CHANNEL_COUNT; i++) {
 		if (s->channel_sources[i]) {
-			obs_source_release(s->channel_sources[i]);
+			obs_weak_source_release(s->channel_sources[i]);
 			s->channel_sources[i] = NULL;
 		}
 		if (s->channel_files[i]) {
@@ -1714,34 +1714,136 @@ static void filter_destroy(void *data)
 	log_debug_direct("filter_destroy: END");
 }
 
-/* Helper: Bind channel source using UUID (preferred) or name (fallback).
- * Caches UUID on successful name-based lookup for future resilience.
- * Returns true if source was successfully bound. */
+/* Channel selection changes and GPU texture ownership share the graphics
+ * context lock. No strong reference is retained to another source. */
+static void clear_channel_source(struct hypershader_data *s, int ch)
+{
+	if (s->channel_sources[ch]) {
+		obs_weak_source_release(s->channel_sources[ch]);
+		s->channel_sources[ch] = NULL;
+	}
+	if (s->channel_renders[ch]) {
+		gs_texrender_destroy(s->channel_renders[ch]);
+		s->channel_renders[ch] = NULL;
+	}
+	s->channel_textures[ch] = NULL;
+}
+
 static bool bind_channel_source(struct hypershader_data *s, int ch, const char *uuid, const char *name)
 {
 	if (ch < 0 || ch >= CHANNEL_COUNT)
 		return false;
-
-	/* Release existing source reference if any */
-	if (s->channel_sources[ch]) {
-		obs_source_release(s->channel_sources[ch]);
-		s->channel_sources[ch] = NULL;
-	}
-
 	obs_source_t *src = hs_source_selection_resolve(name, uuid);
-	if (src && src == s->context) {
+	if (src && (src == s->context || obs_source_get_type(src) == OBS_SOURCE_TYPE_FILTER ||
+		    !(obs_source_get_output_flags(src) & OBS_SOURCE_VIDEO))) {
 		obs_source_release(src);
 		src = NULL;
 	}
-	if (src) {
-		s->channel_sources[ch] = src;
-		const char *found_uuid = obs_source_get_uuid(src);
-		bfree(s->channel_source_uuids[ch]);
-		s->channel_source_uuids[ch] = found_uuid && *found_uuid ? bstrdup(found_uuid) : NULL;
+	if (src && s->channel_sources[ch] &&
+	    obs_weak_source_references_source(s->channel_sources[ch], src)) {
+		obs_source_release(src);
 		return true;
 	}
+	clear_channel_source(s, ch);
+	if (!src)
+		return false;
+	s->channel_sources[ch] = obs_source_get_weak_source(src);
+	const char *found_uuid = obs_source_get_uuid(src);
+	bfree(s->channel_source_uuids[ch]);
+	s->channel_source_uuids[ch] = found_uuid && *found_uuid ? bstrdup(found_uuid) : NULL;
+	obs_source_release(src);
+	return s->channel_sources[ch] != NULL;
+}
 
-	return false;
+struct channel_tree_check {
+	obs_source_t *owner;
+	obs_source_t *parent;
+	bool cycle;
+};
+
+static void channel_check_descendant(obs_source_t *parent, obs_source_t *child, void *data)
+{
+	struct channel_tree_check *check = data;
+	if (parent == check->owner || child == check->owner ||
+	    (check->parent && (parent == check->parent || child == check->parent)))
+		check->cycle = true;
+}
+
+static bool channel_capture_allowed(struct hypershader_data *s, obs_source_t *src)
+{
+	/* No hidden-source activation or audio mixing side effects. A separate
+	 * showing lease contract is needed for independently hidden media. */
+	if (!src || obs_source_removed(src) || !obs_source_enabled(src) ||
+	    !obs_source_showing(src) || src == s->context)
+		return false;
+	struct channel_tree_check check = {s->context, NULL, false};
+	if (s->kind == HYPER_KIND_FILTER)
+		check.parent = obs_filter_get_parent(s->context);
+	if (src == check.parent)
+		return false;
+	obs_source_enum_full_tree(src, channel_check_descendant, &check);
+	return !check.cycle;
+}
+
+/* Capture the selected source through libobs, not its decoder or raw
+ * texture. The render target API restores viewport, projection, matrix
+ * and color space on end. Each graph pass samples the same capture.
+ * Do not start another capture when a shader technique is active. */
+static void capture_live_channels(struct hypershader_data *s)
+{
+	if (!s->effect || s->channel_capture_active)
+		return;
+	/* Transition lanes have a distinct A/B input contract. Do not claim
+	 * extra capture support there until their native render is qualified. */
+	const bool capture_allowed = !gs_get_effect() && s->kind != HYPER_KIND_TRANSITION;
+	s->channel_capture_active = true;
+	for (int i = 0; i < CHANNEL_COUNT; i++) {
+		if (s->channel_types[i] != 2)
+			continue;
+		s->channel_textures[i] = NULL;
+		obs_source_t *src = capture_allowed && s->ep_iChannel[i] && s->channel_sources[i] ?
+			obs_weak_source_get_source(s->channel_sources[i]) : NULL;
+		if (channel_capture_allowed(s, src)) {
+			const uint32_t width = obs_source_get_width(src);
+			const uint32_t height = obs_source_get_height(src);
+			const enum gs_color_space preferred[] = {GS_CS_SRGB, GS_CS_SRGB_16F, GS_CS_709_EXTENDED};
+			const enum gs_color_space space = obs_source_get_color_space(src, 3, preferred);
+			const enum gs_color_format format = gs_get_format_from_space(space);
+			const uint64_t bpp = format == GS_RGBA16F ? 8 : 4;
+			/* Separate conservative per-channel allocation limit. */
+			if (width && height && (uint64_t)width * height <= (128 * HS_GRAPH_MIB) / bpp) {
+				if (s->channel_renders[i] && gs_texrender_get_format(s->channel_renders[i]) != format) {
+					gs_texrender_destroy(s->channel_renders[i]);
+					s->channel_renders[i] = NULL;
+				}
+				if (!s->channel_renders[i])
+					s->channel_renders[i] = gs_texrender_create(format, GS_ZS_NONE);
+				gs_texrender_t *render = s->channel_renders[i];
+				if (render) {
+					gs_texrender_reset(render);
+					gs_blend_state_push();
+					gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+					if (gs_texrender_begin_with_color_space(render, width, height, space)) {
+						struct vec4 clear;
+						vec4_zero(&clear);
+						gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
+						gs_ortho(0, (float)width, 0, (float)height, -100, 100);
+						obs_source_video_render(src);
+						gs_texrender_end(render);
+						s->channel_textures[i] = gs_texrender_get_texture(render);
+					}
+					gs_blend_state_pop();
+				}
+			}
+		}
+		if (!s->channel_textures[i] && s->channel_renders[i]) {
+			gs_texrender_destroy(s->channel_renders[i]);
+			s->channel_renders[i] = NULL;
+		}
+		if (src)
+			obs_source_release(src);
+	}
+	s->channel_capture_active = false;
 }
 
 static void update_text_texture(struct shader_param_meta *m, const char *text)
@@ -2477,6 +2579,8 @@ static void filter_update(void *data, obs_data_t *settings)
          * lock with animation uploads. Never leave a retired file bound. */
         if (type == 1) {
             obs_enter_graphics();
+            if (s->channel_types[i] == 2)
+                clear_channel_source(s, i);
             bool changed = s->channel_types[i] != 1 ||
                 !s->channel_files[i] || strcmp(s->channel_files[i], file ? file : "") != 0;
             if (changed) {
@@ -2498,21 +2602,19 @@ static void filter_update(void *data, obs_data_t *settings)
                 bfree(s->channel_files[i]);
                 s->channel_files[i] = NULL;
             }
+            if (s->channel_types[i] == 2 && type != 2)
+                clear_channel_source(s, i);
             if (s->channel_types[i] != type || type != 2)
                 s->channel_textures[i] = type == 3 ? s->audio_texture : NULL;
             s->channel_types[i] = type;
-            obs_leave_graphics();
             if (type == 2) {
                 bfree(s->channel_source_names[i]);
                 s->channel_source_names[i] = src_name && src_name[0] ? bstrdup(src_name) : NULL;
                 bfree(s->channel_source_uuids[i]);
                 s->channel_source_uuids[i] = src_uuid && src_uuid[0] ? bstrdup(src_uuid) : NULL;
                 bind_channel_source(s, i, src_uuid, src_name);
-                obs_enter_graphics();
-                if (s->channel_renders[i])
-                    s->channel_textures[i] = gs_texrender_get_texture(s->channel_renders[i]);
-                obs_leave_graphics();
             }
+            obs_leave_graphics();
         }
 	}
 
@@ -2686,13 +2788,8 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	}
 #endif
 
-	/* Initialize channel renders */
+	/* Channel render targets are allocated on demand. */
 	obs_enter_graphics();
-	for (int i = 0; i < 4; i++) {
-		s->channel_renders[i] = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
-		s->channel_files[i] = NULL;
-		s->channel_types[i] = 0;
-	}
 
 	/* Create 1x1 black texture (Bug G fix) */
 	uint32_t black = 0xFF000000;
@@ -3889,6 +3986,7 @@ static void update_sprite_atlases(struct hypershader_data *s)
 /* Helper: Update all standard uniforms and parameters shared by Filter and Source */
 static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, uint32_t height)
 {
+	capture_live_channels(s);
 	float dt = s->last_tick_delta;
 	if (dt < 0.0f)
 		dt = 0.0f;
@@ -4279,7 +4377,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 			channel_res[i].z = (h > 0) ? w / h : 0.0f;
 		}
 		if (s->ep_iChannel[i])
-			gs_effect_set_texture(s->ep_iChannel[i], tex);
+			gs_effect_set_texture(s->ep_iChannel[i], tex ? tex : (s->channel_types[i] == 2 ? s->dummy_texture : NULL));
 	}
 
 	/* Apply Audio Metadata Bindings with Dynamics */
@@ -4977,7 +5075,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 {
 	UNUSED_PARAMETER(effect);
 	struct hypershader_data *s = data;
-	if (!s)
+	if (!s || s->channel_capture_active)
 		return;
 
 	/* Initialize timing */
@@ -5389,7 +5487,7 @@ static void source_video_render(void *data, gs_effect_t *effect)
 {
 	UNUSED_PARAMETER(effect);
 	struct hypershader_data *s = data;
-	if (!s)
+	if (!s || s->channel_capture_active)
 		return;
 
 	/* Initialize timing */
