@@ -10,7 +10,7 @@ float hs_eye_width(bool left, float2 resolution) {
                   hs_face_point(left ? 362 : 133, resolution));
 }
 float hs_eye_open_ratio(bool left, float2 resolution) {
-    if(iFacePresent < 0.5) return 0.0;
+    if(hs_face_present < 0.5) return 0.0;
     float2 a=hs_face_point(left ? 362 : 133,resolution);
     float2 b=hs_face_point(left ? 263 : 33,resolution);
     float2 axis=b-a;
@@ -22,7 +22,7 @@ float hs_eye_open_ratio(bool left, float2 resolution) {
     return abs(dot(top-bottom,normal))/width;
 }
 float hs_eye_visibility(bool left,float2 resolution) {
-    if(iFacePresent<0.5) return 0.0;
+    if(hs_face_present<0.5) return 0.0;
     float a=hs_eye_width(left,resolution);
     float b=hs_eye_width(!left,resolution);
     if(a<2.0) return 0.0;

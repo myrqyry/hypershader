@@ -59,11 +59,11 @@ static Textures fixture(){
  return {a,b,h,c};
 }
 static Frame render(gs_effect_t* fx,const Textures& t,int kind,int state,int soloBand=-1){
- st(fx,"image",t.video);st(fx,"iSightDepth",t.depth);
- st(fx,"iSightHands",t.hands);st(fx,"iPreviousFrame",state==2?t.depth:t.old);
+ st(fx,"image",t.video);st(fx,"hs_sight_depth",t.depth);
+ st(fx,"hs_sight_hands",t.hands);st(fx,"hs_history",state==2?t.depth:t.old);
  vec3 r;vec3_set(&r,W,H,1);
- if(auto* p=gs_effect_get_param_by_name(fx,"iResolution"))gs_effect_set_vec3(p,&r);
- sf(fx,"iTime",soloBand>=0?1.25f:(state==0?1.25f:state==1?2.65f:4.15f));
+ if(auto* p=gs_effect_get_param_by_name(fx,"hs_resolution"))gs_effect_set_vec3(p,&r);
+ sf(fx,"hs_time",soloBand>=0?1.25f:(state==0?1.25f:state==1?2.65f:4.15f));
  for(int i=0;i<8;i++){char name[24];snprintf(name,sizeof(name),"audio_band%d",i);
   float value=soloBand>=0?(state>0&&i==soloBand?.95f:0.f)
                           :(state==0?0.f:state==1?.28f+i*.07f:.95f);
@@ -73,11 +73,11 @@ static Frame render(gs_effect_t* fx,const Textures& t,int kind,int state,int sol
  sf(fx,"audio_beat",state==0?0.f:.81f);
  sf(fx,"audio_flux",state==0?0.f:.94f);
  sf(fx,"audio_beat_phase",state==0?0.f:.61f);
- sf(fx,"iSightPresent",kind==2&&state>0?1.f:0.f);
- si(fx,"iSightHandCount",kind==2&&state>0?1:0);
- sf(fx,"iSightPinch0",state==2?1.f:0.2f);
- sf(fx,"iSightPinch1",0.0f);
- sf(fx,"iSightDepthPresent",kind==1&&state>0?1.f:0.f);
+ sf(fx,"hs_sight_present",kind==2&&state>0?1.f:0.f);
+ si(fx,"hs_sight_hand_count",kind==2&&state>0?1:0);
+ sf(fx,"hs_sight_pinch0",state==2?1.f:0.2f);
+ sf(fx,"hs_sight_pinch1",0.0f);
+ sf(fx,"hs_sight_depth_present",kind==1&&state>0?1.f:0.f);
  if(kind==3){sf(fx,"effect_mix",state==0?0.f:.88f);
   sf(fx,"history",state==2?.99f:.74f);}
  auto* target=gs_texrender_create(GS_RGBA,GS_ZS_NONE);

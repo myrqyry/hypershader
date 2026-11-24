@@ -10,21 +10,21 @@ uniform int music_response; // @label "React to music" @list "Off,Kick / bass hi
 uniform float music_amount; // @label "Music strength" @min 0 @max 1 @step 0.01 @default 0.75 @group "Music"
 
 uniform texture2d image;
-uniform texture2d iBufferA;
-uniform texture2d iBufferB;
-uniform texture2d iBufferAPrevious;
-uniform texture2d iBufferBPrevious;
-uniform texture2d iSightFlow;
-uniform float iSightFlowPresent;
-uniform float iSightFlowStep;
-uniform float iSightFlowInterval;
-uniform texture2d iSegmentation;
-uniform float iSightMattePresent;
-uniform texture2d iSightDepth;
-uniform float iSightDepthPresent;
-uniform float3 iResolution;
-uniform int iGraphFrame;
-uniform float iTimeDelta;
+uniform texture2d hs_buffer_a;
+uniform texture2d hs_buffer_b;
+uniform texture2d hs_buffer_a_previous;
+uniform texture2d hs_buffer_b_previous;
+uniform texture2d hs_sight_flow;
+uniform float hs_sight_flow_present;
+uniform float hs_sight_flow_step;
+uniform float hs_sight_flow_interval;
+uniform texture2d hs_segmentation;
+uniform float hs_sight_matte_present;
+uniform texture2d hs_sight_depth;
+uniform float hs_sight_depth_present;
+uniform float3 hs_resolution;
+uniform int hs_graph_frame;
+uniform float hs_delta_time;
 uniform float retention; // @label "Spark Half-Life (seconds)" @min 0.05 @max 3 @step 0.05 @default 0.65 @group "Sparks"
 uniform float tracking; // @label "Flow Tracking" @min 0 @max 2 @step 0.05 @default 1 @group "Sparks"
 uniform float emission; // @label "Emission" @min 0 @max 1 @step 0.01 @default 0.35 @group "Sparks"
@@ -52,20 +52,20 @@ float4 packDensity(float value) {
 float density(float4 encoded) {return saturate(encoded.r+encoded.g/255.0);}
 float hash21(float2 p) {return frac(sin(dot(p,float2(127.1,311.7)))*43758.5453);}
 bool inactive() {
-    return iSightFlowPresent<0.5||clear_history||effect_mix<=0.0001||
-           (spark_region!=0&&iSightMattePresent<0.5)||
-           (depth_occlusion&&iSightDepthPresent<0.5);
+    return hs_sight_flow_present<0.5||clear_history||effect_mix<=0.0001||
+           (spark_region!=0&&hs_sight_matte_present<0.5)||
+           (depth_occlusion&&hs_sight_depth_present<0.5);
 }
 float regionMask(float2 uv) {
     if(spark_region==0)return 1.0;
-    float fg=saturate(iSegmentation.Sample(fieldSampler,uv).r);
+    float fg=saturate(hs_segmentation.Sample(fieldSampler,uv).r);
     // Use a soft edge, but reject small residual matte values.
     fg=smoothstep(0.18,0.82,fg);
     return spark_region==1?fg:1.0-fg;
 }
 float depthMask(float2 uv) {
     if(!depth_occlusion)return 1.0;
-    float scene=saturate(iSightDepth.Sample(fieldSampler,uv).r);
+    float scene=saturate(hs_sight_depth.Sample(fieldSampler,uv).r);
     float feather=max(depth_softness,0.01);
     return 1.0-smoothstep(spark_depth-feather,spark_depth+feather,scene);
 }
@@ -79,20 +79,20 @@ float musicPulse() {
     return saturate(pulse)*saturate(music_amount);
 }
 float4 PSSeed(VertData v):TARGET {
-    if(inactive()||iGraphFrame==0||iSightFlowStep<0.5||emission<=0.0||iSightFlowInterval<=0.0)
+    if(inactive()||hs_graph_frame==0||hs_sight_flow_step<0.5||emission<=0.0||hs_sight_flow_interval<=0.0)
         return packDensity(0);
-    float2 resolution=max(iResolution.xy,float2(1,1));
+    float2 resolution=max(hs_resolution.xy,float2(1,1));
     float cellSize=max(spacing,6.0);
     float2 pixel=v.uv*resolution;
     float2 cell=floor(pixel/cellSize);
     // Jitter a point inside each cell; clamp radius so the point never
     // gets clipped by its cell. Hash changes only on a capture step.
     float radius=min(spark_size,cellSize*0.24);
-    float2 key=cell+float2(float(iGraphFrame%4096)*17.0,3.0);
+    float2 key=cell+float2(float(hs_graph_frame%4096)*17.0,3.0);
     float2 center=(cell+0.5)*cellSize;
     center+=(float2(hash21(key),hash21(key+float2(19,71)))-0.5)*cellSize*0.44;
-    float4 motion=iSightFlow.Sample(fieldSampler,saturate(center/resolution));
-    float speed=length(motion.xy*resolution)/max(iSightFlowInterval,0.001);
+    float4 motion=hs_sight_flow.Sample(fieldSampler,saturate(center/resolution));
+    float speed=length(motion.xy*resolution)/max(hs_sight_flow_interval,0.001);
     float chance=saturate((speed-speed_threshold)/max(speed_threshold,35.0))*saturate(motion.b)*lerp(emission,1.0,musicPulse());
     if(motion.b<0.35||speed<=speed_threshold||hash21(key+float2(43,13))>=chance)
         return packDensity(0);
@@ -100,23 +100,23 @@ float4 PSSeed(VertData v):TARGET {
     return packDensity(dotShape*motion.b*regionMask(v.uv)*depthMask(v.uv));
 }
 float4 PSAdvect(VertData v):TARGET {
-    if(inactive()||iGraphFrame==0)return packDensity(0);
-    float born=density(iBufferA.Sample(fieldSampler,v.uv));
+    if(inactive()||hs_graph_frame==0)return packDensity(0);
+    float born=density(hs_buffer_a.Sample(fieldSampler,v.uv));
     float2 from=v.uv;
-    if(iSightFlowStep>0.5) {
-        float4 motion=iSightFlow.Sample(fieldSampler,v.uv);
+    if(hs_sight_flow_step>0.5) {
+        float4 motion=hs_sight_flow.Sample(fieldSampler,v.uv);
         from+=motion.xy*saturate(motion.b)*tracking;
     }
     if(from.x<0.0||from.y<0.0||from.x>1.0||from.y>1.0)return packDensity(born);
-    float retained=density(iBufferBPrevious.Sample(fieldSampler,from));
-    retained*=exp2(-clamp(iTimeDelta,0.0,0.25)/max(retention,0.05));
+    float retained=density(hs_buffer_b_previous.Sample(fieldSampler,from));
+    retained*=exp2(-clamp(hs_delta_time,0.0,0.25)/max(retention,0.05));
     if(retained<1.0/255.0)retained=0.0;
     return packDensity(max(born,retained));
 }
 float4 PSDisplay(VertData v):TARGET {
     float4 fresh=image.Sample(fieldSampler,v.uv);
     if(inactive())return fresh;
-    float ink=density(iBufferB.Sample(fieldSampler,v.uv))*regionMask(v.uv)*depthMask(v.uv);
+    float ink=density(hs_buffer_b.Sample(fieldSampler,v.uv))*regionMask(v.uv)*depthMask(v.uv);
     float3 glow=saturate(spark_color.rgb)*ink*saturate(spark_color.a)*saturate(effect_mix);
     return float4(fresh.rgb+(1.0-saturate(fresh.rgb))*glow*fresh.a,fresh.a);
 }

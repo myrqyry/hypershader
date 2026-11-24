@@ -100,13 +100,13 @@ class ShaderCodeGenerator {
             case 'input_uv':
                 return `    float2 ${varName} = v_in.uv;`;
             case 'input_fragcoord':
-                return `    float2 ${varName} = v_in.uv * iResolution.xy;`;
+                return `    float2 ${varName} = v_in.uv * hs_resolution.xy;`;
             case 'input_time':
-                return `    float ${varName} = iTime;`;
+                return `    float ${varName} = hs_time;`;
             case 'input_resolution':
-                return `    float3 ${varName} = iResolution;`;
+                return `    float3 ${varName} = hs_resolution;`;
             case 'input_mouse':
-                return `    float4 ${varName} = iMouse;`;
+                return `    float4 ${varName} = hs_pointer;`;
             case 'input_texture':
                 return `    float4 ${varName} = image.Sample(textureSampler, v_in.uv);`;
             case 'input_float':
@@ -368,7 +368,7 @@ class ShaderCodeGenerator {
             .replace(/\bfloat4\b/g, 'vec4')
             .replace(/\blerp\s*\(/g, 'mix(')
             .replace(/\bfrac\s*\(/g, 'fract(')
-            .replace(/\bv_in\.uv\b/g, '(gl_FragCoord.xy / iResolution.xy)')
+            .replace(/\bv_in\.uv\b/g, '(gl_FragCoord.xy / hs_resolution.xy)')
             .replace(/\bimage\.Sample\(textureSampler,\s*/g, 'texture(uSource, ');
         if (/\bVertData\b|\.Sample\s*\(|#include/.test(body)) {
             throw new Error('This native shader expression has no WebGL2 preview adapter');
@@ -399,9 +399,9 @@ vec2 uvSwirl(vec2 uv, vec2 center, float angle, float radius) {
         const extraSource = [...previewFunctions].map(name => previewAdapters[name]).join('\n');
         return `#version 300 es
 precision highp float;
-uniform float iTime;
-uniform vec3 iResolution;
-uniform vec4 iMouse;
+uniform float hs_time;
+uniform vec3 hs_resolution;
+uniform vec4 hs_pointer;
 uniform sampler2D uSource;
 out vec4 previewColor;
 ${swirl}
@@ -448,7 +448,7 @@ ${includeLines}
 ${uniformLines || '// (none)'}
 
 // Shader technique
-float4 mainImage(VertData v_in) : TARGET {
+float4 hs_shade_pixel(VertData v_in) : TARGET {
     float4 finalColor = float4(0.0, 0.0, 0.0, 1.0);
     
 ${mainBody}
@@ -459,7 +459,7 @@ ${mainBody}
 technique Draw {
     pass {
         vertex_shader = VSDefault(v_in);
-        pixel_shader = mainImage(v_in);
+        pixel_shader = hs_shade_pixel(v_in);
     }
 }
 `;
@@ -473,7 +473,7 @@ technique Draw {
 
 #include "../stdlib/hypershader_standard.glsl"
 
-float4 mainImage(VertData v_in) : TARGET {
+float4 hs_shade_pixel(VertData v_in) : TARGET {
     // Sample source
     float4 color = image.Sample(textureSampler, v_in.uv);
     return color;
@@ -482,7 +482,7 @@ float4 mainImage(VertData v_in) : TARGET {
 technique Draw {
     pass {
         vertex_shader = VSDefault(v_in);
-        pixel_shader = mainImage(v_in);
+        pixel_shader = hs_shade_pixel(v_in);
     }
 }
 `;

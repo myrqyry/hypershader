@@ -3,25 +3,25 @@
 // x/y are normalized and w=0 disables each point. All uniforms are bound.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform float4 iSightTouch0; // x,y,pinch,valid
-uniform float4 iSightTouch1;
+uniform float4 hs_sight_touch0; // x,y,pinch,valid
+uniform float4 hs_sight_touch1;
 uniform float touch_strength; // @label "Refraction strength" @group "Hand Ripples" @min 0 @max 3 @step 0.05 @default 0.85
 uniform float touch_radius; // @label "Ripple radius" @group "Hand Ripples" @min 0.03 @max 0.65 @step 0.01 @default 0.19
 uniform float touch_waves; // @label "Ripple rings" @group "Hand Ripples" @min 0.5 @max 7 @step 0.1 @default 2.5
 uniform float touch_speed; // @label "Wave speed" @group "Hand Ripples" @min 0 @max 4 @step 0.1 @default 0.8
 uniform float touch_pinch_boost; // @label "Pinch strength boost" @group "Hand Ripples" @min 0 @max 3 @step 0.05 @default 1.0
-uniform float iTime;
-uniform float3 iResolution;
+uniform float hs_time;
+uniform float3 hs_resolution;
 // Each event stores x, y, age in seconds, intensity; w=0 disables.
 // Eight bounded waves are maintained by the CPU as fingers move.
-uniform float4 iSightRipple0;
-uniform float4 iSightRipple1;
-uniform float4 iSightRipple2;
-uniform float4 iSightRipple3;
-uniform float4 iSightRipple4;
-uniform float4 iSightRipple5;
-uniform float4 iSightRipple6;
-uniform float4 iSightRipple7;
+uniform float4 hs_sight_ripple0;
+uniform float4 hs_sight_ripple1;
+uniform float4 hs_sight_ripple2;
+uniform float4 hs_sight_ripple3;
+uniform float4 hs_sight_ripple4;
+uniform float4 hs_sight_ripple5;
+uniform float4 hs_sight_ripple6;
+uniform float4 hs_sight_ripple7;
 sampler_state sample_source {
     Filter = Linear;
     AddressU = Clamp;
@@ -38,7 +38,7 @@ VSOutput VSMain(VSInput v_in) {
 float2 bend(float2 uv,float4 touch) {
     if(touch.w<0.5)return float2(0.0,0.0);
     float2 from=uv-touch.xy;
-    float2 metric=float2(from.x*iResolution.z,from.y);
+    float2 metric=float2(from.x*hs_resolution.z,from.y);
     float distance=length(metric);
     float radius=max(0.0001,touch_radius);
     float reach=saturate(1.0-distance/radius);
@@ -47,18 +47,18 @@ float2 bend(float2 uv,float4 touch) {
     // fingertip positions after tracking signals expire.
     float falloff=reach*reach*(3.0-2.0*reach);
     float phase=distance/radius*touch_waves*6.2831853-
-                iTime*touch_speed*6.2831853;
+                hs_time*touch_speed*6.2831853;
     float displacement=sin(phase)*falloff*touch_strength*
                        (1.0 + touch.z*touch_pinch_boost);
     float2 direction=metric/max(0.0001,distance);
-    return float2(direction.x/max(0.001,iResolution.z),
+    return float2(direction.x/max(0.001,hs_resolution.z),
                   direction.y)*displacement*0.012;
 }
 float2 expanding_ripple(float2 uv,float4 ripple) {
     if(ripple.w<=0.0||ripple.z<0.0||ripple.z>=1.6)
         return float2(0.0,0.0);
     float2 from=uv-ripple.xy;
-    float2 metric=float2(from.x*iResolution.z,from.y);
+    float2 metric=float2(from.x*hs_resolution.z,from.y);
     float distance=length(metric);
     float width=max(0.006,touch_radius*0.22);
     // The wavefront travels away from the *saved* fingertip position.
@@ -71,19 +71,19 @@ float2 expanding_ripple(float2 uv,float4 ripple) {
     float displacement=sin(phase)*envelope*decay*decay*
                        touch_strength*(1.0+(ripple.w-1.0)*touch_pinch_boost)*0.016;
     float2 direction=metric/max(0.0001,distance);
-    return float2(direction.x/max(0.001,iResolution.z),direction.y)*displacement;
+    return float2(direction.x/max(0.001,hs_resolution.z),direction.y)*displacement;
 }
 float4 PSMain(VSOutput v_in) : TARGET {
     float2 uv=v_in.uv;
-    float2 shift=bend(uv,iSightTouch0)+bend(uv,iSightTouch1);
-    shift+=expanding_ripple(uv,iSightRipple0);
-    shift+=expanding_ripple(uv,iSightRipple1);
-    shift+=expanding_ripple(uv,iSightRipple2);
-    shift+=expanding_ripple(uv,iSightRipple3);
-    shift+=expanding_ripple(uv,iSightRipple4);
-    shift+=expanding_ripple(uv,iSightRipple5);
-    shift+=expanding_ripple(uv,iSightRipple6);
-    shift+=expanding_ripple(uv,iSightRipple7);
+    float2 shift=bend(uv,hs_sight_touch0)+bend(uv,hs_sight_touch1);
+    shift+=expanding_ripple(uv,hs_sight_ripple0);
+    shift+=expanding_ripple(uv,hs_sight_ripple1);
+    shift+=expanding_ripple(uv,hs_sight_ripple2);
+    shift+=expanding_ripple(uv,hs_sight_ripple3);
+    shift+=expanding_ripple(uv,hs_sight_ripple4);
+    shift+=expanding_ripple(uv,hs_sight_ripple5);
+    shift+=expanding_ripple(uv,hs_sight_ripple6);
+    shift+=expanding_ripple(uv,hs_sight_ripple7);
     return image.Sample(sample_source,saturate(uv+shift));
 }
 technique Draw {

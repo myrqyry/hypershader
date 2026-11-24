@@ -7,57 +7,57 @@
 #include "hypershader_standard.glsl"
 
 // --- MediaPipe Vision ---
-uniform texture2d iSegmentation;
+uniform texture2d hs_segmentation;
 // 1 when a fresh source-local Sight foreground matte is available.
 // Native face-region approximation is not a Sight matte.
-uniform float iSightMattePresent;
+uniform float hs_sight_matte_present;
 // Backward displacement: current UV + RG samples the previous capture.
-uniform texture2d iSightFlow; // 32x18 RGBA32F: dx,dy,confidence,reserved
-uniform float iSightFlowPresent;
-uniform float iSightFlowInterval; // seconds between captures
-uniform float iSightFlowCoverage; // valid cell fraction
+uniform texture2d hs_sight_flow; // 32x18 RGBA32F: dx,dy,confidence,reserved
+uniform float hs_sight_flow_present;
+uniform float hs_sight_flow_interval; // seconds between captures
+uniform float hs_sight_flow_coverage; // valid cell fraction
 // Graph-only: 1 for a newly consumed snapshot after initialization.
-uniform float iSightFlowStep;
+uniform float hs_sight_flow_step;
 // Relative inverse depth R8, 0 far / 1 near, independently normalized.
-uniform texture2d iSightDepth;
-uniform float iSightDepthPresent;
+uniform texture2d hs_sight_depth;
+uniform float hs_sight_depth_present;
 // Local OCR line geometry; a fresh empty result has count zero.
-uniform float iSightTextPresent;
-uniform int iSightTextCount;
-uniform texture2d iSightTextMask;
-uniform texture2d iSightTextBounds; // 512x1 RGBA32F, normalized xyxy
+uniform float hs_sight_text_present;
+uniform int hs_sight_text_count;
+uniform texture2d hs_sight_text_mask;
+uniform texture2d hs_sight_text_bounds; // 512x1 RGBA32F, normalized xyxy
 // Whole-frame normalized luma change between consecutive Sight captures.
-uniform float iSightMotionPresent;
-uniform float iSightMotionEnergy;
+uniform float hs_sight_motion_present;
+uniform float hs_sight_motion_energy;
 // Binary foreground geometry from the shared R8 matte (>=128).
 // Bounds: minX,minY,maxX,maxY (outer pixel edges), normalized source UV.
-uniform float iSightSubjectPresent;
-uniform float4 iSightSubjectBounds;
-uniform float2 iSightSubjectCenter;
-uniform float iSightSubjectCoverage;
-uniform texture2d iLandmarks;
-uniform texture2d iReferenceLandmarks;
-uniform texture2d iFaceSurface;
-uniform texture2d iFaceTriangles;
-uniform float iFacePresent;
+uniform float hs_sight_subject_present;
+uniform float4 hs_sight_subject_bounds;
+uniform float2 hs_sight_subject_center;
+uniform float hs_sight_subject_coverage;
+uniform texture2d hs_landmarks;
+uniform texture2d hs_reference_landmarks;
+uniform texture2d hs_face_surface;
+uniform texture2d hs_face_triangles;
+uniform float hs_face_present;
 
 // Face surface: R=(triangle index+.5)/898; G/B=barycentric weights;
 // A=coverage. The remaining weight is 1-G-B.
-#define face_surface_at(uv) iFaceSurface.Sample(textureSampler, (uv))
-#define face_triangle_indices(id) iFaceTriangles.Load(int3((id), 0, 0)).rgb
+#define face_surface_at(uv) hs_face_surface.Sample(textureSampler, (uv))
+#define face_triangle_indices(id) hs_face_triangles.Load(int3((id), 0, 0)).rgb
 
 
 // segmentation_mask: 1.0 at face/person, 0.0 at background
-#define segmentation_mask(uv) iSegmentation.Sample(textureSampler, uv).r
+#define segmentation_mask(uv) hs_segmentation.Sample(textureSampler, uv).r
 
 // landmark_pos: Returns vec4(x, y, z, visibility) for landmark ID (0-467)
 // Coordinates are normalized [0, 1]
-#define landmark_pos(id) iLandmarks.Load(int3(id, 0, 0))
+#define landmark_pos(id) hs_landmarks.Load(int3(id, 0, 0))
 
 #include "face_regions.glsl"
 
 // reference_pos: Returns the static reference pose landmarks (for puppeteering)
-#define reference_pos(id) iReferenceLandmarks.Load(int3(id, 0, 0))
+#define reference_pos(id) hs_reference_landmarks.Load(int3(id, 0, 0))
 
 // --- Advanced Audio ---
 #define bass     audio_band(0)

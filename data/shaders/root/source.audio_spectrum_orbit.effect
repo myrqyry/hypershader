@@ -15,10 +15,10 @@ uniform float opacity;     // @min 0.0 @max 1.0 @step 0.02 @default 1.0 @label "
 uniform float3 low_color;  // @default "0.89,0.55,0.30" @label "Bass / Amber" @group "Palette"
 uniform float3 high_color; // @default "0.68,0.81,0.72" @label "Treble / Sage" @group "Palette"
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 {
-    float2 uv = fragCoord / max(iResolution.xy, float2(1.0, 1.0));
-    float aspect = iResolution.x / max(1.0, iResolution.y);
+    float2 uv = fragCoord / max(hs_resolution.xy, float2(1.0, 1.0));
+    float aspect = hs_resolution.x / max(1.0, hs_resolution.y);
     float2 p = (uv - 0.5) * float2(aspect, 1.0);
     float r = length(p);
 
@@ -43,7 +43,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     float magnitude = saturate(energy * gain);
     float inside = ring_radius;
     float outside = inside + 0.013 + bar_length * magnitude;
-    float pixel = 1.5 / max(iResolution.y, 1.0);
+    float pixel = 1.5 / max(hs_resolution.y, 1.0);
     float radial = smoothstep(inside - pixel, inside + pixel, r)
                  * (1.0 - smoothstep(outside - pixel, outside + pixel, r));
     float wedge = 1.0 - smoothstep(bar_fill * 0.5 - 0.015,
@@ -65,6 +65,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     fragColor = float4(pigment * a, a);
 }
 
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER
 
 // @audio (native audio inputs)

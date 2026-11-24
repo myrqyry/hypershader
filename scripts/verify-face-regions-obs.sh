@@ -14,7 +14,7 @@ for name in ("hypershader_standard.glsl","face_regions.glsl"):
 s+="""
 float4 PSRegions(VertData v):TARGET {
  float3 c=hs_face_tint_luma(float3(0.9,0.1,0.4),0.5);
- return float4(hs_eye_mask(v.uv,false,iResolution.xy),hs_eye_mask(v.uv,true,iResolution.xy),dot(c,float3(0.2126,0.7152,0.0722)),1.0);
+ return float4(hs_eye_mask(v.uv,false,hs_resolution.xy),hs_eye_mask(v.uv,true,hs_resolution.xy),dot(c,float3(0.2126,0.7152,0.0722)),1.0);
 }
 technique Draw {pass {vertex_shader=VSDefault(v_in);pixel_shader=PSRegions(v);}}
 """

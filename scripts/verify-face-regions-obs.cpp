@@ -38,9 +38,9 @@ static Frame draw(gs_effect_t* fx,const Points& points,bool present){
         gs_blend_state_push();gs_enable_blending(false);gs_set_cull_mode(GS_NEITHER);
         gs_projection_push();gs_matrix_push();gs_matrix_identity();gs_ortho(0,W,0,H,-100,100);
         vec3 res;vec3_set(&res,W,H,float(W)/H);
-        gs_effect_set_vec3(gs_effect_get_param_by_name(fx,"iResolution"),&res);
-        gs_effect_set_texture(gs_effect_get_param_by_name(fx,"iLandmarks"),lm);
-        gs_effect_set_float(gs_effect_get_param_by_name(fx,"iFacePresent"),present?1:0);
+        gs_effect_set_vec3(gs_effect_get_param_by_name(fx,"hs_resolution"),&res);
+        gs_effect_set_texture(gs_effect_get_param_by_name(fx,"hs_landmarks"),lm);
+        gs_effect_set_float(gs_effect_get_param_by_name(fx,"hs_face_present"),present?1:0);
         while(gs_effect_loop(fx,"Draw"))gs_draw_sprite(nullptr,0,W,H);
         gs_matrix_pop();gs_projection_pop();gs_blend_state_pop();gs_texrender_end(rt);
         gs_stage_texture(stage,gs_texrender_get_texture(rt));

@@ -13,7 +13,7 @@ Commands used:
 
 | Control | Key | Behavior verified | Text update made |
 |---|---|---|---|
-| Animation Speed | `speed` | Multiplies `iTime`/`iTimeDelta` accumulation; unitless range `0.0..10.0`; `0` freezes animation; immediate apply. | Added tooltip with exact semantics, range, and edge behavior. |
+| Animation Speed | `speed` | Multiplies `hs_time`/`hs_delta_time` accumulation; unitless range `0.0..10.0`; `0` freezes animation; immediate apply. | Added tooltip with exact semantics, range, and edge behavior. |
 | Global Scale | `scale` | Value is read into `s->global_scale` but not consumed by render path (currently no visual effect). | Label updated to mark unused; tooltip explicitly says currently no runtime effect. |
 | Enable Showcase Comparison | `showcase_enabled` | Enables side-by-side original vs filtered render split; immediate apply. | Added locale key and tooltip to match behavior. |
 | Showcase Wipe Position | `showcase_wipe` | Normalized split position `0.0..1.0` (unitless); immediate apply. | Added locale key and tooltip with units/range. |

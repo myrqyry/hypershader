@@ -96,7 +96,7 @@ several channels with different ranges and playback rates. Sprite fitting
 uses the cell dimensions, not the entire sheet; texel-center clamping keeps
 linear filtering from leaking neighboring frames. There are no additional
 GPU history textures or file reads on each animation frame. The native
-host-owned `iChannelAtlas0..3` uniforms provide columns, rows, current
+host-owned `hs_input_atlas0..3` uniforms provide columns, rows, current
 frame index, and a reserved fourth component.
 
 Suggested starting points:

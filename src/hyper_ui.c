@@ -741,7 +741,7 @@ static void populate_source_picker(obs_property_t *property, struct hypershader_
 
 void properties_add_input_settings(obs_properties_t *props, struct hypershader_data *s)
 {
-	/* Channel samplers (iChannel0..iChannel3) — grouped per-channel */
+	/* Channel samplers (hs_input0..hs_input3) — grouped per-channel */
 	for (int i = 0; i < CHANNEL_COUNT; i++) {
 
         /* Referenced textures are optional user-supplied inputs, not
@@ -783,7 +783,7 @@ void properties_add_input_settings(obs_properties_t *props, struct hypershader_d
         obs_property_t *group = obs_properties_add_group(
             props, key_group, label, OBS_GROUP_NORMAL, ch_props);
         obs_property_set_long_description(group,
-            "Optional texture input for iChannel0..iChannel3. Select an image,"
+            "Optional texture input for hs_input0..hs_input3. Select an image,"
             " OBS video source or audio spectrum, or leave None for no texture."
             " Live video inputs must already be showing; hidden, removed and"
             " self-referential sources are unavailable. Live capture is supported"
@@ -1657,7 +1657,7 @@ bool analyze_image_clicked(obs_properties_t *props, obs_property_t *property, vo
 
 /* Helper: set a numeric effect parameter using the correct typed setter
  * (int vs float) based on the shader parameter info. This avoids warnings
- * when a shader declares e.g. "uniform int iFrame;" but the host tries to
+ * when a shader declares e.g. "uniform int hs_frame_index;" but the host tries to
  * set it with a float setter. */
 static void set_param_numeric(gs_eparam_t *param, double val)
 {
@@ -2154,7 +2154,7 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 		/* Add ISF main wrapper */
 		fprintf(f_out, "void main() {\n");
 		fprintf(f_out, "    vec4 color = vec4(0.0);\n");
-		fprintf(f_out, "    mainImage(color, gl_FragCoord.xy);\n");
+		fprintf(f_out, "    hs_shade_pixel(color, gl_FragCoord.xy);\n");
 		fprintf(f_out, "    gl_FragColor = color;\n");
 		fprintf(f_out, "}\n");
 	}
@@ -2196,7 +2196,7 @@ bool save_current_preset_clicked(obs_properties_t *props, obs_property_t *proper
 /* Simple, defensive scanner to extract Shadertoy "inputs" from a JSON-like file.
  * We don't depend on an external JSON library here: this extracts at most
  * MAX_SHADER_INPUTS occurrences of objects that contain "name" and "src".
-	 * The format we support (loose) is: { "inputs": [ { "name":"iChannel0", "src":"example_path" , "type":"texture" }, other entries ] }
+	 * The format we support (loose) is: { "inputs": [ { "name":"hs_input0", "src":"example_path" , "type":"texture" }, other entries ] }
  * This is intentionally forgiving: it's not a full JSON parser. It's suitable
  * for initial import and will be improved later when a JSON lib is available.
  */
@@ -2265,7 +2265,7 @@ static int parse_shadertoy_inputs(const char *text, struct hypershader_data *s)
 						if (name && src) {
 							int idx = -1;
 
-							if (strncmp(name, "iChannel", 8) == 0) {
+							if (strncmp(name, "hs_input", 8) == 0) {
 								const char *num_str = name + 8;
 								char *endptr = NULL;
 								long ch = strtol(num_str, &endptr, 10);
@@ -2803,28 +2803,28 @@ static const char *pg_get_snippet(int id)
 	case 1: /* Basic Template */
 		return "// Basic HyperShader Template\n"
 		       "#include \"shadertoy_compat.glsl\"\n\n"
-		       "void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n"
-		       "    vec2 uv = fragCoord / iResolution.xy;\n"
+		       "void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord) {\n"
+		       "    vec2 uv = fragCoord / hs_resolution.xy;\n"
 		       "    \n"
 		       "    // Your shader code here\n"
-		       "    vec3 col = vec3(uv, 0.5 + 0.5 * sin(iTime));\n"
+		       "    vec3 col = vec3(uv, 0.5 + 0.5 * sin(hs_time));\n"
 		       "    \n"
 		       "    fragColor = vec4(col, 1.0);\n"
 		       "}\n";
 
 	/* Uniforms */
 	case 10:
-		return "float t = iTime; // Time in seconds";
+		return "float t = hs_time; // Time in seconds";
 	case 11:
-		return "vec2 uv = fragCoord / iResolution.xy; // Normalized UV";
+		return "vec2 uv = fragCoord / hs_resolution.xy; // Normalized UV";
 	case 12:
-		return "vec2 mouse = iMouse.xy / iResolution.xy; // Normalized mouse";
+		return "vec2 mouse = hs_pointer.xy / hs_resolution.xy; // Normalized mouse";
 	case 13:
-		return "vec4 tex = texture(iChannel0, uv); // Sample texture";
+		return "vec4 tex = texture(hs_input0, uv); // Sample texture";
 	case 14:
 		return "float level = audio_level; // Audio RMS 0.0-1.0";
 	case 15:
-		return "float progress = iProgress; // Transition 0.0-1.0";
+		return "float progress = hs_transition_progress; // Transition 0.0-1.0";
 
 	/* Retro */
 	case 20:
@@ -2864,10 +2864,10 @@ static const char *pg_get_snippet(int id)
 		       "col *= v;";
 	case 41:
 		return "#include \"stdlib/filters.glsl\"\n"
-		       "col += filmGrain(uv, iTime, 0.05); // Add grain";
+		       "col += filmGrain(uv, hs_time, 0.05); // Add grain";
 	case 42:
 		return "#include \"stdlib/filters.glsl\"\n"
-		       "col = chromaticAberration(iChannel0, uv, 0.01);";
+		       "col = chromaticAberration(hs_input0, uv, 0.01);";
 
 	/* Dynamics Examples */
 	case 50:
@@ -2889,7 +2889,7 @@ static const char *pg_get_snippet(int id)
 	case 71:
 		return "#include \"stdlib/retro.glsl\"\n"
 		       "// PS1 jitter with animated wobble\n"
-		       "vec2 ps1UV = ps1_jitter_animated(uv, 256.0, iTime, 0.5);";
+		       "vec2 ps1UV = ps1_jitter_animated(uv, 256.0, hs_time, 0.5);";
 	case 72:
 		return "#include \"stdlib/retro.glsl\"\n"
 		       "// PS1 15-bit color depth (32 levels)\n"
@@ -2897,11 +2897,11 @@ static const char *pg_get_snippet(int id)
 	case 73:
 		return "#include \"stdlib/retro.glsl\"\n"
 		       "// PS1 complete filter\n"
-		       "col = ps1_filter(image, uv, iResolution.xy, 256.0, 32.0, iTime);";
+		       "col = ps1_filter(image, uv, hs_resolution.xy, 256.0, 32.0, hs_time);";
 	case 74:
 		return "#include \"stdlib/retro.glsl\"\n"
 		       "// VHS tracking distortion\n"
-		       "uv = vhs_tracking(uv, iTime, 0.5);";
+		       "uv = vhs_tracking(uv, hs_time, 0.5);";
 
 	default:
 		return NULL;
@@ -3079,7 +3079,7 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 
 	properties_add_advanced_settings(props, s);
 
-	/* Channel samplers (iChannel0..iChannel3) — grouped per-channel */
+	/* Channel samplers (hs_input0..hs_input3) — grouped per-channel */
 	/* Image Channel Inputs */
 	properties_add_input_settings(props, s);
 

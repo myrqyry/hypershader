@@ -19,16 +19,16 @@ def wrap_shader(source: str) -> str:
     source = re.sub(r'^\s*uniform\s+vec2\s+u_resolution\s*;\s*\n', '', source, flags=re.M)
     source = re.sub(r'^\s*uniform\s+float\s+u_time\s*;\s*\n', '', source, flags=re.M)
     source = re.sub(r'^\s*out\s+vec4\s+out_color\s*;\s*\n', '', source, flags=re.M)
-    source = re.sub(browser_main, 'void mainImage(out vec4 fragColor, in vec2 fragCoord)', source)
+    source = re.sub(browser_main, 'void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)', source)
     source = re.sub(r'\bgl_FragCoord\.xy\b', 'fragCoord', source)
     source = re.sub(r'\bgl_FragCoord\b', 'vec4(fragCoord,0.0,1.0)', source)
     source = re.sub(r'\bout_color\b', 'fragColor', source)
-    source = re.sub(r'\bu_resolution\b', 'iResolution.xy', source)
-    source = re.sub(r'\bu_time\b', 'iTime', source)
+    source = re.sub(r'\bu_resolution\b', 'hs_resolution.xy', source)
+    source = re.sub(r'\bu_time\b', 'hs_time', source)
     # Native stdlib defines one-argument atan(v); GLSL allows atan(y, x).
     # This intentionally only recognizes the simple two-argument call shape.
     source = re.sub(r'\batan\s*\(([^()\n]*,[^()\n]*)\)', lambda m: 'atan2(' + m.group(1) + ')', source)
-    return '#include "../../stdlib/hypershader_standard.glsl"\n' + source + '\nHYPERSHADER_MAINIMAGE_WRAPPER\n'
+    return '#include "../../stdlib/hypershader_standard.glsl"\n' + source + '\nHYPERSHADER_PIXEL_WRAPPER\n'
 
 
 def stage_directory(source_dir: Path, dest_dir: Path, mode: str) -> int:

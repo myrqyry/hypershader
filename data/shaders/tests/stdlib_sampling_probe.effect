@@ -1,23 +1,23 @@
 #include "../../stdlib/hypershader_standard.glsl"
 #include "../../stdlib/sampling.glsl"
 
-void mainImage(out float4 color, in float2 fragCoord)
+void hs_shade_pixel(out float4 color, in float2 fragCoord)
 {
-    float2 uv = fragCoord / iResolution.xy;
-    float4 clamped = hsSamplePointClamp(image, uv + float2(1.0, 0.0), iResolution.xy);
-    float4 repeated = hsSampleLinearRepeat(image, uv + float2(1.0, 0.0), iResolution.xy);
+    float2 uv = fragCoord / hs_resolution.xy;
+    float4 clamped = hsSamplePointClamp(image, uv + float2(1.0, 0.0), hs_resolution.xy);
+    float4 repeated = hsSampleLinearRepeat(image, uv + float2(1.0, 0.0), hs_resolution.xy);
     float4 mirrored = hsSampleLinearMirror(image, float2(2.0 - uv.x, uv.y));
-    float4 texel = hsFetchTexel(image, int2(fragCoord), iResolution.xy);
-    float4 point = hsSamplePointRepeat(image, uv - float2(1.0, 0.0), iResolution.xy);
+    float4 texel = hsFetchTexel(image, int2(fragCoord), hs_resolution.xy);
+    float4 point = hsSamplePointRepeat(image, uv - float2(1.0, 0.0), hs_resolution.xy);
     float2 wrapped = hsFloorMod(float2(-1.25, 3.25), float2(2.0, 2.0));
     float scalar = hsFloorMod(-1.25, 2.0);
     float valid = abs(scalar - 0.75) + abs(wrapped.x - 0.75) + abs(wrapped.y - 1.25);
     valid += length(mirrored.rgb - texel.rgb) + length(point.rgb - texel.rgb);
-    float4 seam = hsSampleLinearRepeat(image, float2(0.0, uv.y), iResolution.xy);
-    float4 left = hsFetchTexel(image, int2(0, int(fragCoord.y)), iResolution.xy);
-    float4 right = hsFetchTexel(image, int2(int(iResolution.x) - 1, int(fragCoord.y)), iResolution.xy);
+    float4 seam = hsSampleLinearRepeat(image, float2(0.0, uv.y), hs_resolution.xy);
+    float4 left = hsFetchTexel(image, int2(0, int(fragCoord.y)), hs_resolution.xy);
+    float4 right = hsFetchTexel(image, int2(int(hs_resolution.x) - 1, int(fragCoord.y)), hs_resolution.xy);
     valid += length(seam.rgb - (left.rgb + right.rgb) * 0.5);
     color = valid < 0.025 ? float4(clamped.r, repeated.g, texel.b, 1.0)
                           : float4(1.0, 0.0, 1.0, 1.0);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

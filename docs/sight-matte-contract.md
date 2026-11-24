@@ -10,7 +10,7 @@ chain; mismatched, ambiguous, disabled, detached, misordered or expired
 producer data is rejected.
 
 Native shaders receive an inference-resolution, temporally stabilized
-mask in iSegmentation. Check iSightMattePresent > 0.5 before sampling
+mask in hs_segmentation. Check hs_sight_matte_present > 0.5 before sampling
 the red channel at normalized source UV; otherwise preserve the original
 image. An all-zero matte is valid when no foreground is detected.
 Sight's GPU edge refinement and the native HyperShader face-region mask

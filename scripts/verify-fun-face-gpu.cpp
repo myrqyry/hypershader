@@ -60,9 +60,9 @@ static void param(gs_effect_t* fx,const char*name,float v){
     if(p)gs_effect_set_float(p,v);
 }
 static void setTime(gs_effect_t*fx,float seconds){
-    param(fx,"iTime",seconds);
+    param(fx,"hs_time",seconds);
     vec3 res;vec3_set(&res,float(W),float(H),float(W)/H);
-    if(auto*p=gs_effect_get_param_by_name(fx,"iResolution"))gs_effect_set_vec3(p,&res);
+    if(auto*p=gs_effect_get_param_by_name(fx,"hs_resolution"))gs_effect_set_vec3(p,&res);
 }
 static Frame draw(gs_effect_t* fx,gs_texture_t*image,gs_texture_t* landmarks,bool useChannel,bool facePresent){
     gs_set_cull_mode(GS_NEITHER);
@@ -72,16 +72,16 @@ static Frame draw(gs_effect_t* fx,gs_texture_t*image,gs_texture_t* landmarks,boo
     if(target&&stage&&gs_texrender_begin(target,W,H)){
         gs_projection_push();gs_matrix_push();gs_matrix_identity();
         gs_ortho(0,float(W),0,float(H),-100,100);
-        if(auto*p=gs_effect_get_param_by_name(fx,"iChannel0"))
+        if(auto*p=gs_effect_get_param_by_name(fx,"hs_input0"))
             gs_effect_set_texture(p,useChannel?image:nullptr);
         if(auto*p=gs_effect_get_param_by_name(fx,"image"))
             gs_effect_set_texture(p,image);
-        if(auto*p=gs_effect_get_param_by_name(fx,"iChannelResolution0")){
+        if(auto*p=gs_effect_get_param_by_name(fx,"hs_input_resolution0")){
             vec4 dim;vec4_set(&dim,useChannel?float(W):0.0f,useChannel?float(H):0.0f,float(W)/H,0);
             gs_effect_set_vec4(p,&dim);
         }
-        if(auto*p=gs_effect_get_param_by_name(fx,"iLandmarks"))gs_effect_set_texture(p,landmarks);
-        if(auto*p=gs_effect_get_param_by_name(fx,"iFacePresent"))gs_effect_set_float(p,facePresent?1.0f:0.0f);
+        if(auto*p=gs_effect_get_param_by_name(fx,"hs_landmarks"))gs_effect_set_texture(p,landmarks);
+        if(auto*p=gs_effect_get_param_by_name(fx,"hs_face_present"))gs_effect_set_float(p,facePresent?1.0f:0.0f);
         while(gs_effect_loop(fx,"Draw"))gs_draw_sprite(nullptr,0,W,H);
         gs_matrix_pop();gs_projection_pop();gs_texrender_end(target);
         if(auto*t=gs_texrender_get_texture(target)){

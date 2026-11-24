@@ -6,12 +6,12 @@ int main()
 {
     const QString code = "// technique Draw is supplied by the wrapper\n"
                          "/* #include hypershader_standard.glsl "
-                         "HYPERSHADER_MAINIMAGE_WRAPPER */\n"
-                         "void mainImage(out vec4 color, in vec2 uv) { color = vec4(1.0); }";
+                         "HYPERSHADER_PIXEL_WRAPPER */\n"
+                         "void hs_shade_pixel(out vec4 color, in vec2 uv) { color = vec4(1.0); }";
     const QString bare = stripShaderComments(code);
-    const bool main = QRegularExpression(R"(\bmainImage\s*\()").match(bare).hasMatch();
+    const bool main = QRegularExpression(R"(\bhs_shade_pixel\s*\()").match(bare).hasMatch();
     const bool technique = QRegularExpression(R"(\btechnique\s+)").match(bare).hasMatch();
-    if (!main || technique || bare.contains("HYPERSHADER_MAINIMAGE_WRAPPER") ||
+    if (!main || technique || bare.contains("HYPERSHADER_PIXEL_WRAPPER") ||
         bare.contains("hypershader_standard.glsl")) return 1;
     const QString strings = "const char* url = \"https://example.org/\"; // technique Draw\n"
                             "technique Draw { pass { } }";

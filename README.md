@@ -26,12 +26,12 @@ porting paths, not the underlying runtime architecture.
 
 | Brass Register | Paper Tide | Spectral Garden |
 | :---: | :---: | :---: |
-| ![Brass Register GPU preview](data/shaders/root/previews/source.brass_register-6debfcdf90fc8998.png) | ![Paper Tide GPU preview](data/shaders/root/previews/source.paper_tide-f7583740dbad11dd.png) | ![Spectral Garden GPU preview](data/shaders/root/previews/source.spectral_garden-cf7d442d507f4ab5.png) |
+| ![Brass Register GPU preview](data/shaders/root/previews/source.brass_register-49728ce30eb6b656.png) | ![Paper Tide GPU preview](data/shaders/root/previews/source.paper_tide-f7e6f0aad1ba92a4.png) | ![Spectral Garden GPU preview](data/shaders/root/previews/source.spectral_garden-dad94309c6ccee3e.png) |
 | Audio-reactive source | Audio-reactive source | Audio-reactive source |
 
 | Topographic Etching | Contact Filaments | Afterimage Press |
 | :---: | :---: | :---: |
-| ![Topographic Etching GPU preview](data/shaders/root/previews/filter.topographic_etch-08d662f0c54acdf7.png) | ![Contact Filaments GPU preview](data/shaders/root/previews/filter.contact_filaments-2d84498f690eb47b.png) | ![Afterimage Press GPU preview](data/shaders/root/previews/filter.afterimage_press-2eb1a96190462a85.png) |
+| ![Topographic Etching GPU preview](data/shaders/root/previews/filter.topographic_etch-13f00946109ffc35.png) | ![Contact Filaments GPU preview](data/shaders/root/previews/filter.contact_filaments-87f35cd422c04f1d.png) | ![Afterimage Press GPU preview](data/shaders/root/previews/filter.afterimage_press-f330550012982865.png) |
 | Sight depth filter | Sight hand-tracking filter | GPU feedback filter |
 
 *Existing libobs/OpenGL fixture renders, not new live-camera captures.*
@@ -54,12 +54,12 @@ The same authoring model and most host controls are shared across those lanes.
 ### Native MediaPipe face surface
 
 When the ONNX **Face Mesh** graph is enabled for a filter, HyperShaderFX
-can expose 468 face landmarks through iLandmarks. Effects can now also
-request iFaceSurface (256×256 RGBA32F GPU triangle coverage) and
-iFaceTriangles (898×1 RGBA32F triangle-to-landmark IDs). The surface
+can expose 468 face landmarks through hs_landmarks. Effects can now also
+request hs_face_surface (256×256 RGBA32F GPU triangle coverage) and
+hs_face_triangles (898×1 RGBA32F triangle-to-landmark IDs). The surface
 stores a normalized triangle ID in R, the first two barycentric weights
 in G/B, and coverage in A; the third weight is 1-G-B. The surface
-clears on face loss and iFacePresent remains the authoritative gate
+clears on face loss and hs_face_present remains the authoritative gate
 for effects to skip face overlays.
 
 The opt-in **Face Mesh Wireframe** filter demonstrates this without adding a
@@ -83,7 +83,7 @@ photographs are committed to this repository.
 - **Mouse input**, resolution/time/frame uniforms, and OBS source dimensions.
 - **Four optional texture channels** backed by images, OBS sources, or audio spectrum data where supported.
 - **Audio reactivity** with bass, mid, treble, and level bindings.
-- **Previous-frame feedback** through `iPreviousFrame`.
+- **Previous-frame feedback** through `hs_history`.
 - **Live source textures** from already-showing OBS sources and independent scenes, with real capture dimensions.
 - **Native two-buffer graphs** with independent A/B history, configurable per-buffer resolution and optional RGBA16F data storage, and bounded per-instance graph allocations for multi-stage temporal effects.
 - **Source compositing** and host-level blend modes without forcing every shader to reimplement them.
@@ -204,7 +204,7 @@ Sight receiver and uploads only changed points to its shader textures.
 
 Shader-facing uniforms are described in
 [shader authoring: Sight tracking](data/shaders/SHADERS.md). An existing
-\`iLandmarks\` / \`iFacePresent\` face shader can also use Sight's 478-point
+\`hs_landmarks\` / \`hs_face_present\` face shader can also use Sight's 478-point
 face output (first 468 for the existing triangle topology). A 750 ms
 signal expiry or missing/empty tracking clears the previous result; it does
 **not** freeze a face or hand at the last position.
@@ -220,16 +220,16 @@ upstream of HyperShaderFX on the same source. Select Sight's
 **Diagnostic view → Original source** to avoid changing the input video,
 then enable the same Sight tracking/matte switch in HyperShaderFX.
 The shader receives the stabilized inference-resolution mask through
-`iSegmentation`; check `iSightMattePresent > 0.5` before sampling it.
-The same mask also supplies `iSightSubjectBounds`, `iSightSubjectCenter`,
-`iSightSubjectCoverage`, and `iSightSubjectPresent`. Select **Sight: Subject
+`hs_segmentation`; check `hs_sight_matte_present > 0.5` before sampling it.
+The same mask also supplies `hs_sight_subject_bounds`, `hs_sight_subject_center`,
+`hs_sight_subject_coverage`, and `hs_sight_subject_present`. Select **Sight: Subject
 Frame** for an optional native corner-bracket/centroid/coverage overlay.
-A separate `iSightMotionEnergy` / `iSightMotionPresent` pair reports
+A separate `hs_sight_motion_energy` / `hs_sight_motion_present` pair reports
 whole-input luma difference at inference cadence. **Sight: Motion Pulse**
 uses it for subject tint/edge glow with optional audio beat modulation.
 An optional Sight Text Obfuscation producer upstream can
-supply local OCR line geometry (`iSightTextPresent`, `iSightTextCount`,
-`iSightTextMask`, `iSightTextBounds`). Set its Treatment to Original source
+supply local OCR line geometry (`hs_sight_text_present`, `hs_sight_text_count`,
+`hs_sight_text_mask`, `hs_sight_text_bounds`). Set its Treatment to Original source
 and use **Sight: Text Scramble** for animated synthetic noise, opaque
 black, or a mask preview. No recognized strings reach HyperShaderFX.
 The optional **LLL.sight Spatial Motion (DIS)** filter can publish
@@ -377,27 +377,27 @@ Shader categories and friendly names are presentation-only. Stored shader paths 
 
 ## Writing a native HyperShaderFX shader
 
-The simplest native shader can use the convenience `mainImage` wrapper:
+The simplest native shader can use the convenience `hs_shade_pixel` wrapper:
 
 ```glsl
 #include "../stdlib/hypershader_standard.glsl"
 
 uniform float speed; // @min 0.0 @max 2.0 @default 1.0 @label "Speed"
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 {
-    vec2 uv = fragCoord / iResolution.xy;
+    vec2 uv = fragCoord / hs_resolution.xy;
     vec3 color = 0.5 + 0.5 * cos(
-        iTime * speed + uv.xyx + vec3(0.0, 2.0, 4.0)
+        hs_time * speed + uv.xyx + vec3(0.0, 2.0, 4.0)
     );
 
     fragColor = vec4(color, 1.0);
 }
 
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER
 ```
 
-HyperShaderFX can also use complete OBS techniques/passes directly; `mainImage` is a convenience form, not a required architecture.
+HyperShaderFX can also use complete OBS techniques/passes directly; `hs_shade_pixel` is a convenience form, not a required architecture.
 
 ### Metadata controls
 
@@ -417,6 +417,7 @@ For the full authoring contract, see:
 
 - [`data/shaders/SHADERS.md`](data/shaders/SHADERS.md)
 - [Shader capability roadmap and verified primitives](docs/SHADER-CAPABILITIES.md)
+- [Native shader vocabulary and custom shader migration](docs/NATIVE-SHADER-API.md)
 - [`data/shaders/OBS_SHADER_SYNTAX.md`](data/shaders/OBS_SHADER_SYNTAX.md)
 - [`docs/TWO-BUFFER-GRAPH.md`](docs/TWO-BUFFER-GRAPH.md)
 - [`docs/GLOBAL-SHADER-COMPOSITING.md`](docs/GLOBAL-SHADER-COMPOSITING.md)

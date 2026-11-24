@@ -2,12 +2,12 @@
 // @description "Temporal phosphor retention and second-buffer soft halation."
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iBufferA;
-uniform texture2d iBufferB;
-uniform texture2d iBufferAPrevious;
-uniform texture2d iBufferBPrevious;
-uniform float3 iResolution;
-uniform int iGraphFrame;
+uniform texture2d hs_buffer_a;
+uniform texture2d hs_buffer_b;
+uniform texture2d hs_buffer_a_previous;
+uniform texture2d hs_buffer_b_previous;
+uniform float3 hs_resolution;
+uniform int hs_graph_frame;
 uniform float phosphor_decay; // @min 0.70 @max 0.995 @step 0.005 @default 0.965 @label "Phosphor Retention" @group "Persistence"
 uniform float bloom_retention; // @min 0.50 @max 0.99 @step 0.01 @default 0.87 @label "Halation Retention" @group "Persistence"
 uniform float highlight_threshold; // @min 0.05 @max 0.80 @step 0.01 @default 0.23 @label "Phosphor Threshold" @group "Exposure"
@@ -28,23 +28,23 @@ float4 PSPhosphor(VertData v):TARGET {
     // Vintage phosphors respond to saturated channel peaks as well as luma.
     float l=max(luminance(camera),max(camera.r,max(camera.g,camera.b))*0.88);
     float excitation=saturate((l-highlight_threshold)/max(0.01,1.0-highlight_threshold));
-    float prior=iGraphFrame==0 ? 0.0 : iBufferAPrevious.Sample(fieldSampler,uv).r;
+    float prior=hs_graph_frame==0 ? 0.0 : hs_buffer_a_previous.Sample(fieldSampler,uv).r;
     float emission=max(excitation,prior*phosphor_decay);
     return float4(emission,excitation,l,1.0);
 }
 float4 PSHalation(VertData v):TARGET {
     float2 uv=v.uv;
-    float2 px=bloom_radius/max(iResolution.xy,float2(1,1));
-    float sum=iBufferA.Sample(fieldSampler,uv).r*0.20;
-    sum+=iBufferA.Sample(fieldSampler,uv+float2(px.x,0)).r*0.15;
-    sum+=iBufferA.Sample(fieldSampler,uv-float2(px.x,0)).r*0.15;
-    sum+=iBufferA.Sample(fieldSampler,uv+float2(0,px.y)).r*0.15;
-    sum+=iBufferA.Sample(fieldSampler,uv-float2(0,px.y)).r*0.15;
-    sum+=iBufferA.Sample(fieldSampler,uv+px).r*0.05;
-    sum+=iBufferA.Sample(fieldSampler,uv-px).r*0.05;
-    sum+=iBufferA.Sample(fieldSampler,uv+float2(px.x,-px.y)).r*0.05;
-    sum+=iBufferA.Sample(fieldSampler,uv+float2(-px.x,px.y)).r*0.05;
-    float previous=iGraphFrame==0 ? 0.0 : iBufferBPrevious.Sample(fieldSampler,uv).r;
+    float2 px=bloom_radius/max(hs_resolution.xy,float2(1,1));
+    float sum=hs_buffer_a.Sample(fieldSampler,uv).r*0.20;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv+float2(px.x,0)).r*0.15;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv-float2(px.x,0)).r*0.15;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv+float2(0,px.y)).r*0.15;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv-float2(0,px.y)).r*0.15;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv+px).r*0.05;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv-px).r*0.05;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv+float2(px.x,-px.y)).r*0.05;
+    sum+=hs_buffer_a.Sample(fieldSampler,uv+float2(-px.x,px.y)).r*0.05;
+    float previous=hs_graph_frame==0 ? 0.0 : hs_buffer_b_previous.Sample(fieldSampler,uv).r;
     float pooled=max(sum,previous*bloom_retention);
     float slow=lerp(previous,sum,0.1);
     return float4(saturate(pooled),saturate(slow),0,1);
@@ -52,8 +52,8 @@ float4 PSHalation(VertData v):TARGET {
 float4 PSDisplay(VertData v):TARGET {
     float2 uv=v.uv;
     float4 camera=image.Sample(fieldSampler,uv);
-    float3 lit=iBufferA.Sample(fieldSampler,uv).rgb;
-    float2 halo=iBufferB.Sample(fieldSampler,uv).rg;
+    float3 lit=hs_buffer_a.Sample(fieldSampler,uv).rgb;
+    float2 halo=hs_buffer_b.Sample(fieldSampler,uv).rg;
     float3 phosphorColor=lerp(float3(0.58,0.78,1.0),
                               float3(1.0,0.52,0.23),color_warmth);
     float3 halationColor=lerp(float3(0.38,0.6,1.0),
@@ -62,7 +62,7 @@ float4 PSDisplay(VertData v):TARGET {
                   + halationColor*halo.r*bloom_strength*0.42
                   + halationColor*halo.g*0.09;
     float softLine=1.0-scanline_strength*0.5*
-                   (1.0-cos(uv.y*iResolution.y*3.14159265));
+                   (1.0-cos(uv.y*hs_resolution.y*3.14159265));
     coated*=softLine;
     return float4(lerp(camera.rgb,saturate(coated),effect_mix),camera.a);
 }

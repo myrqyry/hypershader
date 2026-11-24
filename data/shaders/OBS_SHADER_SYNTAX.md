@@ -18,7 +18,7 @@ Use this guide when authoring HyperShaderFX `.effect` files that should run clea
 - Avoid `mat2` (`float2x2`) in OBS effect shaders.
 - Avoid dynamic array-heavy logic for OpenGL-style backends.
 - Keep loop bounds constant when possible.
-- For simple `mainImage` effects, finish with `HYPERSHADER_MAINIMAGE_WRAPPER`. Full native effects may declare their own techniques/passes.
+- For simple `hs_shade_pixel` effects, finish with `HYPERSHADER_PIXEL_WRAPPER`. Full native effects may declare their own techniques/passes.
 
 ## Standard Cross-Platform Template
 
@@ -28,14 +28,14 @@ Use this guide when authoring HyperShaderFX `.effect` files that should run clea
 // @min 0.0 @max 2.0 @step 0.01 @label "Speed"
 uniform float speed = 1.0;
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 {
-    vec2 uv = fragCoord / iResolution.xy;
-    vec3 col = 0.5 + 0.5 * cos(iTime * speed + uv.xyx + vec3(0, 2, 4));
+    vec2 uv = fragCoord / hs_resolution.xy;
+    vec3 col = 0.5 + 0.5 * cos(hs_time * speed + uv.xyx + vec3(0, 2, 4));
     fragColor = vec4(col, 1.0);
 }
 
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER
 ```
 
 ## Generating Windows/macOS Variants

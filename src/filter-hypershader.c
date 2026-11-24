@@ -132,7 +132,7 @@ static bool graph_read_descriptor(gs_effect_t *effect, const char *name, int fal
 static bool graph_configure(struct hypershader_data *s)
 {
 	int budget;
-	if (!graph_read_descriptor(s->effect, "iGraphBudgetMiB", HS_GRAPH_MAX_MIB, &budget) ||
+	if (!graph_read_descriptor(s->effect, "hs_graph_budget_mib", HS_GRAPH_MAX_MIB, &budget) ||
 	    budget < 1 || budget > HS_GRAPH_MAX_MIB) {
 		blog(LOG_ERROR, "[HyperShader] Invalid graph resource budget: expected int 1..%d MiB",
 		     HS_GRAPH_MAX_MIB);
@@ -140,9 +140,9 @@ static bool graph_configure(struct hypershader_data *s)
 	}
 	s->graph_budget_mib = (uint32_t)budget;
 
-	const char *divisor_names[] = {"iBufferADivisor", "iBufferBDivisor"};
-	const char *format_names[] = {"iBufferAFormat", "iBufferBFormat"};
-	const char *resolution_names[] = {"iBufferAResolution", "iBufferBResolution"};
+	const char *divisor_names[] = {"hs_buffer_a_divisor", "hs_buffer_b_divisor"};
+	const char *format_names[] = {"hs_buffer_a_format", "hs_buffer_b_format"};
+	const char *resolution_names[] = {"hs_buffer_a_resolution", "hs_buffer_b_resolution"};
 	for (unsigned i = 0; i < 2; ++i) {
 		int divisor, format;
 		if (!graph_read_descriptor(s->effect, divisor_names[i], 1, &divisor) ||
@@ -156,7 +156,7 @@ static bool graph_configure(struct hypershader_data *s)
 		s->graph_float16[i] = format == 1;
 		s->ep_graph_buffer_resolution[i] = gs_effect_get_param_by_name(s->effect, resolution_names[i]);
 	}
-	s->ep_graph_output_resolution = gs_effect_get_param_by_name(s->effect, "iGraphOutputResolution");
+	s->ep_graph_output_resolution = gs_effect_get_param_by_name(s->effect, "hs_graph_output_resolution");
 	gs_eparam_t *resolutions[] = {s->ep_graph_buffer_resolution[0], s->ep_graph_buffer_resolution[1],
 				      s->ep_graph_output_resolution};
 	for (unsigned i = 0; i < 3; ++i) {
@@ -488,13 +488,13 @@ static char *translate_glsl_to_obs(char *source)
     return output.array ? output.array : bstrdup("");
 }
 
-/* Boilerplate expansion for SHADERTOY_MAINIMAGE_WRAPPER / HYPERSHADER_MAINIMAGE_WRAPPER.
+/* Boilerplate expansion for SHADERTOY_MAINIMAGE_WRAPPER / HYPERSHADER_PIXEL_WRAPPER.
  * OBS effect compiler does not expand C preprocessor macros, so we emit the
  * PSMain entry point and technique block directly. */
 static const char *WRAPPER_EXPANSION = "float4 PSMain(VertData v_in) : TARGET {\n"
-				       "    float2 fragCoord = v_in.uv * iResolution.xy;\n"
+				       "    float2 fragCoord = v_in.uv * hs_resolution.xy;\n"
 				       "    float4 fragColor;\n"
-				       "    mainImage(fragColor, fragCoord);\n"
+				       "    hs_shade_pixel(fragColor, fragCoord);\n"
 				       "    return fragColor;\n"
 				       "}\n"
 				       "technique Draw {\n"
@@ -566,7 +566,7 @@ static bool shader_has_include_directive(const char *source)
 /* Only a complete macro-invocation line can introduce the PSMain and Draw
  * technique. Replacing tokens inside comments or #define source produced
  * duplicate shader code and an invalid OBS effect on real GPUs. */
-static char *expand_mainimage_wrapper_statements(const char *source)
+static char *expand_pixel_wrapper_statements(const char *source)
 {
     if (!source)
         return NULL;
@@ -581,7 +581,7 @@ static char *expand_mainimage_wrapper_statements(const char *source)
         if (!start)
             start = line + len;
         const char *tail = NULL;
-        const char *a = "HYPERSHADER_MAINIMAGE_WRAPPER";
+        const char *a = "HYPERSHADER_PIXEL_WRAPPER";
         const char *b = "SHADERTOY_MAINIMAGE_WRAPPER";
         size_t a_len = strlen(a), b_len = strlen(b);
         if (line + len - start >= (ptrdiff_t)a_len && strncmp(start, a, a_len) == 0)
@@ -601,7 +601,7 @@ static char *expand_mainimage_wrapper_statements(const char *source)
         }
         if (invocation) {
             if (++replacements > 1) {
-                blog(LOG_ERROR, "[HyperShader] More than one mainImage wrapper invocation");
+                blog(LOG_ERROR, "[HyperShader] More than one hs_shade_pixel wrapper invocation");
                 dstr_free(&out);
                 return NULL;
             }
@@ -1212,8 +1212,8 @@ static char *preprocess_shader_with_guard(const char *path, int depth, struct in
 		/* The OBS effect compiler cannot expand multi-line wrapper defines.
 		 * Skip exactly the definition and its continuation lines, including
 		 * the final non-backslash line (previously leaked a stray brace). */
-		if (strncmp(line_start, "#define SHADERTOY_MAINIMAGE_WRAPPER", 35) == 0 ||
-		    strncmp(line_start, "#define HYPERSHADER_MAINIMAGE_WRAPPER", 37) == 0) {
+		if (strncmp(line_start, "#define SHADERTOY_MAINIMAGE_WRAPPER", sizeof("#define SHADERTOY_MAINIMAGE_WRAPPER") - 1) == 0 ||
+		    strncmp(line_start, "#define HYPERSHADER_PIXEL_WRAPPER", sizeof("#define HYPERSHADER_PIXEL_WRAPPER") - 1) == 0) {
 			bool continued = line_len > 0 && line_start[line_len - 1] == '\\';
 			line_start = line_end ? line_end + 1 : NULL;
 			while (continued && line_start && *line_start) {
@@ -1280,7 +1280,7 @@ static char *preprocess_shader(const char *path)
 			blog(LOG_ERROR, "[HyperShader] Translation failed, using original source");
 		}
 
-		char *expanded = expand_mainimage_wrapper_statements(result);
+		char *expanded = expand_pixel_wrapper_statements(result);
 		bfree(result);
 		if (!expanded) {
 			include_guard_free(&guard);
@@ -1801,7 +1801,7 @@ static void capture_live_channels(struct hypershader_data *s)
 		if (s->channel_types[i] != 2)
 			continue;
 		s->channel_textures[i] = NULL;
-		obs_source_t *src = capture_allowed && s->ep_iChannel[i] && s->channel_sources[i] ?
+		obs_source_t *src = capture_allowed && s->ep_input[i] && s->channel_sources[i] ?
 			obs_weak_source_get_source(s->channel_sources[i]) : NULL;
 		if (channel_capture_allowed(s, src)) {
 			const uint32_t width = obs_source_get_width(src);
@@ -2911,7 +2911,7 @@ static void sight_update_tracking(struct hypershader_data *s,
 		hs_sight_upload_rgba32f(&s->sight_transform_tex,0,0,NULL);
 	}
 	if (ok && snapshot->kind==SIGHT_SNAPSHOT_FACE && snapshot->point_count>=468 &&
-	    (s->ep_iFaceSurface || s->ep_iFaceTriangles)) {
+	    (s->ep_face_surface || s->ep_face_triangles)) {
 		if (!s->sight_face_surface) {
 			char *path=obs_module_file("effects/face_surface.effect");
 			if (path) {s->sight_face_surface=hs_face_surface_create(path);bfree(path);}
@@ -2941,7 +2941,7 @@ static void sight_update_tracking(struct hypershader_data *s,
 static void sight_depth_tick(struct hypershader_data *s,bool enabled)
 {
     s->sight_depth_present=false;
-    if(!enabled||(!s->ep_iSightDepth&&!s->ep_iSightDepthPresent))return;
+    if(!enabled||(!s->ep_sight_depth&&!s->ep_sight_depth_present))return;
     sight_depth_v1 snap;
     if(!hs_sight_depth_read(s->context,s->sight_depth_sequence,&snap))return;
     if(snap.sequence!=s->sight_depth_sequence){
@@ -2968,9 +2968,9 @@ static void sight_matte_tick(struct hypershader_data *s, bool enabled)
 {
     // On demand; skip copy and GPU upload for unchanged sequence.
     s->sight_matte_present = false;
-    if (!enabled || (!s->ep_iSegmentation && !s->ep_iSightMattePresent &&
-        !s->ep_iSightSubjectPresent && !s->ep_iSightSubjectBounds &&
-        !s->ep_iSightSubjectCenter && !s->ep_iSightSubjectCoverage)) return;
+    if (!enabled || (!s->ep_segmentation && !s->ep_sight_matte_present &&
+        !s->ep_sight_subject_present && !s->ep_sight_subject_bounds &&
+        !s->ep_sight_subject_center && !s->ep_sight_subject_coverage)) return;
     sight_matte_v1 snapshot;
     if (!hs_sight_matte_read(s->context,s->sight_matte_sequence,&snapshot)) return;
     if (snapshot.sequence != s->sight_matte_sequence) {
@@ -3003,8 +3003,8 @@ static void sight_flow_tick(struct hypershader_data *s,bool enabled)
 {
     s->sight_flow_present=false;
     s->sight_flow_interval=0;s->sight_flow_coverage=0;
-    if(!enabled||(!s->ep_iSightFlow&&!s->ep_iSightFlowPresent&&
-       !s->ep_iSightFlowInterval&&!s->ep_iSightFlowCoverage&&!s->ep_iSightFlowStep))return;
+    if(!enabled||(!s->ep_sight_flow&&!s->ep_sight_flow_present&&
+       !s->ep_sight_flow_interval&&!s->ep_sight_flow_coverage&&!s->ep_sight_flow_step))return;
     sight_flow_v1 snap;
     if(!hs_sight_flow_read(s->context,&snap))return;
     if(snap.sequence!=s->sight_flow_sequence) {
@@ -3032,8 +3032,8 @@ static void sight_text_tick(struct hypershader_data *s,bool enabled)
 {
     s->sight_text_present=false;
     s->sight_text_count=0;
-    if(!enabled||(!s->ep_iSightTextMask&&!s->ep_iSightTextBounds&&
-                  !s->ep_iSightTextPresent&&!s->ep_iSightTextCount))return;
+    if(!enabled||(!s->ep_sight_text_mask&&!s->ep_sight_text_bounds&&
+                  !s->ep_sight_text_present&&!s->ep_sight_text_count))return;
     sight_text_v1 snapshot;
     if(!hs_sight_text_read(s->context,&snapshot))return;
     if(snapshot.sequence!=s->sight_text_sequence) {
@@ -3078,7 +3078,7 @@ static void sight_tick(struct hypershader_data *s)
 	pthread_mutex_unlock(&s->mutex);
     s->sight_motion_present=false;
     s->sight_motion_energy=0.f;
-    if (enabled && (s->ep_iSightMotionPresent || s->ep_iSightMotionEnergy)) {
+    if (enabled && (s->ep_sight_motion_present || s->ep_sight_motion_energy)) {
         sight_motion_v1 motion;
         if (hs_sight_motion_read(s->context,&motion)) {
             s->sight_motion_present=true;
@@ -3114,7 +3114,7 @@ static void sight_tick(struct hypershader_data *s)
 	sight_snapshot_v1 snapshot;
 	const bool fresh=hs_sight_reader_read(s->sight_receiver,channel,750,&snapshot);
 	sight_update_tracking(s,&snapshot,fresh);
-    if(s->ep_iSightTouch[0] || s->ep_iSightRipple[0]){
+    if(s->ep_sight_touch[0] || s->ep_sight_ripple[0]){
         obs_source_t* target=obs_filter_get_target(s->context);
         uint32_t w=target?obs_source_get_base_width(target):0;
         uint32_t h=target?obs_source_get_base_height(target):0;
@@ -3134,8 +3134,8 @@ static void filter_tick(void *data, float seconds)
      * Do not spend cycles updating unused demo scenes in every filter. */
     if (s->scene && s->ep_entityTexture && seconds > 0.0f)
         scene_update(s->scene, s->mp_runner, seconds * 1000.0f);
-    /* iGraphFrame and physical frame_count remain real render counters for
-     * feedback initialization. iFrame is virtual, governed by global speed. */
+    /* hs_graph_frame and physical frame_count remain real render counters for
+     * feedback initialization. hs_frame_index is virtual, governed by global speed. */
     s->shader_frame_count += s->time_scale;
 	if (seconds > 0.0f)
 		s->time_accumulator += seconds * s->time_scale;
@@ -3213,7 +3213,7 @@ static void mp_update_textures_task(void *param)
 
 	/* Optional GPU face topology, only created for effects requesting it.
 	 * No extra GPU drawing is performed for ordinary landmark-only shaders. */
-	if (s->ep_iFaceSurface || s->ep_iFaceTriangles) {
+	if (s->ep_face_surface || s->ep_face_triangles) {
 		if (!s->mp_face_surface && task->landmark_data) {
 			char *effect_path = obs_module_file("effects/face_surface.effect");
 			if (effect_path) {
@@ -3406,28 +3406,28 @@ static void shader_load_complete_task(void *param)
 		res->audio_values = NULL;
 
 		/* Update cached standard params for NEW effect */
-		s->ep_iTime = gs_effect_get_param_by_name(s->effect, "iTime");
-		s->ep_iScale = gs_effect_get_param_by_name(s->effect, "iScale");
-		s->ep_iResolution = gs_effect_get_param_by_name(s->effect, "iResolution");
-		s->ep_iTimeDelta = gs_effect_get_param_by_name(s->effect, "iTimeDelta");
-		s->ep_iFrame = gs_effect_get_param_by_name(s->effect, "iFrame");
-		s->ep_iDate = gs_effect_get_param_by_name(s->effect, "iDate");
-		s->ep_iFrameRate = gs_effect_get_param_by_name(s->effect, "iFrameRate");
-		s->ep_iSampleRate = gs_effect_get_param_by_name(s->effect, "iSampleRate");
-		s->ep_iMouse = gs_effect_get_param_by_name(s->effect, "iMouse");
-		s->ep_iPreviousFrame = gs_effect_get_param_by_name(s->effect, "iPreviousFrame");
+		s->ep_time = gs_effect_get_param_by_name(s->effect, "hs_time");
+		s->ep_scale = gs_effect_get_param_by_name(s->effect, "hs_scale");
+		s->ep_resolution = gs_effect_get_param_by_name(s->effect, "hs_resolution");
+		s->ep_delta_time = gs_effect_get_param_by_name(s->effect, "hs_delta_time");
+		s->ep_frame_index = gs_effect_get_param_by_name(s->effect, "hs_frame_index");
+		s->ep_date = gs_effect_get_param_by_name(s->effect, "hs_date");
+		s->ep_frame_rate = gs_effect_get_param_by_name(s->effect, "hs_frame_rate");
+		s->ep_sample_rate = gs_effect_get_param_by_name(s->effect, "hs_sample_rate");
+		s->ep_pointer = gs_effect_get_param_by_name(s->effect, "hs_pointer");
+		s->ep_history = gs_effect_get_param_by_name(s->effect, "hs_history");
 		/* Graph mode is intentionally opt-in and does not change older effects.
 		 * Partial technique sets must never enter a half-working render path. */
-		s->ep_iBufferA = gs_effect_get_param_by_name(s->effect, "iBufferA");
-		s->ep_iBufferB = gs_effect_get_param_by_name(s->effect, "iBufferB");
-		s->ep_iBufferAPrevious = gs_effect_get_param_by_name(s->effect, "iBufferAPrevious");
-		s->ep_iBufferBPrevious = gs_effect_get_param_by_name(s->effect, "iBufferBPrevious");
-		s->ep_iGraphFrame = gs_effect_get_param_by_name(s->effect, "iGraphFrame");
+		s->ep_buffer_a = gs_effect_get_param_by_name(s->effect, "hs_buffer_a");
+		s->ep_buffer_b = gs_effect_get_param_by_name(s->effect, "hs_buffer_b");
+		s->ep_buffer_a_previous = gs_effect_get_param_by_name(s->effect, "hs_buffer_a_previous");
+		s->ep_buffer_b_previous = gs_effect_get_param_by_name(s->effect, "hs_buffer_b_previous");
+		s->ep_graph_frame = gs_effect_get_param_by_name(s->effect, "hs_graph_frame");
 		s->graph_enabled = gs_effect_get_technique(s->effect, "BufferA") &&
 		gs_effect_get_technique(s->effect, "BufferB") &&
 		gs_effect_get_technique(s->effect, "Draw") &&
-		s->ep_iBufferA && s->ep_iBufferB &&
-		s->ep_iBufferAPrevious && s->ep_iBufferBPrevious;
+		s->ep_buffer_a && s->ep_buffer_b &&
+		s->ep_buffer_a_previous && s->ep_buffer_b_previous;
 		if (s->graph_enabled)
 			graph_release_targets(s);
 		else
@@ -3436,51 +3436,51 @@ static void shader_load_complete_task(void *param)
 		s->graph_config_valid = !s->graph_enabled || graph_configure(s);
 		if (s->graph_enabled && s->graph_config_valid)
 			blog(LOG_INFO, "[HyperShader] Two-buffer graph enabled: A -> B -> Draw");
-		s->ep_iSegmentation = gs_effect_get_param_by_name(s->effect, "iSegmentation");
-		s->ep_iSightMattePresent = gs_effect_get_param_by_name(s->effect, "iSightMattePresent");
-        s->ep_iSightDepth=gs_effect_get_param_by_name(s->effect,"iSightDepth");
-        s->ep_iSightDepthPresent=gs_effect_get_param_by_name(s->effect,"iSightDepthPresent");
-        s->ep_iSightFlow=gs_effect_get_param_by_name(s->effect,"iSightFlow");
-        s->ep_iSightFlowPresent=gs_effect_get_param_by_name(s->effect,"iSightFlowPresent");
-        s->ep_iSightFlowInterval=gs_effect_get_param_by_name(s->effect,"iSightFlowInterval");
-        s->ep_iSightFlowCoverage=gs_effect_get_param_by_name(s->effect,"iSightFlowCoverage");
-        s->ep_iSightFlowStep=gs_effect_get_param_by_name(s->effect,"iSightFlowStep");
-        s->ep_iSightTextPresent = gs_effect_get_param_by_name(s->effect, "iSightTextPresent");
-        s->ep_iSightTextCount = gs_effect_get_param_by_name(s->effect, "iSightTextCount");
-        s->ep_iSightTextMask = gs_effect_get_param_by_name(s->effect, "iSightTextMask");
-        s->ep_iSightTextBounds = gs_effect_get_param_by_name(s->effect, "iSightTextBounds");
-        s->ep_iSightMotionPresent = gs_effect_get_param_by_name(s->effect, "iSightMotionPresent");
-        s->ep_iSightMotionEnergy = gs_effect_get_param_by_name(s->effect, "iSightMotionEnergy");
-        s->ep_iSightSubjectPresent = gs_effect_get_param_by_name(s->effect, "iSightSubjectPresent");
-        s->ep_iSightSubjectBounds = gs_effect_get_param_by_name(s->effect, "iSightSubjectBounds");
-        s->ep_iSightSubjectCenter = gs_effect_get_param_by_name(s->effect, "iSightSubjectCenter");
-        s->ep_iSightSubjectCoverage = gs_effect_get_param_by_name(s->effect, "iSightSubjectCoverage");
-		s->ep_iLandmarks = gs_effect_get_param_by_name(s->effect, "iLandmarks");
-		s->ep_iFacePresent = gs_effect_get_param_by_name(s->effect, "iFacePresent");
-		s->ep_iReferenceLandmarks = gs_effect_get_param_by_name(s->effect, "iReferenceLandmarks");
-		s->ep_iFaceSurface = gs_effect_get_param_by_name(s->effect, "iFaceSurface");
-		s->ep_iFaceTriangles = gs_effect_get_param_by_name(s->effect, "iFaceTriangles");
-		s->ep_iSightPoints = gs_effect_get_param_by_name(s->effect, "iSightPoints");
-		s->ep_iSightHands = gs_effect_get_param_by_name(s->effect, "iSightHands");
+		s->ep_segmentation = gs_effect_get_param_by_name(s->effect, "hs_segmentation");
+		s->ep_sight_matte_present = gs_effect_get_param_by_name(s->effect, "hs_sight_matte_present");
+        s->ep_sight_depth=gs_effect_get_param_by_name(s->effect,"hs_sight_depth");
+        s->ep_sight_depth_present=gs_effect_get_param_by_name(s->effect,"hs_sight_depth_present");
+        s->ep_sight_flow=gs_effect_get_param_by_name(s->effect,"hs_sight_flow");
+        s->ep_sight_flow_present=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_present");
+        s->ep_sight_flow_interval=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_interval");
+        s->ep_sight_flow_coverage=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_coverage");
+        s->ep_sight_flow_step=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_step");
+        s->ep_sight_text_present = gs_effect_get_param_by_name(s->effect, "hs_sight_text_present");
+        s->ep_sight_text_count = gs_effect_get_param_by_name(s->effect, "hs_sight_text_count");
+        s->ep_sight_text_mask = gs_effect_get_param_by_name(s->effect, "hs_sight_text_mask");
+        s->ep_sight_text_bounds = gs_effect_get_param_by_name(s->effect, "hs_sight_text_bounds");
+        s->ep_sight_motion_present = gs_effect_get_param_by_name(s->effect, "hs_sight_motion_present");
+        s->ep_sight_motion_energy = gs_effect_get_param_by_name(s->effect, "hs_sight_motion_energy");
+        s->ep_sight_subject_present = gs_effect_get_param_by_name(s->effect, "hs_sight_subject_present");
+        s->ep_sight_subject_bounds = gs_effect_get_param_by_name(s->effect, "hs_sight_subject_bounds");
+        s->ep_sight_subject_center = gs_effect_get_param_by_name(s->effect, "hs_sight_subject_center");
+        s->ep_sight_subject_coverage = gs_effect_get_param_by_name(s->effect, "hs_sight_subject_coverage");
+		s->ep_landmarks = gs_effect_get_param_by_name(s->effect, "hs_landmarks");
+		s->ep_face_present = gs_effect_get_param_by_name(s->effect, "hs_face_present");
+		s->ep_reference_landmarks = gs_effect_get_param_by_name(s->effect, "hs_reference_landmarks");
+		s->ep_face_surface = gs_effect_get_param_by_name(s->effect, "hs_face_surface");
+		s->ep_face_triangles = gs_effect_get_param_by_name(s->effect, "hs_face_triangles");
+		s->ep_sight_points = gs_effect_get_param_by_name(s->effect, "hs_sight_points");
+		s->ep_sight_hands = gs_effect_get_param_by_name(s->effect, "hs_sight_hands");
         hs_touch_reset(&s->sight_touch);
         for(unsigned i=0;i<2;i++){
-            char key[32];snprintf(key,sizeof(key),"iSightTouch%u",i);
-            s->ep_iSightTouch[i]=gs_effect_get_param_by_name(s->effect,key);
+            char key[32];snprintf(key,sizeof(key),"hs_sight_touch%u",i);
+            s->ep_sight_touch[i]=gs_effect_get_param_by_name(s->effect,key);
         }
         for(unsigned i=0;i<HS_TOUCH_CAPACITY;i++){
-            char key[32];snprintf(key,sizeof(key),"iSightRipple%u",i);
-            s->ep_iSightRipple[i]=gs_effect_get_param_by_name(s->effect,key);
+            char key[32];snprintf(key,sizeof(key),"hs_sight_ripple%u",i);
+            s->ep_sight_ripple[i]=gs_effect_get_param_by_name(s->effect,key);
         }
-		s->ep_iSightBlendshapes = gs_effect_get_param_by_name(s->effect, "iSightBlendshapes");
-		s->ep_iSightHeadRows = gs_effect_get_param_by_name(s->effect, "iSightHeadRows");
-		s->ep_iSightPresent = gs_effect_get_param_by_name(s->effect, "iSightPresent");
-		s->ep_iSightKind = gs_effect_get_param_by_name(s->effect, "iSightKind");
-		s->ep_iSightPointCount = gs_effect_get_param_by_name(s->effect, "iSightPointCount");
-		s->ep_iSightHandCount = gs_effect_get_param_by_name(s->effect, "iSightHandCount");
-		s->ep_iSightPinch0 = gs_effect_get_param_by_name(s->effect, "iSightPinch0");
-		s->ep_iSightPinch1 = gs_effect_get_param_by_name(s->effect, "iSightPinch1");
-		s->ep_iSightGesture0 = gs_effect_get_param_by_name(s->effect, "iSightGesture0");
-		s->ep_iSightGesture1 = gs_effect_get_param_by_name(s->effect, "iSightGesture1");
+		s->ep_sight_blendshapes = gs_effect_get_param_by_name(s->effect, "hs_sight_blendshapes");
+		s->ep_sight_head_rows = gs_effect_get_param_by_name(s->effect, "hs_sight_head_rows");
+		s->ep_sight_present = gs_effect_get_param_by_name(s->effect, "hs_sight_present");
+		s->ep_sight_kind = gs_effect_get_param_by_name(s->effect, "hs_sight_kind");
+		s->ep_sight_point_count = gs_effect_get_param_by_name(s->effect, "hs_sight_point_count");
+		s->ep_sight_hand_count = gs_effect_get_param_by_name(s->effect, "hs_sight_hand_count");
+		s->ep_sight_pinch0 = gs_effect_get_param_by_name(s->effect, "hs_sight_pinch0");
+		s->ep_sight_pinch1 = gs_effect_get_param_by_name(s->effect, "hs_sight_pinch1");
+		s->ep_sight_gesture0 = gs_effect_get_param_by_name(s->effect, "hs_sight_gesture0");
+		s->ep_sight_gesture1 = gs_effect_get_param_by_name(s->effect, "hs_sight_gesture1");
 
         s->ep_entityCount = gs_effect_get_param_by_name(s->effect, "entityCount");
         s->ep_entityTexture = gs_effect_get_param_by_name(s->effect, "entityTexture");
@@ -3488,25 +3488,25 @@ static void shader_load_complete_task(void *param)
 
 		/* Cache the source texture handles on the newly loaded effect.
 		 * These must be refreshed on every shader swap. In particular, OBS
-		 * transitions bind the actual A/B source textures via iChannel0/1;
+		 * transitions bind the actual A/B source textures via hs_input0/1;
 		 * previously the uninitialized handles silently discarded both. */
 		for (int i = 0; i < 4; i++) {
 			char name[32];
-			snprintf(name, sizeof(name), "iChannel%d", i);
-			s->ep_iChannel[i] = gs_effect_get_param_by_name(s->effect, name);
-			snprintf(name, sizeof(name), "iChannelResolution%d", i);
-			s->ep_iChannelResolution[i] = gs_effect_get_param_by_name(s->effect, name);
-            snprintf(name,sizeof(name),"iChannelAtlas%d",i);
-            s->ep_iChannelAtlas[i]=gs_effect_get_param_by_name(s->effect,name);
+			snprintf(name, sizeof(name), "hs_input%d", i);
+			s->ep_input[i] = gs_effect_get_param_by_name(s->effect, name);
+			snprintf(name, sizeof(name), "hs_input_resolution%d", i);
+			s->ep_input_resolution[i] = gs_effect_get_param_by_name(s->effect, name);
+            snprintf(name,sizeof(name),"hs_input_atlas%d",i);
+            s->ep_input_atlas[i]=gs_effect_get_param_by_name(s->effect,name);
             memset(&s->atlas_clock[i],0,sizeof(s->atlas_clock[i]));
             vec4_set(&s->atlas_value[i],1,1,0,0);
 		}
 
-		/* Cache iChannelTime parameters */
+		/* Cache hs_input_time parameters */
 		for (int i = 0; i < 4; i++) {
 			char name[32];
-			snprintf(name, sizeof(name), "iChannelTime%d", i);
-			s->ep_iChannelTime[i] = gs_effect_get_param_by_name(s->effect, name);
+			snprintf(name, sizeof(name), "hs_input_time%d", i);
+			s->ep_input_time[i] = gs_effect_get_param_by_name(s->effect, name);
 		}
 
 		/* Cache audio band parameters */
@@ -3535,7 +3535,7 @@ static void shader_load_complete_task(void *param)
 		cache_effect_params(s);
 
 		/* A newly compiled effect must not inherit an unrelated shader's
-		 * damaged reference frames, even if both use iPreviousFrame. */
+		 * damaged reference frames, even if both use hs_history. */
 		for (int i=0;i<2;i++) {
 			if (s->history[i]) {
 				gs_texrender_destroy(s->history[i]);
@@ -3547,7 +3547,7 @@ static void shader_load_complete_task(void *param)
 		s->feedback_first_render_logged=false;
 
 		/* Post-Swap Cleanup */
-		if (!s->ep_iPreviousFrame && !s->graph_enabled) {
+		if (!s->ep_history && !s->graph_enabled) {
 			if (s->feedback_input) {
 				gs_texrender_destroy(s->feedback_input);
 				s->feedback_input = NULL;
@@ -3898,7 +3898,7 @@ static void update_animated_channels(struct hypershader_data *s)
 {
     bool any = false;
     for (int i=0; i<CHANNEL_COUNT; ++i)
-        any |= s->channel_types[i] == 1 && s->ep_iChannel[i] &&
+        any |= s->channel_types[i] == 1 && s->ep_input[i] &&
                hs_channel_image_animated(&s->channel_images[i]);
     if (!any) return;
 
@@ -3917,7 +3917,7 @@ static void update_animated_channels(struct hypershader_data *s)
     }
     uint64_t frame_ns = obs_get_video_frame_time();
     for (int i=0; i<CHANNEL_COUNT; ++i) {
-        if (s->channel_types[i] != 1 || !s->ep_iChannel[i]) continue;
+        if (s->channel_types[i] != 1 || !s->ep_input[i]) continue;
         int state = i - (s->kind == HYPER_KIND_SOURCE ? 1 : 0);
         bool expression = reactive && state >= 0 && state < 3;
         bool triggered = expression && s->reaction_state.target[state] > 0.01f;
@@ -3930,8 +3930,8 @@ static void update_animated_channels(struct hypershader_data *s)
 static void bind_sprite_atlases(struct hypershader_data *s)
 {
     for (int i=0;i<CHANNEL_COUNT;++i)
-        if(s->ep_iChannelAtlas[i])
-            gs_effect_set_vec4(s->ep_iChannelAtlas[i],&s->atlas_value[i]);
+        if(s->ep_input_atlas[i])
+            gs_effect_set_vec4(s->ep_input_atlas[i],&s->atlas_value[i]);
 }
 
 static int atlas_setting(obs_data_t *settings,const char *prefix,const char *suffix,int fallback)
@@ -3946,7 +3946,7 @@ static int atlas_setting(obs_data_t *settings,const char *prefix,const char *suf
 static void update_sprite_atlases(struct hypershader_data *s)
 {
     bool any=false;
-    for(int i=0;i<CHANNEL_COUNT;++i) any|=s->ep_iChannelAtlas[i]!=NULL;
+    for(int i=0;i<CHANNEL_COUNT;++i) any|=s->ep_input_atlas[i]!=NULL;
     if(!any) return;
     obs_data_t *settings=obs_source_get_settings(s->context);
     if(!settings) return;
@@ -3955,7 +3955,7 @@ static void update_sprite_atlases(struct hypershader_data *s)
         ? (int)obs_data_get_int(settings,"param_animation_playback"):1;
     uint64_t now=obs_get_video_frame_time();
     for(int i=0;i<CHANNEL_COUNT;++i) {
-        if(!s->ep_iChannelAtlas[i]) continue;
+        if(!s->ep_input_atlas[i]) continue;
         int state=i+(s->kind==HYPER_KIND_SOURCE?0:1);
         if(state>=4) continue;
         const char *prefix=states[state];
@@ -4081,34 +4081,34 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 	}
 
 	/* Set standard uniforms */
-	if (s->ep_iTime)
-		gs_effect_set_float(s->ep_iTime, s->time_accumulator);
-	if (s->ep_iScale)
-		gs_effect_set_float(s->ep_iScale, 1.0f);
-	if (s->ep_iTimeDelta)
-		gs_effect_set_float(s->ep_iTimeDelta, dt * s->time_scale);
-	if (s->ep_iFrameRate)
-		gs_effect_set_float(s->ep_iFrameRate, dt > 0.0f ? (1.0f / dt) : 0.0f);
-	if (s->ep_iSampleRate)
-		gs_effect_set_float(s->ep_iSampleRate, (float)s->audio_sample_rate);
+	if (s->ep_time)
+		gs_effect_set_float(s->ep_time, s->time_accumulator);
+	if (s->ep_scale)
+		gs_effect_set_float(s->ep_scale, 1.0f);
+	if (s->ep_delta_time)
+		gs_effect_set_float(s->ep_delta_time, dt * s->time_scale);
+	if (s->ep_frame_rate)
+		gs_effect_set_float(s->ep_frame_rate, dt > 0.0f ? (1.0f / dt) : 0.0f);
+	if (s->ep_sample_rate)
+		gs_effect_set_float(s->ep_sample_rate, (float)s->audio_sample_rate);
 
-	/* CRITICAL FIX: Set iChannelTime for per-channel time sync */
+	/* CRITICAL FIX: Set hs_input_time for per-channel time sync */
 	for (int i = 0; i < 4; i++) {
-		if (s->ep_iChannelTime[i]) {
-			gs_effect_set_float(s->ep_iChannelTime[i], s->time_accumulator);
+		if (s->ep_input_time[i]) {
+			gs_effect_set_float(s->ep_input_time[i], s->time_accumulator);
 		}
 	}
 
-	if (s->ep_iFrame) {
+	if (s->ep_frame_index) {
 		struct gs_effect_param_info pinfo;
-		gs_effect_get_param_info(s->ep_iFrame, &pinfo);
+		gs_effect_get_param_info(s->ep_frame_index, &pinfo);
 		if (pinfo.type == GS_SHADER_PARAM_INT)
-			gs_effect_set_int(s->ep_iFrame, (int)s->shader_frame_count);
+			gs_effect_set_int(s->ep_frame_index, (int)s->shader_frame_count);
 		else
-			gs_effect_set_float(s->ep_iFrame, s->shader_frame_count);
+			gs_effect_set_float(s->ep_frame_index, s->shader_frame_count);
 	}
 
-	if (s->ep_iDate) {
+	if (s->ep_date) {
 		time_t now_t = time(NULL);
 		struct tm *tm = localtime(&now_t);
 		if (tm) {
@@ -4116,7 +4116,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 					 (float)(tm->tm_hour * 3600 + tm->tm_min * 60 + tm->tm_sec) + dt};
 			struct vec4 v_date;
 			vec4_from_float4(&v_date, date);
-			gs_effect_set_vec4(s->ep_iDate, &v_date);
+			gs_effect_set_vec4(s->ep_date, &v_date);
 		}
 	}
 
@@ -4129,19 +4129,19 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 		}
 	}
 
-	if (s->ep_iMouse) {
+	if (s->ep_pointer) {
 		/* Mouse needs to be set (vec4: x, y, click_x, click_y) */
 		struct vec4 v_mouse;
 		vec4_set(&v_mouse, s->mouse_pos.x, s->mouse_pos.y, s->mouse_click.x, s->mouse_click.y);
-		gs_effect_set_vec4(s->ep_iMouse, &v_mouse);
+		gs_effect_set_vec4(s->ep_pointer, &v_mouse);
 	}
 
-	if (s->ep_iResolution) {
+	if (s->ep_resolution) {
 		struct vec3 res;
 		res.x = (float)width;
 		res.y = (float)height;
 		res.z = (height > 0) ? (res.x / res.y) : 1.0f; // aspect ratio (width/height)
-		gs_effect_set_vec3(s->ep_iResolution, &res);
+		gs_effect_set_vec3(s->ep_resolution, &res);
 	}
 
 	if (s->ep_screen_size) {
@@ -4153,7 +4153,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 
 	/* Channel Resolutions */
 	for (int i = 0; i < 4; i++) {
-		if (s->ep_iChannelResolution[i]) {
+		if (s->ep_input_resolution[i]) {
 			/* CRITICAL FIX: Use actual texture resolution for each channel, not output resolution */
 			gs_texture_t *tex = s->channel_textures[i];
 			if (tex) {
@@ -4161,12 +4161,12 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 				float h = (float)gs_texture_get_height(tex);
 				struct vec4 v_dims;
 				vec4_set(&v_dims, w, h, (h > 0) ? w / h : 1.0f, 0.0f);
-				gs_effect_set_vec4(s->ep_iChannelResolution[i], &v_dims);
+				gs_effect_set_vec4(s->ep_input_resolution[i], &v_dims);
 			} else {
 				/* No texture bound - use zero resolution */
 				struct vec4 v_dims;
 				vec4_set(&v_dims, 0.0f, 0.0f, 1.0f, 0.0f);
-				gs_effect_set_vec4(s->ep_iChannelResolution[i], &v_dims);
+				gs_effect_set_vec4(s->ep_input_resolution[i], &v_dims);
 			}
 		}
 	}
@@ -4222,121 +4222,121 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 		s->sight_point_count > 0;
 	const bool sight_face = sight_present && s->sight_kind == SIGHT_SNAPSHOT_FACE &&
 		s->sight_point_count >= 468;
-	if (s->ep_iSightPresent)
-		gs_effect_set_float(s->ep_iSightPresent, sight_present ? 1.f : 0.f);
-	if (s->ep_iSightKind)
-		gs_effect_set_int(s->ep_iSightKind, sight_present ? (int)s->sight_kind : 0);
-	if (s->ep_iSightPointCount)
-		gs_effect_set_int(s->ep_iSightPointCount, sight_present ? (int)s->sight_point_count : 0);
-	if (s->ep_iSightHandCount)
-		gs_effect_set_int(s->ep_iSightHandCount, sight_present ? (int)s->sight_hand_count : 0);
-	if (s->ep_iSightPinch0)
-		gs_effect_set_float(s->ep_iSightPinch0, sight_present ? s->sight_pinch[0] : 0.f);
-	if (s->ep_iSightPinch1)
-		gs_effect_set_float(s->ep_iSightPinch1, sight_present ? s->sight_pinch[1] : 0.f);
-	if (s->ep_iSightGesture0)
-		gs_effect_set_int(s->ep_iSightGesture0, sight_present ? s->sight_gesture[0] : 0);
-	if (s->ep_iSightGesture1)
-		gs_effect_set_int(s->ep_iSightGesture1, sight_present ? s->sight_gesture[1] : 0);
-	if (s->ep_iSightPoints)
-		gs_effect_set_texture(s->ep_iSightPoints,
+	if (s->ep_sight_present)
+		gs_effect_set_float(s->ep_sight_present, sight_present ? 1.f : 0.f);
+	if (s->ep_sight_kind)
+		gs_effect_set_int(s->ep_sight_kind, sight_present ? (int)s->sight_kind : 0);
+	if (s->ep_sight_point_count)
+		gs_effect_set_int(s->ep_sight_point_count, sight_present ? (int)s->sight_point_count : 0);
+	if (s->ep_sight_hand_count)
+		gs_effect_set_int(s->ep_sight_hand_count, sight_present ? (int)s->sight_hand_count : 0);
+	if (s->ep_sight_pinch0)
+		gs_effect_set_float(s->ep_sight_pinch0, sight_present ? s->sight_pinch[0] : 0.f);
+	if (s->ep_sight_pinch1)
+		gs_effect_set_float(s->ep_sight_pinch1, sight_present ? s->sight_pinch[1] : 0.f);
+	if (s->ep_sight_gesture0)
+		gs_effect_set_int(s->ep_sight_gesture0, sight_present ? s->sight_gesture[0] : 0);
+	if (s->ep_sight_gesture1)
+		gs_effect_set_int(s->ep_sight_gesture1, sight_present ? s->sight_gesture[1] : 0);
+	if (s->ep_sight_points)
+		gs_effect_set_texture(s->ep_sight_points,
 				      sight_present ? s->sight_points_tex : s->dummy_texture);
-	if (s->ep_iSightHands)
-		gs_effect_set_texture(s->ep_iSightHands,
+	if (s->ep_sight_hands)
+		gs_effect_set_texture(s->ep_sight_hands,
 				      sight_present && s->sight_hands_tex ? s->sight_hands_tex : s->dummy_texture);
-    if(s->ep_iSightTouch[0]||s->ep_iSightRipple[0]){
+    if(s->ep_sight_touch[0]||s->ep_sight_ripple[0]){
         const bool valid=sight_present && s->sight_kind==SIGHT_SNAPSHOT_HAND &&
             s->sight_touch.width==width && s->sight_touch.height==height;
         double now=(double)os_gettime_ns()/1e9;
-        for(unsigned i=0;i<2;i++)if(s->ep_iSightTouch[i]){
+        for(unsigned i=0;i<2;i++)if(s->ep_sight_touch[i]){
             struct vec4 v;
             if(valid)vec4_set(&v,s->sight_touch.fingers[i][0],s->sight_touch.fingers[i][1],
                 s->sight_touch.fingers[i][2],s->sight_touch.fingers[i][3]);
             else vec4_zero(&v);
-            gs_effect_set_vec4(s->ep_iSightTouch[i],&v);
+            gs_effect_set_vec4(s->ep_sight_touch[i],&v);
         }
-        for(unsigned i=0;i<HS_TOUCH_CAPACITY;i++)if(s->ep_iSightRipple[i]){
+        for(unsigned i=0;i<HS_TOUCH_CAPACITY;i++)if(s->ep_sight_ripple[i]){
             float wave[4]={0};struct vec4 v;
             if(valid)hs_touch_wave(&s->sight_touch,i,now,wave);
             vec4_set(&v,wave[0],wave[1],wave[2],wave[3]);
-            gs_effect_set_vec4(s->ep_iSightRipple[i],&v);
+            gs_effect_set_vec4(s->ep_sight_ripple[i],&v);
         }
     }
-	if (s->ep_iSightBlendshapes)
-		gs_effect_set_texture(s->ep_iSightBlendshapes,
+	if (s->ep_sight_blendshapes)
+		gs_effect_set_texture(s->ep_sight_blendshapes,
 				      sight_face && s->sight_blendshape_tex ? s->sight_blendshape_tex : s->dummy_texture);
-	if (s->ep_iSightHeadRows)
-		gs_effect_set_texture(s->ep_iSightHeadRows,
+	if (s->ep_sight_head_rows)
+		gs_effect_set_texture(s->ep_sight_head_rows,
 				      sight_face && s->sight_transform_tex ? s->sight_transform_tex : s->dummy_texture);
 
-	if (s->ep_iFacePresent)
-		gs_effect_set_float(s->ep_iFacePresent,
+	if (s->ep_face_present)
+		gs_effect_set_float(s->ep_face_present,
 				sight_selected ? (sight_face ? 1.f : 0.f) :
 				(s->mp_enabled && s->mp_landmarks_tex ? 1.f : 0.f));
-	if (s->ep_iSightMattePresent)
-		gs_effect_set_float(s->ep_iSightMattePresent,sight_selected && s->sight_matte_present ? 1.f : 0.f);
+	if (s->ep_sight_matte_present)
+		gs_effect_set_float(s->ep_sight_matte_present,sight_selected && s->sight_matte_present ? 1.f : 0.f);
     const bool depth=sight_selected&&s->sight_depth_present&&s->sight_depth_tex;
-    if(s->ep_iSightDepth)gs_effect_set_texture(s->ep_iSightDepth,depth?s->sight_depth_tex:s->dummy_texture);
-    if(s->ep_iSightDepthPresent)gs_effect_set_float(s->ep_iSightDepthPresent,depth?1.f:0.f);
+    if(s->ep_sight_depth)gs_effect_set_texture(s->ep_sight_depth,depth?s->sight_depth_tex:s->dummy_texture);
+    if(s->ep_sight_depth_present)gs_effect_set_float(s->ep_sight_depth_present,depth?1.f:0.f);
     const bool flow=sight_selected&&s->sight_flow_present;
-    if(s->ep_iSightFlow)gs_effect_set_texture(s->ep_iSightFlow,flow?s->sight_flow_texture:s->dummy_texture);
-    if(s->ep_iSightFlowPresent)gs_effect_set_float(s->ep_iSightFlowPresent,flow?1.f:0.f);
-    if(s->ep_iSightFlowInterval)gs_effect_set_float(s->ep_iSightFlowInterval,flow?s->sight_flow_interval:0.f);
-    if(s->ep_iSightFlowCoverage)gs_effect_set_float(s->ep_iSightFlowCoverage,flow?s->sight_flow_coverage:0.f);
-    if(s->ep_iSightFlowStep)gs_effect_set_float(s->ep_iSightFlowStep,0.f);
+    if(s->ep_sight_flow)gs_effect_set_texture(s->ep_sight_flow,flow?s->sight_flow_texture:s->dummy_texture);
+    if(s->ep_sight_flow_present)gs_effect_set_float(s->ep_sight_flow_present,flow?1.f:0.f);
+    if(s->ep_sight_flow_interval)gs_effect_set_float(s->ep_sight_flow_interval,flow?s->sight_flow_interval:0.f);
+    if(s->ep_sight_flow_coverage)gs_effect_set_float(s->ep_sight_flow_coverage,flow?s->sight_flow_coverage:0.f);
+    if(s->ep_sight_flow_step)gs_effect_set_float(s->ep_sight_flow_step,0.f);
     const bool text = sight_selected && s->sight_text_present;
-    if(s->ep_iSightTextPresent)gs_effect_set_float(s->ep_iSightTextPresent,text?1.f:0.f);
-    if(s->ep_iSightTextCount)gs_effect_set_int(s->ep_iSightTextCount,text?(int)s->sight_text_count:0);
-    if(s->ep_iSightTextMask)gs_effect_set_texture(s->ep_iSightTextMask,text?s->sight_text_mask:s->dummy_texture);
-    if(s->ep_iSightTextBounds)gs_effect_set_texture(s->ep_iSightTextBounds,text?s->sight_text_bounds:s->dummy_texture);
+    if(s->ep_sight_text_present)gs_effect_set_float(s->ep_sight_text_present,text?1.f:0.f);
+    if(s->ep_sight_text_count)gs_effect_set_int(s->ep_sight_text_count,text?(int)s->sight_text_count:0);
+    if(s->ep_sight_text_mask)gs_effect_set_texture(s->ep_sight_text_mask,text?s->sight_text_mask:s->dummy_texture);
+    if(s->ep_sight_text_bounds)gs_effect_set_texture(s->ep_sight_text_bounds,text?s->sight_text_bounds:s->dummy_texture);
     const bool motion = sight_selected && s->sight_motion_present;
-    if (s->ep_iSightMotionPresent)
-        gs_effect_set_float(s->ep_iSightMotionPresent,motion?1.f:0.f);
-    if (s->ep_iSightMotionEnergy)
-        gs_effect_set_float(s->ep_iSightMotionEnergy,motion?s->sight_motion_energy:0.f);
+    if (s->ep_sight_motion_present)
+        gs_effect_set_float(s->ep_sight_motion_present,motion?1.f:0.f);
+    if (s->ep_sight_motion_energy)
+        gs_effect_set_float(s->ep_sight_motion_energy,motion?s->sight_motion_energy:0.f);
     const bool subject = sight_selected && s->sight_matte_present && s->sight_subject_present;
-    if (s->ep_iSightSubjectPresent)
-        gs_effect_set_float(s->ep_iSightSubjectPresent, subject ? 1.f : 0.f);
-    if (s->ep_iSightSubjectBounds) {
+    if (s->ep_sight_subject_present)
+        gs_effect_set_float(s->ep_sight_subject_present, subject ? 1.f : 0.f);
+    if (s->ep_sight_subject_bounds) {
         struct vec4 bounds;
         vec4_set(&bounds, subject?s->sight_subject_bounds[0]:0.f, subject?s->sight_subject_bounds[1]:0.f,
                  subject?s->sight_subject_bounds[2]:0.f, subject?s->sight_subject_bounds[3]:0.f);
-        gs_effect_set_vec4(s->ep_iSightSubjectBounds,&bounds);
+        gs_effect_set_vec4(s->ep_sight_subject_bounds,&bounds);
     }
-    if (s->ep_iSightSubjectCenter) {
+    if (s->ep_sight_subject_center) {
         struct vec2 center;
         vec2_set(&center,subject?s->sight_subject_center[0]:0.f,subject?s->sight_subject_center[1]:0.f);
-        gs_effect_set_vec2(s->ep_iSightSubjectCenter,&center);
+        gs_effect_set_vec2(s->ep_sight_subject_center,&center);
     }
-    if (s->ep_iSightSubjectCoverage)
-        gs_effect_set_float(s->ep_iSightSubjectCoverage,subject?s->sight_subject_coverage:0.f);
+    if (s->ep_sight_subject_coverage)
+        gs_effect_set_float(s->ep_sight_subject_coverage,subject?s->sight_subject_coverage:0.f);
 	if (sight_selected) {
-		if (s->ep_iLandmarks)
-			gs_effect_set_texture(s->ep_iLandmarks,
+		if (s->ep_landmarks)
+			gs_effect_set_texture(s->ep_landmarks,
 					     sight_present ? s->sight_points_tex : s->dummy_texture);
-		if (s->ep_iFaceSurface)
-			gs_effect_set_texture(s->ep_iFaceSurface,
+		if (s->ep_face_surface)
+			gs_effect_set_texture(s->ep_face_surface,
 					     sight_face && s->sight_face_surface ?
 					     hs_face_surface_texture(s->sight_face_surface) : s->dummy_texture);
-		if (s->ep_iFaceTriangles)
-			gs_effect_set_texture(s->ep_iFaceTriangles,
+		if (s->ep_face_triangles)
+			gs_effect_set_texture(s->ep_face_triangles,
 					     sight_face && s->sight_face_surface ?
 					     hs_face_surface_triangles(s->sight_face_surface) : s->dummy_texture);
-		if (s->ep_iSegmentation)
-			gs_effect_set_texture(s->ep_iSegmentation, s->sight_matte_present ? s->sight_matte_tex : s->dummy_texture);
+		if (s->ep_segmentation)
+			gs_effect_set_texture(s->ep_segmentation, s->sight_matte_present ? s->sight_matte_tex : s->dummy_texture);
 	} else if (s->mp_enabled) {
-		if (s->ep_iSegmentation && s->mp_mask_tex)
-			gs_effect_set_texture(s->ep_iSegmentation, s->mp_mask_tex);
-		if (s->ep_iLandmarks)
-			gs_effect_set_texture(s->ep_iLandmarks, s->mp_landmarks_tex);
-		if (s->ep_iReferenceLandmarks && s->mp_ref_landmarks_tex)
-			gs_effect_set_texture(s->ep_iReferenceLandmarks, s->mp_ref_landmarks_tex);
+		if (s->ep_segmentation && s->mp_mask_tex)
+			gs_effect_set_texture(s->ep_segmentation, s->mp_mask_tex);
+		if (s->ep_landmarks)
+			gs_effect_set_texture(s->ep_landmarks, s->mp_landmarks_tex);
+		if (s->ep_reference_landmarks && s->mp_ref_landmarks_tex)
+			gs_effect_set_texture(s->ep_reference_landmarks, s->mp_ref_landmarks_tex);
 		if (s->mp_face_surface) {
-			if (s->ep_iFaceSurface)
-				gs_effect_set_texture(s->ep_iFaceSurface,
+			if (s->ep_face_surface)
+				gs_effect_set_texture(s->ep_face_surface,
 						     hs_face_surface_texture(s->mp_face_surface));
-			if (s->ep_iFaceTriangles)
-				gs_effect_set_texture(s->ep_iFaceTriangles,
+			if (s->ep_face_triangles)
+				gs_effect_set_texture(s->ep_face_triangles,
 						     hs_face_surface_triangles(s->mp_face_surface));
 		}
 	}
@@ -4364,7 +4364,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
         }
     }
 
-	/* Update iChannel Resolution and bind textures */
+	/* Update hs_input Resolution and bind textures */
 	struct vec3 channel_res[4];
 	memset(channel_res, 0, sizeof(channel_res));
 	for (int i = 0; i < 4; i++) {
@@ -4376,8 +4376,8 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 			channel_res[i].y = h;
 			channel_res[i].z = (h > 0) ? w / h : 0.0f;
 		}
-		if (s->ep_iChannel[i])
-			gs_effect_set_texture(s->ep_iChannel[i], tex ? tex : (s->channel_types[i] == 2 ? s->dummy_texture : NULL));
+		if (s->ep_input[i])
+			gs_effect_set_texture(s->ep_input[i], tex ? tex : (s->channel_types[i] == 2 ? s->dummy_texture : NULL));
 	}
 
 	/* Apply Audio Metadata Bindings with Dynamics */
@@ -4530,17 +4530,17 @@ static void graph_bind_builtins(struct hypershader_data *s, uint32_t width, uint
 	 * fallback and zero logical dimensions. */
 	for (unsigned i = 0; i < CHANNEL_COUNT; i++) {
 		gs_texture_t *tex = s->channel_textures[i];
-		if (s->ep_iChannel[i])
-			gs_effect_set_texture(s->ep_iChannel[i], tex ? tex : s->dummy_texture);
-		if (s->ep_iChannelResolution[i]) {
+		if (s->ep_input[i])
+			gs_effect_set_texture(s->ep_input[i], tex ? tex : s->dummy_texture);
+		if (s->ep_input_resolution[i]) {
 			const float w = tex ? (float)gs_texture_get_width(tex) : 0.0f;
 			const float h = tex ? (float)gs_texture_get_height(tex) : 0.0f;
 			struct vec4 dims;
 			vec4_set(&dims, w, h, h > 0.0f ? w / h : 1.0f, 0.0f);
-			gs_effect_set_vec4(s->ep_iChannelResolution[i], &dims);
+			gs_effect_set_vec4(s->ep_input_resolution[i], &dims);
 		}
-		if (s->ep_iChannelTime[i])
-			gs_effect_set_float(s->ep_iChannelTime[i], s->time_accumulator);
+		if (s->ep_input_time[i])
+			gs_effect_set_float(s->ep_input_time[i], s->time_accumulator);
 	}
 
     bind_reaction_state(s);
@@ -4560,43 +4560,43 @@ static void graph_bind_builtins(struct hypershader_data *s, uint32_t width, uint
     for(int i=0;i<HS_MUSIC_FIELDS;++i)
         if(s->ep_audio_music[i])
             gs_effect_set_float(s->ep_audio_music[i],s->render_audio_music[i]);
-	if (s->ep_iGraphFrame)
-		gs_effect_set_int(s->ep_iGraphFrame, (int)s->graph_frame);
+	if (s->ep_graph_frame)
+		gs_effect_set_int(s->ep_graph_frame, (int)s->graph_frame);
     /* Native effect loops clear parameters between techniques. Rebind
      * the same shared-flow decision for all passes in this graph render. */
-    if(s->ep_iSightFlow)gs_effect_set_texture(s->ep_iSightFlow,flow?s->sight_flow_texture:s->dummy_texture);
-    if(s->ep_iSightFlowPresent)gs_effect_set_float(s->ep_iSightFlowPresent,flow?1.f:0.f);
-    if(s->ep_iSightFlowInterval)gs_effect_set_float(s->ep_iSightFlowInterval,flow?s->sight_flow_interval:0.f);
-    if(s->ep_iSightFlowCoverage)gs_effect_set_float(s->ep_iSightFlowCoverage,flow?s->sight_flow_coverage:0.f);
-    if(s->ep_iSightFlowStep)gs_effect_set_float(s->ep_iSightFlowStep,flow_step?1.f:0.f);
+    if(s->ep_sight_flow)gs_effect_set_texture(s->ep_sight_flow,flow?s->sight_flow_texture:s->dummy_texture);
+    if(s->ep_sight_flow_present)gs_effect_set_float(s->ep_sight_flow_present,flow?1.f:0.f);
+    if(s->ep_sight_flow_interval)gs_effect_set_float(s->ep_sight_flow_interval,flow?s->sight_flow_interval:0.f);
+    if(s->ep_sight_flow_coverage)gs_effect_set_float(s->ep_sight_flow_coverage,flow?s->sight_flow_coverage:0.f);
+    if(s->ep_sight_flow_step)gs_effect_set_float(s->ep_sight_flow_step,flow_step?1.f:0.f);
     // Rebind the same source-local matte in every graph pass.  Do not
     // replace the existing native MediaPipe binding when Sight is off.
     const bool depth=sight_selected&&s->sight_depth_present&&s->sight_depth_tex;
-    if(s->ep_iSightDepth)gs_effect_set_texture(s->ep_iSightDepth,depth?s->sight_depth_tex:s->dummy_texture);
-    if(s->ep_iSightDepthPresent)gs_effect_set_float(s->ep_iSightDepthPresent,depth?1.f:0.f);
+    if(s->ep_sight_depth)gs_effect_set_texture(s->ep_sight_depth,depth?s->sight_depth_tex:s->dummy_texture);
+    if(s->ep_sight_depth_present)gs_effect_set_float(s->ep_sight_depth_present,depth?1.f:0.f);
     const bool matte=sight_selected&&s->sight_matte_present&&s->sight_matte_tex;
-    if(s->ep_iSightMattePresent)gs_effect_set_float(s->ep_iSightMattePresent,matte?1.f:0.f);
-    if(sight_selected&&s->ep_iSegmentation)
-        gs_effect_set_texture(s->ep_iSegmentation,matte?s->sight_matte_tex:s->dummy_texture);
+    if(s->ep_sight_matte_present)gs_effect_set_float(s->ep_sight_matte_present,matte?1.f:0.f);
+    if(sight_selected&&s->ep_segmentation)
+        gs_effect_set_texture(s->ep_segmentation,matte?s->sight_matte_tex:s->dummy_texture);
 
 
-	if (s->ep_iTime)
-		gs_effect_set_float(s->ep_iTime, s->time_accumulator);
-	if (s->ep_iResolution) {
+	if (s->ep_time)
+		gs_effect_set_float(s->ep_time, s->time_accumulator);
+	if (s->ep_resolution) {
 		struct vec3 resolution;
 		vec3_set(&resolution, (float)width, (float)height,
 			 height ? (float)width / (float)height : 1.0f);
-		gs_effect_set_vec3(s->ep_iResolution, &resolution);
+		gs_effect_set_vec3(s->ep_resolution, &resolution);
 	}
-	if (s->ep_iTimeDelta)
-		gs_effect_set_float(s->ep_iTimeDelta, s->last_tick_delta * s->time_scale);
-	if (s->ep_iFrame) {
+	if (s->ep_delta_time)
+		gs_effect_set_float(s->ep_delta_time, s->last_tick_delta * s->time_scale);
+	if (s->ep_frame_index) {
 		struct gs_effect_param_info info;
-		gs_effect_get_param_info(s->ep_iFrame, &info);
+		gs_effect_get_param_info(s->ep_frame_index, &info);
 		if (info.type == GS_SHADER_PARAM_INT)
-			gs_effect_set_int(s->ep_iFrame, (int)s->shader_frame_count);
+			gs_effect_set_int(s->ep_frame_index, (int)s->shader_frame_count);
 		else if (info.type == GS_SHADER_PARAM_FLOAT)
-			gs_effect_set_float(s->ep_iFrame, s->shader_frame_count);
+			gs_effect_set_float(s->ep_frame_index, s->shader_frame_count);
 	}
 }
 
@@ -4990,8 +4990,8 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 	}
 
 	gs_eparam_t *image = gs_effect_get_param_by_name(s->effect, "image");
-	gs_effect_set_texture(s->ep_iBufferAPrevious, previous_a);
-	gs_effect_set_texture(s->ep_iBufferBPrevious, previous_b);
+	gs_effect_set_texture(s->ep_buffer_a_previous, previous_a);
+	gs_effect_set_texture(s->ep_buffer_b_previous, previous_b);
 	gs_texture_t *current_a = NULL, *current_b = NULL;
 	for (unsigned pass = 0; pass < 2; pass++) {
 		gs_texrender_t *destination = s->graph_history[pass][write];
@@ -5012,10 +5012,10 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 			gs_effect_set_texture(image, input);
 		/* Effect loops may clear sampled texture state between techniques.
 		 * Every graph pass owns the complete previous-frame contract. */
-		gs_effect_set_texture(s->ep_iBufferAPrevious, previous_a);
-		gs_effect_set_texture(s->ep_iBufferBPrevious, previous_b);
-		gs_effect_set_texture(s->ep_iBufferA, pass == 0 ? previous_a : current_a);
-		gs_effect_set_texture(s->ep_iBufferB, previous_b);
+		gs_effect_set_texture(s->ep_buffer_a_previous, previous_a);
+		gs_effect_set_texture(s->ep_buffer_b_previous, previous_b);
+		gs_effect_set_texture(s->ep_buffer_a, pass == 0 ? previous_a : current_a);
+		gs_effect_set_texture(s->ep_buffer_b, previous_b);
 		graph_bind_controls(s);
 		graph_bind_builtins(s, pass_width, pass_height, flow, flow_step, flow_selected);
 		graph_bind_resolutions(s, width, height);
@@ -5044,10 +5044,10 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 
 	if (image)
 		gs_effect_set_texture(image, input);
-	gs_effect_set_texture(s->ep_iBufferA, current_a);
-	gs_effect_set_texture(s->ep_iBufferB, current_b);
-	gs_effect_set_texture(s->ep_iBufferAPrevious, previous_a);
-	gs_effect_set_texture(s->ep_iBufferBPrevious, previous_b);
+	gs_effect_set_texture(s->ep_buffer_a, current_a);
+	gs_effect_set_texture(s->ep_buffer_b, current_b);
+	gs_effect_set_texture(s->ep_buffer_a_previous, previous_a);
+	gs_effect_set_texture(s->ep_buffer_b_previous, previous_b);
 	graph_bind_controls(s);
     graph_bind_builtins(s, width, height, flow, flow_step, flow_selected);
     graph_bind_resolutions(s, width, height);
@@ -5062,7 +5062,7 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 
 	s->graph_write_idx = read;
 	s->graph_flow_sequence = flow_sequence;
-    if(s->ep_iSightFlowStep&&flow_step&&!s->graph_flow_announced) {
+    if(s->ep_sight_flow_step&&flow_step&&!s->graph_flow_announced) {
         s->graph_flow_announced=true;
         blog(LOG_INFO,"[HyperShaderFX] SIGHT_FLOW_GRAPH_STEP_20261118: consumed new motion snapshot");
     }
@@ -5189,7 +5189,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 	 * only while it draws, so we must own an intermediate input capture.
 	 * This path does not call process_filter_begin/end (or a NULL sprite).
 	 * MediaPipe-aware shaders remain on the existing non-feedback route. */
-	if (s->ep_iPreviousFrame && s->effect && s->metadata_rc &&
+	if (s->ep_history && s->effect && s->metadata_rc &&
 	    !s->metadata_rc->capabilities.mediapipe_enabled) {
 		if (s->feedback_width != width || s->feedback_height != height) {
 			for (int i=0;i<2;i++) {
@@ -5234,7 +5234,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 					gs_ortho(0,(float)width,0,(float)height,-100,100);
 					gs_eparam_t *image=gs_effect_get_param_by_name(s->effect,"image");
 					if (image)gs_effect_set_texture(image,input);
-					gs_effect_set_texture(s->ep_iPreviousFrame,previous ? previous : input);
+					gs_effect_set_texture(s->ep_history,previous ? previous : input);
 					while (gs_effect_loop(s->effect,"Draw"))
 						gs_draw_sprite(input,0,width,height);
 					gs_matrix_pop();
@@ -5524,9 +5524,9 @@ static void source_video_render(void *data, gs_effect_t *effect)
 												     : GS_RGBA;
 
 	/* Cache values we need before unlocking for render operations */
-	bool has_persistence = (s->ep_iPreviousFrame != NULL);
+	bool has_persistence = (s->ep_history != NULL);
 	gs_effect_t *current_effect = s->effect;
-	gs_eparam_t *prev_frame_param = s->ep_iPreviousFrame;
+	gs_eparam_t *prev_frame_param = s->ep_history;
 	int hist_idx = s->history_idx;
 
 	/* pthread_mutex_unlock(&s->mutex); - REMOVED */
@@ -5640,20 +5640,20 @@ static void mix_render_callback(void *data, gs_texture_t *a, gs_texture_t *b, fl
 		/* Update Uniforms */
 		update_shader_uniforms(s, width, height);
 
-		/* Set Transition Progress 'iProgress' */
-		gs_eparam_t *ep_progress = gs_effect_get_param_by_name(s->effect, "iProgress");
+		/* Set Transition Progress 'hs_transition_progress' */
+		gs_eparam_t *ep_progress = gs_effect_get_param_by_name(s->effect, "hs_transition_progress");
 		if (ep_progress)
 			gs_effect_set_float(ep_progress, t);
 
 		/* Bind Source A and B to Channels */
-		if (s->ep_iChannel[0])
-			gs_effect_set_texture(s->ep_iChannel[0], a);
-		if (s->ep_iChannel[1])
-			gs_effect_set_texture(s->ep_iChannel[1], b);
+		if (s->ep_input[0])
+			gs_effect_set_texture(s->ep_input[0], a);
+		if (s->ep_input[1])
+			gs_effect_set_texture(s->ep_input[1], b);
 
 		/* Bind sizes if available */
 		for (int i = 0; i < 2; i++) {
-			if (s->ep_iChannelResolution[i]) {
+			if (s->ep_input_resolution[i]) {
 				/* CRITICAL FIX: Use actual texture resolution, not output resolution */
 				gs_texture_t *tex = (i == 0) ? a : b;
 				if (tex) {
@@ -5661,10 +5661,10 @@ static void mix_render_callback(void *data, gs_texture_t *a, gs_texture_t *b, fl
 					float h = (float)gs_texture_get_height(tex);
 					struct vec4 v_res;
 					vec4_set(&v_res, w, h, (h > 0) ? w / h : 1.0f, 0.0f);
-					gs_effect_set_vec4(s->ep_iChannelResolution[i], &v_res);
+					gs_effect_set_vec4(s->ep_input_resolution[i], &v_res);
 				} else {
 					struct vec4 v_res = {(float)width, (float)height, 1.0f, 0.0f};
-					gs_effect_set_vec4(s->ep_iChannelResolution[i], &v_res);
+					gs_effect_set_vec4(s->ep_input_resolution[i], &v_res);
 				}
 			}
 		}

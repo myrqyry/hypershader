@@ -39,7 +39,7 @@ def run():
             print(f"{mode}: delta against native camera-only image = {change:.3f}",flush=True)
             assert change>threshold,mode+" effect has no visible response"
         source_fallback=rgb_delta(images["base"],images["fallback"])
-        print(f"unconfigured iChannel0: difference from channel input = {source_fallback:.3f}",flush=True)
+        print(f"unconfigured hs_input0: difference from channel input = {source_fallback:.3f}",flush=True)
         assert source_fallback<0.5, "unconfigured channel should fall back to OBS image"
         missing=rgb_delta(baseline,images["blank"])
         print(f"missing landmarks: bypass RGB difference {missing:.3f}",flush=True)

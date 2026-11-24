@@ -3,12 +3,12 @@
 #include "../../stdlib/hypershader_standard.glsl"
 #include "../../stdlib/postprocess_3d.glsl"
 
-void mainImage(out float4 fragColor, in float2 fragCoord)
+void hs_shade_pixel(out float4 fragColor, in float2 fragCoord)
 {
-    float2 uv = fragCoord / max(iResolution.xy, float2(1.0, 1.0));
+    float2 uv = fragCoord / max(hs_resolution.xy, float2(1.0, 1.0));
     float4 src = image.Sample(textureSampler, uv);
-    float3 combined = applyBloom(uv, max(iResolution.xy, float2(1.0, 1.0)),
+    float3 combined = applyBloom(uv, max(hs_resolution.xy, float2(1.0, 1.0)),
                                   0.75, 0.55, 0.15);
     fragColor = float4(saturate(combined), src.a);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

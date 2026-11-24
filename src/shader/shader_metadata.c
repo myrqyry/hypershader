@@ -133,7 +133,7 @@ static char *metadata_include_directive(char *line, bool *in_block_comment)
 }
 
 /* Only executable shader references should expose optional texture slots.
- * The old strstr(line, "iChannel0") counted stdlib uniform declarations,
+ * A substring-only scan counted stdlib uniform declarations,
  * comments, and GLSL metadata includes; every Shabon source then falsely
  * claimed active channels even though the shader never samples them.
  * Track block comments across lines and match full identifiers only.
@@ -184,7 +184,8 @@ static void metadata_scan_channel_use(const char *line, bool *in_block_comment,
          isspace((unsigned char)active[7])))
         return;
     for (const char *cursor = active; *cursor; cursor++) {
-        if (strncmp(cursor, "iChannel", 8) != 0 ||
+        if ((strncmp(cursor, "hs_input", 8) != 0 &&
+             strncmp(cursor, "iChannel", 8) != 0) ||
             cursor[8] < '0' || cursor[8] > '3')
             continue;
         const unsigned char preceding = (cursor == active) ? 0 : (unsigned char)cursor[-1];

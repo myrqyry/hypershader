@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
  const bool vector=(mode=="vector");
  const bool scalar=(mode=="scalar");
  const bool audit=(mode=="audit");
- if(!missing && !apply && mode!="math" && mode!="wrapper" && mode!="managed" && mode!="vector" && mode!="scalar" && mode!="macro" && mode!="bloom" && mode!="bloom_off" && mode!="audit" && mode!="sampling") return 2;
+ if(!missing && !apply && mode!="math" && mode!="wrapper" && mode!="managed" && mode!="vector" && mode!="scalar" && mode!="macro" && mode!="bloom" && mode!="bloom_off" && mode!="audit" && mode!="sampling" && mode!="compat") return 2;
  if(!obs_startup("en-US",nullptr,nullptr))return 1;
  obs_set_ui_task_handler(test_ui_task_handler);
  obs_video_info video{};

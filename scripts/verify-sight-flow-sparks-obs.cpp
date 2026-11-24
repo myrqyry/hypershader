@@ -51,11 +51,11 @@ int main(int argc,char** argv) {
         gs_blend_state_push();gs_enable_blending(false);
         auto p=[&](const char* name){return gs_effect_get_param_by_name(effect,name);};
         gs_effect_set_texture(p("image"),input);
-        gs_effect_set_texture(p("iBufferA"),input);
-        gs_effect_set_texture(p("iBufferB"),old);
+        gs_effect_set_texture(p("hs_buffer_a"),input);
+        gs_effect_set_texture(p("hs_buffer_b"),old);
         struct vec3 size;vec3_set(&size,W,H,float(W)/H);
-        gs_effect_set_vec3(p("iResolution"),&size);
-        gs_effect_set_float(p("iSightFlowInterval"),.05f);
+        gs_effect_set_vec3(p("hs_resolution"),&size);
+        gs_effect_set_float(p("hs_sight_flow_interval"),.05f);
         if(auto* a=p("music_response"))gs_effect_set_int(a,music);
         if(auto* a=p("music_amount"))gs_effect_set_float(a,amount);
         for(auto* name:{"audio_kick","audio_snare","audio_beat","audio_flux","audio_band0"})
@@ -67,21 +67,21 @@ int main(int argc,char** argv) {
         gs_effect_set_float(p("speed_threshold"),35.f);
         struct vec4 color;vec4_set(&color,1,0,0,1);
         gs_effect_set_vec4(p("spark_color"),&color);
-        gs_effect_set_texture(p("iBufferBPrevious"),old);
-        gs_effect_set_texture(p("iSightFlow"),flow);
-        if(auto* param=p("iSegmentation"))gs_effect_set_texture(param,mask);
-        if(auto* param=p("iSightMattePresent"))gs_effect_set_float(param,matte_present?1.f:0.f);
+        gs_effect_set_texture(p("hs_buffer_b_previous"),old);
+        gs_effect_set_texture(p("hs_sight_flow"),flow);
+        if(auto* param=p("hs_segmentation"))gs_effect_set_texture(param,mask);
+        if(auto* param=p("hs_sight_matte_present"))gs_effect_set_float(param,matte_present?1.f:0.f);
         if(auto* param=p("spark_region"))gs_effect_set_int(param,region);
         // Left half is near (1); right half far (0).
-        if(auto* param=p("iSightDepth"))gs_effect_set_texture(param,mask);
-        if(auto* param=p("iSightDepthPresent"))gs_effect_set_float(param,depth_present?1.f:0.f);
+        if(auto* param=p("hs_sight_depth"))gs_effect_set_texture(param,mask);
+        if(auto* param=p("hs_sight_depth_present"))gs_effect_set_float(param,depth_present?1.f:0.f);
         if(auto* param=p("depth_occlusion"))gs_effect_set_bool(param,depth_on);
         if(auto* param=p("spark_depth"))gs_effect_set_float(param,plane);
         if(auto* param=p("depth_softness"))gs_effect_set_float(param,.05f);
-        gs_effect_set_int(p("iGraphFrame"),frame);
-        gs_effect_set_float(p("iSightFlowPresent"),present?1.f:0.f);
-        gs_effect_set_float(p("iSightFlowStep"),step);
-        gs_effect_set_float(p("iTimeDelta"),dt);
+        gs_effect_set_int(p("hs_graph_frame"),frame);
+        gs_effect_set_float(p("hs_sight_flow_present"),present?1.f:0.f);
+        gs_effect_set_float(p("hs_sight_flow_step"),step);
+        gs_effect_set_float(p("hs_delta_time"),dt);
         gs_effect_set_float(p("retention"),.2f);
         gs_effect_set_float(p("tracking"),tracking);
         gs_effect_set_float(p("effect_mix"),mix);

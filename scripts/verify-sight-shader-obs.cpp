@@ -15,11 +15,11 @@ int main(int argc, char**argv)
     gs_effect_t* effect=gs_effect_create_from_file(argv[1],&errors);
     bool pass=effect &&
         gs_effect_get_technique(effect,"Draw") &&
-        gs_effect_get_param_by_name(effect,"iSightPresent") &&
-        ((gs_effect_get_param_by_name(effect,"iSightHands") &&
-          gs_effect_get_param_by_name(effect,"iSightHandCount")) ||
-         (gs_effect_get_param_by_name(effect,"iSightPoints") &&
-          gs_effect_get_param_by_name(effect,"iSightPointCount")));
+        gs_effect_get_param_by_name(effect,"hs_sight_present") &&
+        ((gs_effect_get_param_by_name(effect,"hs_sight_hands") &&
+          gs_effect_get_param_by_name(effect,"hs_sight_hand_count")) ||
+         (gs_effect_get_param_by_name(effect,"hs_sight_points") &&
+          gs_effect_get_param_by_name(effect,"hs_sight_point_count")));
     if(errors) {fprintf(stderr,"SHADER_DIAGNOSTICS=%s\n",errors);bfree(errors);}
     if(effect)gs_effect_destroy(effect);
     obs_leave_graphics();

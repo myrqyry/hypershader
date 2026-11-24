@@ -3,13 +3,13 @@
 // Original first-party HyperShaderFX artwork. Requires LLL.sight Tracking in hands mode, same source/framing.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iSightHands;
-uniform float iSightPresent;
-uniform int iSightHandCount;
-uniform float iSightPinch0;
-uniform float iSightPinch1;
+uniform texture2d hs_sight_hands;
+uniform float hs_sight_present;
+uniform int hs_sight_hand_count;
+uniform float hs_sight_pinch0;
+uniform float hs_sight_pinch1;
 uniform float audio_envelope;
-uniform float3 iResolution;
+uniform float3 hs_resolution;
 uniform float thread_width; // @min 0.6 @max 7 @step 0.2 @default 2.0 @label "Thread Width (px)" @group "Geometry"
 uniform float node_radius; // @min 2 @max 24 @step 1 @default 7 @label "Pearl Radius (px)" @group "Geometry"
 uniform float audio_sway; // @min 0 @max 2 @step 0.05 @default 0.7 @label "Audio Shimmer" @group "Motion"
@@ -28,19 +28,19 @@ float segmentDistance(float2 p,float2 a,float2 b){
 }
 float4 PSMain(VertData v):TARGET{
     float4 src=image.Sample(threadSampler,v.uv);
-    if(iSightPresent<0.5||iSightHandCount<1||opacity<=0.0||src.a<=0.0001)return src;
-    float2 size=max(iResolution.xy,float2(1,1));
+    if(hs_sight_present<0.5||hs_sight_hand_count<1||opacity<=0.0||src.a<=0.0001)return src;
+    float2 size=max(hs_resolution.xy,float2(1,1));
     float2 p=v.uv*size;
     float line=0.0,pearl=0.0;
     for(int h=0;h<2;h++){
-        if(h>=iSightHandCount)break;
-        float2 wrist=iSightHands.Load(int3(0,h,0)).xy*size;
-        float2 thumb=iSightHands.Load(int3(4,h,0)).xy*size;
-        float2 index=iSightHands.Load(int3(8,h,0)).xy*size;
-        float2 middle=iSightHands.Load(int3(12,h,0)).xy*size;
-        float2 ring=iSightHands.Load(int3(16,h,0)).xy*size;
-        float2 little=iSightHands.Load(int3(20,h,0)).xy*size;
-        float pinch=h==0?iSightPinch0:iSightPinch1;
+        if(h>=hs_sight_hand_count)break;
+        float2 wrist=hs_sight_hands.Load(int3(0,h,0)).xy*size;
+        float2 thumb=hs_sight_hands.Load(int3(4,h,0)).xy*size;
+        float2 index=hs_sight_hands.Load(int3(8,h,0)).xy*size;
+        float2 middle=hs_sight_hands.Load(int3(12,h,0)).xy*size;
+        float2 ring=hs_sight_hands.Load(int3(16,h,0)).xy*size;
+        float2 little=hs_sight_hands.Load(int3(20,h,0)).xy*size;
+        float pinch=h==0?hs_sight_pinch0:hs_sight_pinch1;
         float extra=1.0+0.45*saturate(pinch)+0.20*saturate(audio_envelope)*audio_sway;
         float w=max(0.3,thread_width)*extra;
         float d=segmentDistance(p,wrist,thumb);

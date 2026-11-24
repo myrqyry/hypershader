@@ -23,28 +23,28 @@
 uniform float4x4 ViewProj;
 uniform texture2d image;
 
-uniform float iProgress;
-uniform float iTime;
-uniform float3 iResolution;
-uniform float iScale;
-uniform float4 iMouse;
-uniform float4 iDate;
-uniform float iTimeDelta;
-uniform int iFrame;
-uniform float iFrameRate;
-uniform float iSampleRate;
+uniform float hs_transition_progress;
+uniform float hs_time;
+uniform float3 hs_resolution;
+uniform float hs_scale;
+uniform float4 hs_pointer;
+uniform float4 hs_date;
+uniform float hs_delta_time;
+uniform int hs_frame_index;
+uniform float hs_frame_rate;
+uniform float hs_sample_rate;
 
-uniform texture2d iChannel0;
-uniform texture2d iChannel1;
-uniform texture2d iChannel2;
-uniform texture2d iChannel3;
+uniform texture2d hs_input0;
+uniform texture2d hs_input1;
+uniform texture2d hs_input2;
+uniform texture2d hs_input3;
 
-uniform float4 iChannelResolution0;
-uniform float4 iChannelResolution1;
-uniform float4 iChannelResolution2;
-uniform float4 iChannelResolution3;
+uniform float4 hs_input_resolution0;
+uniform float4 hs_input_resolution1;
+uniform float4 hs_input_resolution2;
+uniform float4 hs_input_resolution3;
 
-#define iChannelResolution(i) (i==0?iChannelResolution0:i==1?iChannelResolution1:i==2?iChannelResolution2:iChannelResolution3)
+#define hs_input_resolution(i) (i==0?hs_input_resolution0:i==1?hs_input_resolution1:i==2?hs_input_resolution2:hs_input_resolution3)
 
 uniform float audio_level;
 uniform float audio_peak;
@@ -88,12 +88,12 @@ VertData VSDefault(VertData v_in) {
 }
 
 // Convenience wrapper for simple native effects that expose:
-// void mainImage(out vec4 fragColor, in vec2 fragCoord)
-#define HYPERSHADER_MAINIMAGE_WRAPPER \
+// void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
+#define HYPERSHADER_PIXEL_WRAPPER \
     float4 PSMain(VertData v_in) : TARGET { \
-        float2 fragCoord = v_in.uv * iResolution.xy; \
+        float2 fragCoord = v_in.uv * hs_resolution.xy; \
         float4 fragColor; \
-        mainImage(fragColor, fragCoord); \
+        hs_shade_pixel(fragColor, fragCoord); \
         return fragColor; \
     } \
     technique Draw { \

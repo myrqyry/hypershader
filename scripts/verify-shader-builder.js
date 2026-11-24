@@ -44,7 +44,7 @@ const { ShaderPreviewRenderer } = vm.runInContext('({ ShaderPreviewRenderer })',
   assert.match(effect, /#include "\.\.\/stdlib\/hypershader_standard\.glsl"/);
   assert.match(effect, /vertex_shader = VSDefault\(v_in\)/);
   assert.doesNotMatch(effect, /mainTransform|sampler_state textureSampler/);
-  assert.match(effect, /float4 mainImage\(VertData v_in\) : TARGET/);
+  assert.match(effect, /float4 hs_shade_pixel\(VertData v_in\) : TARGET/);
   assert.match(effect, /\/\/ @node node_1 input_color\n\s+float4 v0/,
     'Native shader sections must identify their originating node');
   assert.match(effect, /\/\/ @node node_2 output_color\n\s+finalColor/,

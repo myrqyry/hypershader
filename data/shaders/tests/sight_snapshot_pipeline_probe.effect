@@ -2,10 +2,10 @@
 // Test-only: demonstrate actual Sight RGBA32F point texture in HyperShader.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iSightPoints;
-uniform float iSightPresent;
-uniform int iSightKind;
-uniform int iSightPointCount;
+uniform texture2d hs_sight_points;
+uniform float hs_sight_present;
+uniform int hs_sight_kind;
+uniform int hs_sight_point_count;
 sampler_state sourceSampler {
     Filter = Linear;
     AddressU = Clamp;
@@ -17,9 +17,9 @@ VertData VSDefault(VertData v) {
 }
 float4 PSMain(VertData v):TARGET {
     float4 color=image.Sample(sourceSampler,v.uv);
-    if(iSightPresent<0.5 || iSightPointCount<9 ||
-       iSightKind<1 || iSightKind>3) return color;
-    float4 sample=iSightPoints.Load(int3(8,0,0));
+    if(hs_sight_present<0.5 || hs_sight_point_count<9 ||
+       hs_sight_kind<1 || hs_sight_kind>3) return color;
+    float4 sample=hs_sight_points.Load(int3(8,0,0));
     return float4(saturate(sample.x),saturate(sample.y),1.0,1.0);
 }
 technique Draw {pass{vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

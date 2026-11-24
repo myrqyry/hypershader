@@ -4,7 +4,7 @@
 // A true bloom pyramid would require multiple host-controlled render passes.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform float3 iResolution;
+uniform float3 hs_resolution;
 
 // @min 0.0 @max 3.0 @step 0.05 @default 0.85 @label "Bloom Intensity" @group "Light"
 uniform float bloom_intensity;
@@ -66,7 +66,7 @@ float3 gather13(float2 uv, float2 delta) {
 float4 PSMain(VertData v) : TARGET {
     float4 source = image.Sample(textureSampler, v.uv);
     if (bloom_intensity < 0.0001) return source;
-    float2 resolution = max(iResolution.xy, float2(1.0, 1.0));
+    float2 resolution = max(hs_resolution.xy, float2(1.0, 1.0));
     float2 pixel = max(bloom_radius, 0.5) / resolution;
     float3 near_glow = gather13(v.uv, pixel);
     float3 far_glow = gather13(v.uv, pixel * max(halo_spread, 1.0));

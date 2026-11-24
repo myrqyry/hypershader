@@ -59,7 +59,7 @@ float3 retro_maskShadow(float3 color, float2 fragCoord, float str) {
 
 // --- Scanlines ---
 // Better scanline function with width control
-// count: Number of lines (usually iResolution.y for 1:1)
+// count: Number of lines (usually hs_resolution.y for 1:1)
 // opacity: 0.0 to 1.0
 // width: 0.5 (soft) to 2.0 (sharp)
 float3 retro_scanlines(float3 color, float2 uv, float count, float opacity, float width) {

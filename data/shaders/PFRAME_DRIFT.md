@@ -10,7 +10,7 @@ the next. A simulated clean **I-frame** resets the feedback immediately.
 
 This is *not* a real H.264/H.265 parser, an encoded P-frame bitstream editor,
 or access to actual codec motion vectors. It uses HyperShader's existing
-`iPreviousFrame` output-frame feedback. That is crucial: without a working
+`hs_history` output-frame feedback. That is crucial: without a working
 previous-output texture the effect is not temporal moshing.
 
 ## Try it in OBS

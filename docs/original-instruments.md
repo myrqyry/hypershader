@@ -20,27 +20,27 @@ not screenshots of an installed live OBS scene.
 
 **Brass Register**
 
-![Brass Register GPU preview](../data/shaders/root/previews/source.brass_register-6debfcdf90fc8998.png)
+![Brass Register GPU preview](../data/shaders/root/previews/source.brass_register-49728ce30eb6b656.png)
 
 **Paper Tide**
 
-![Paper Tide GPU preview](../data/shaders/root/previews/source.paper_tide-f7583740dbad11dd.png)
+![Paper Tide GPU preview](../data/shaders/root/previews/source.paper_tide-f7e6f0aad1ba92a4.png)
 
 **Spectral Garden**
 
-![Spectral Garden libobs/OpenGL preview](../data/shaders/root/previews/source.spectral_garden-cf7d442d507f4ab5.png)
+![Spectral Garden libobs/OpenGL preview](../data/shaders/root/previews/source.spectral_garden-dad94309c6ccee3e.png)
 
 **Topographic Etching**
 
-![Topographic Etching GPU preview](../data/shaders/root/previews/filter.topographic_etch-08d662f0c54acdf7.png)
+![Topographic Etching GPU preview](../data/shaders/root/previews/filter.topographic_etch-13f00946109ffc35.png)
 
 **Contact Filaments**
 
-![Contact Filaments GPU preview](../data/shaders/root/previews/filter.contact_filaments-2d84498f690eb47b.png)
+![Contact Filaments GPU preview](../data/shaders/root/previews/filter.contact_filaments-87f35cd422c04f1d.png)
 
 **Afterimage Press**
 
-![Afterimage Press GPU preview](../data/shaders/root/previews/filter.afterimage_press-2eb1a96190462a85.png)
+![Afterimage Press GPU preview](../data/shaders/root/previews/filter.afterimage_press-f330550012982865.png)
 
 ## Setup
 
@@ -72,7 +72,7 @@ appearance. Missing current hand landmarks means exact passthrough.
 
 **Afterimage Press** — Add to video as a HyperShaderFX Filter.
 It uses the existing GPU previous-output history passed through
-`iPreviousFrame`, not a simulated time-based ghost. The
+`hs_history`, not a simulated time-based ghost. The
 current source alpha is retained. A selected audio source can change
 the plate registration with measured spectral flux.
 

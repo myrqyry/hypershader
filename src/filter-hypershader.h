@@ -15,30 +15,30 @@
  * The following uniforms are automatically bound to shaders by this plugin:
  *
  * @section Standard Uniforms
- * - `uniform vec3 iResolution;`
+ * - `uniform vec3 hs_resolution;`
  *   - Viewport resolution (in pixels): x=width, y=height, z=aspect ratio (width/height).
- * - `uniform float iTime;`
+ * - `uniform float hs_time;`
  *   - Shader playback time (in seconds).
- * - `uniform float iTimeDelta;`
+ * - `uniform float hs_delta_time;`
  *   - Render time since last frame (in seconds).
- * - `uniform int iFrame;`
+ * - `uniform int hs_frame_index;`
  *   - Frame count since playback started.
- * - `uniform float iFrameRate;`
+ * - `uniform float hs_frame_rate;`
  *   - Estimated frames per second.
- * - `uniform vec4 iMouse;`
+ * - `uniform vec4 hs_pointer;`
  *   - Mouse coordinates: xy = current, zw = click.
- * - `uniform vec4 iDate;`
+ * - `uniform vec4 hs_date;`
  *   - (Year, Month 0-11, Day, TimeInSeconds).
- * - `uniform float iSampleRate;`
+ * - `uniform float hs_sample_rate;`
  *   - Audio sample rate (e.g., 48000.0).
  *
  * @section Inputs
- * - `uniform sampler2D iChannel0..3;`
+ * - `uniform sampler2D hs_input0..3;`
  *   - Input textures (Images or OBS Sources).
- * - `uniform vec3 iChannelResolution[4];`
+ * - `uniform float4 hs_input_resolution0..3;`
  *   - Resolution of each channel texture.
- * - `uniform float iChannelTime[4];`
- *   - Time for each channel (synced to iTime).
+ * - `uniform float hs_input_time0..3;`
+ *   - Time for each channel (synced to hs_time).
  *
  * @section Audio
  * If audio analysis is enabled, the following custom metadata tags can be used in shader comments

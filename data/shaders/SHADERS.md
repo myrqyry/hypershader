@@ -5,6 +5,10 @@ For a native time-mosaic example using previous-output feedback, see
 
 This guide explains how to write custom effect files (`.effect`) for the HyperShaderFX plugin.
 
+Native runtime identifiers use the reserved `hs_` namespace.
+See [native shader vocabulary and migration](../../docs/NATIVE-SHADER-API.md)
+for the contract and the opt-in custom-effect migration tool.
+
 ## 1. Quick Start
 
 A basic shader file looks like this:
@@ -13,8 +17,8 @@ A basic shader file looks like this:
 // @min 0.0 @max 10.0 @label "Speed Control"
 uniform float speed = 1.0;
 
-uniform float iTime;
-uniform float3 iResolution;
+uniform float hs_time;
+uniform float3 hs_resolution;
 
 float4 PSMain(VertData v_in) : TARGET {
     return float4(1.0, 0.0, 0.0, 1.0); // Red
@@ -97,7 +101,7 @@ You can bind any `float` uniform to audio analysis data!
 **Example:**
 ```hlsl
 // @audio "bass" @gain 3.0 @smooth 0.8
-uniform float iBassLevel;
+uniform float audio_level;
 ```
 
 ---
@@ -108,14 +112,14 @@ The HyperShader runtime automatically provides these standard uniforms:
 
 | Type | Name | Description |
 |------|------|-------------|
-| `float` | `iTime` | Seconds since shader start |
-| `float` | `iTimeDelta` | Time since last frame |
-| `int` | `iFrame` | Frame count |
-| `float4` | `iDate` | year, month, day, seconds |
-| `float3` | `iResolution` | Viewport size (pixels) in xy |
-| `float4` | `iMouse` | xy = current pos, zw = click pos |
-| `sampler2D` | `iChannel0`..`3` | Texture inputs (set in plugin UI) |
-| `float4` | `iChannelResolution0`…`3` | Resolution of each input in xy |
+| `float` | `hs_time` | Seconds since shader start |
+| `float` | `hs_delta_time` | Time since last frame |
+| `int` | `hs_frame_index` | Frame count |
+| `float4` | `hs_date` | year, month, day, seconds |
+| `float3` | `hs_resolution` | Viewport size (pixels) in xy |
+| `float4` | `hs_pointer` | xy = current pos, zw = click pos |
+| `sampler2D` | `hs_input0`..`3` | Texture inputs (set in plugin UI) |
+| `float4` | `hs_input_resolution0`…`3` | Resolution of each input in xy |
 
 ---
 
@@ -124,13 +128,13 @@ The HyperShader runtime automatically provides these standard uniforms:
 To create trails or motion blur, read from the **previous frame**:
 
 ```hlsl
-uniform sampler2D iPreviousFrame; // Automatically provided if declared
+uniform sampler2D hs_history; // Automatically provided if declared
 ```
 
 **Example (Trails):**
 ```hlsl
 float4 current = ...;
-float4 prev = iPreviousFrame.Sample(textureSampler, uv);
+float4 prev = hs_history.Sample(textureSampler, uv);
 return lerp(current, prev, 0.9); // 90% trail
 ```
 
@@ -140,16 +144,16 @@ return lerp(current, prev, 0.9); // 90% trail
 
 Native filter effects with BufferA, BufferB and Draw techniques can
 request independent internal buffer sizes using integer default uniforms
-`iBufferADivisor` and `iBufferBDivisor` (1, 2, 4 or 8).
-Use `iBufferAFormat = 1` or `iBufferBFormat = 1` for RGBA16F state.
-The shader's `iResolution` is the active pass size; the float3
-`iBufferAResolution`, `iBufferBResolution` and `iGraphOutputResolution`
+`hs_buffer_a_divisor` and `hs_buffer_b_divisor` (1, 2, 4 or 8).
+Use `hs_buffer_a_format = 1` or `hs_buffer_b_format = 1` for RGBA16F state.
+The shader's `hs_resolution` is the active pass size; the float3
+`hs_buffer_a_resolution`, `hs_buffer_b_resolution` and `hs_graph_output_resolution`
 describe each respective resource. These are runtime bindings, not
-controls. Existing iChannel texture, resolution and time uniforms are
+controls. Existing hs_input texture, resolution and time uniforms are
 rebound in every graph pass. Missing textures report zero logical size
 and sample black. Existing OBS source slots capture already-showing
 independent sources and scenes in filter/source lanes; hidden or
-recursive inputs are unavailable. Optionally declare an integer `iGraphBudgetMiB` (1–512) to
+recursive inputs are unavailable. Optionally declare an integer `hs_graph_budget_mib` (1–512) to
 reduce the default logical graph allocation cap of 512 MiB. See the [two-buffer graph contract](../../docs/TWO-BUFFER-GRAPH.md)
 for declarations, defaults, reset behavior and verification scope.
 
@@ -183,8 +187,8 @@ relying on independent sampler states for a shared OBS texture.
 
 Pass the sampled texture's positive integral dimensions, not necessarily
 the output resolution. For the full-resolution filter image use
-`iResolution.xy`. For channels use `iChannelResolution0.xy` through
-`iChannelResolution3.xy` as appropriate. Check resource availability
+`hs_resolution.xy`. For channels use `hs_input_resolution0.xy` through
+`hs_input_resolution3.xy` as appropriate. Check resource availability
 before sampling. Macro arguments must be side-effect-free. These helpers
 use the existing linear/clamp sampler; they do not generate mipmaps,
 create new resources or implement independent hardware sampler bindings.
@@ -219,24 +223,24 @@ The native OBS/libobs shader runtime binds the following optional uniforms:
 
 | Name | Kind | Meaning |
 | --- | --- | --- |
-| \`iSightPresent\` | float | 1 when a fresh, non-empty snapshot is available; otherwise 0 |
-| \`iSightKind\` | int | 1=face, 2=body/pose, 3=hands; 0 when unavailable |
-| \`iSightPointCount\` | int | Number of primary points (face up to 478, pose 33, hand 21) |
-| \`iSightPoints\` | texture2d RGBA32F | One pixel per landmark at coordinate (index,0): x, y, z, confidence |
-| \`iSightHandCount\` | int | 0, 1, or 2 tracked hands |
-| \`iSightHands\` | texture2d RGBA32F | 21 columns × 2 rows; one set of 21 landmarks per row |
-| \`iSightPinch0\` / \`iSightPinch1\` | float | Sight's relative pinch measurement for each hand |
-| \`iSightGesture0\` / \`iSightGesture1\` | int | 0=unknown, 1=Closed_Fist, 2=Open_Palm, 3=Pointing_Up, 4=Thumb_Down, 5=Thumb_Up, 6=Victory, 7=ILoveYou |
-| \`iSightBlendshapes\` | texture2d RGBA32F | 64 columns × 1 row, face scores in R; order follows producer and should not be treated as a stable named-rig mapping |
-| \`iSightHeadRows\` | texture2d RGBA32F | 4×1 texture containing raw 16-value head transform, where provided |
+| \`hs_sight_present\` | float | 1 when a fresh, non-empty snapshot is available; otherwise 0 |
+| \`hs_sight_kind\` | int | 1=face, 2=body/pose, 3=hands; 0 when unavailable |
+| \`hs_sight_point_count\` | int | Number of primary points (face up to 478, pose 33, hand 21) |
+| \`hs_sight_points\` | texture2d RGBA32F | One pixel per landmark at coordinate (index,0): x, y, z, confidence |
+| \`hs_sight_hand_count\` | int | 0, 1, or 2 tracked hands |
+| \`hs_sight_hands\` | texture2d RGBA32F | 21 columns × 2 rows; one set of 21 landmarks per row |
+| \`hs_sight_pinch0\` / \`hs_sight_pinch1\` | float | Sight's relative pinch measurement for each hand |
+| \`hs_sight_gesture0\` / \`hs_sight_gesture1\` | int | 0=unknown, 1=Closed_Fist, 2=Open_Palm, 3=Pointing_Up, 4=Thumb_Down, 5=Thumb_Up, 6=Victory, 7=ILoveYou |
+| \`hs_sight_blendshapes\` | texture2d RGBA32F | 64 columns × 1 row, face scores in R; order follows producer and should not be treated as a stable named-rig mapping |
+| \`hs_sight_head_rows\` | texture2d RGBA32F | 4×1 texture containing raw 16-value head transform, where provided |
 
-Always gate texture sampling on \`iSightPresent\`, the corresponding
-\`iSightKind\`, and the count. Missing or expired snapshots release old
+Always gate texture sampling on \`hs_sight_present\`, the corresponding
+\`hs_sight_kind\`, and the count. Missing or expired snapshots release old
 GPU data, and absent optional inputs bind the host's dummy texture.
 
-For face shaders, \`iLandmarks\` and \`iFacePresent\` reuse the same Sight
-landmarks when this mode is selected. If the shader requests \`iFaceSurface\`
-or \`iFaceTriangles\`, the native HyperShader GPU topology uses the first 468
+For face shaders, \`hs_landmarks\` and \`hs_face_present\` reuse the same Sight
+landmarks when this mode is selected. If the shader requests \`hs_face_surface\`
+or \`hs_face_triangles\`, the native HyperShader GPU topology uses the first 468
 points from Sight's 478-point face output. Sight body and hand channels do
 not generate a face surface.
 
@@ -274,12 +278,12 @@ Sight mode on HyperShaderFX. The landmark channel is independent.
 
 | Uniform | Type | Meaning |
 | --- | --- | --- |
-| `iSegmentation` | texture2d | Shared R8 stabilized inference matte when available |
-| `iSightMattePresent` | float | Fresh compatible matte, including empty foreground |
-| `iSightSubjectPresent` | float | At least one R8 pixel >=128 in a fresh matte |
-| `iSightSubjectBounds` | float4 | minX,minY,maxX,maxY in normalized source UV, outer pixel edges |
-| `iSightSubjectCenter` | float2 | Centroid of foreground pixel centers in normalized source UV |
-| `iSightSubjectCoverage` | float | Fraction of the entire mask with R8 >=128 |
+| `hs_segmentation` | texture2d | Shared R8 stabilized inference matte when available |
+| `hs_sight_matte_present` | float | Fresh compatible matte, including empty foreground |
+| `hs_sight_subject_present` | float | At least one R8 pixel >=128 in a fresh matte |
+| `hs_sight_subject_bounds` | float4 | minX,minY,maxX,maxY in normalized source UV, outer pixel edges |
+| `hs_sight_subject_center` | float2 | Centroid of foreground pixel centers in normalized source UV |
+| `hs_sight_subject_coverage` | float | Fraction of the entire mask with R8 >=128 |
 
 The geometry is the union of thresholded foreground pixels, not individual
 person detections or a confidence estimate. Empty, stale or unavailable
@@ -306,8 +310,8 @@ builds and a foreground portrait.
 
 | Uniform | Type | Meaning |
 | --- | --- | --- |
-| `iSightMotionPresent` | float | Fresh comparable capture pair (1), otherwise 0 |
-| `iSightMotionEnergy` | float | Whole-frame normalized mean absolute luma change, 0–1 |
+| `hs_sight_motion_present` | float | Fresh comparable capture pair (1), otherwise 0 |
+| `hs_sight_motion_energy` | float | Whole-frame normalized mean absolute luma change, 0–1 |
 
 Same enabled immediate-upstream Sight Subject Cutout as the matte. Choose
 Original source in Sight and enable shared Sight mode. The motion probe
@@ -342,10 +346,10 @@ MediaPipe model.
 
 | Uniform | Type | Meaning |
 | --- | --- | --- |
-| `iSightTextPresent` | float | Fresh validated OCR snapshot (1), otherwise 0 |
-| `iSightTextCount` | int | Number of padded line rectangles, 0–512 |
-| `iSightTextMask` | texture2d | 512×512 R8 union of padded rectangles, normalized source UV |
-| `iSightTextBounds` | texture2d | 512×1 RGBA32F, each texel is normalized x0,y0,x1,y1 |
+| `hs_sight_text_present` | float | Fresh validated OCR snapshot (1), otherwise 0 |
+| `hs_sight_text_count` | int | Number of padded line rectangles, 0–512 |
+| `hs_sight_text_mask` | texture2d | 512×512 R8 union of padded rectangles, normalized source UV |
+| `hs_sight_text_bounds` | texture2d | 512×1 RGBA32F, each texel is normalized x0,y0,x1,y1 |
 
 A valid empty OCR result has presence 1, count 0, black mask and zero
 bounds. Gate on presence, then count; when unavailable the count and
@@ -395,11 +399,11 @@ not yet qualified.
 
 | Uniform | Type | Meaning |
 |---|---|---|
-| `iSightFlow` | texture2d | 32×18 RGBA32F: backward dx,dy in source UV, confidence, reserved |
-| `iSightFlowPresent` | float | Fresh validated snapshot |
-| `iSightFlowInterval` | float | Seconds between captures |
-| `iSightFlowCoverage` | float | Fraction of cells accepted by the worker |
-| `iSightFlowStep` | float | Native filter graph only: 1 on a new flow sequence after seeding, otherwise 0 |
+| `hs_sight_flow` | texture2d | 32×18 RGBA32F: backward dx,dy in source UV, confidence, reserved |
+| `hs_sight_flow_present` | float | Fresh validated snapshot |
+| `hs_sight_flow_interval` | float | Seconds between captures |
+| `hs_sight_flow_coverage` | float | Fraction of cells accepted by the worker |
+| `hs_sight_flow_step` | float | Native filter graph only: 1 on a new flow sequence after seeding, otherwise 0 |
 
 The grid is defined at current-frame cell centers. Add RG to current UV
 to address the corresponding previous capture; negate to get approximate
@@ -430,7 +434,7 @@ Loss of Sight availability, graph initialization, zero effect mix,
 or clear-history enable seeds from fresh rather than old history.
 Out-of-bounds advection samples fresh instead of clamped-edge history.
 
-`iSightFlowStep` is a graph-only capture-step gate; seed the first
+`hs_sight_flow_step` is a graph-only capture-step gate; seed the first
 observed sequence, advance on a larger sequence, and consume only on
 successful graph completion. It is constant across all techniques in
 that graph render. On absent flow the graph observes sequence zero;
@@ -512,8 +516,8 @@ masked sparks smoke rendered on a translated portrait.
 Place Sight Depth Camera (Depth Anything V2) in **Original source (share
 depth)** mode in the analysis-only source chain. Existing model and
 inference settings remain in Sight; no second depth model is started.
-`iSightDepth` is a normalized R8 texture, 0 = far / 1 = near, up to
-518px per axis. `iSightDepthPresent` is an independent freshness and
+`hs_sight_depth` is a normalized R8 texture, 0 = far / 1 = near, up to
+518px per axis. `hs_sight_depth_present` is an independent freshness and
 compatibility flag; use it before sampling. 1500ms capture TTL.
 Equal values across time do not imply equal real-world distance because
 the model normalizes each inference independently. Existing temporal

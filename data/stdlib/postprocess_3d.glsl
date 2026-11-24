@@ -305,7 +305,7 @@ float3 applyLensFlare(float3 color, float2 uv, float2 lightPos, float intensity)
         float scale = 1.0 / float(i);
         float2 ghostPos = lightPos + dir * scale;
         if (all(ghostPos >= 0.0) && all(ghostPos <= 1.0)) {
-            float ghost = texture(iChannel0, ghostPos).r; // Use scene texture for ghost shape
+            float ghost = texture(hs_input0, ghostPos).r; // Use scene texture for ghost shape
             flare += float3(0.8, 0.6, 1.0) * ghost * intensity / float(i);
         }
     }
@@ -423,7 +423,7 @@ float3 applyPostProcessing(float3 color, sampler2D colorTex, sampler2D depthTex,
 
     // Apply film grain
     if (filmGrainIntensity > 0.0) {
-        result = applyFilmGrain(result, uv, filmGrainIntensity, iTime);
+        result = applyFilmGrain(result, uv, filmGrainIntensity, hs_time);
     }
 
     // Color grading

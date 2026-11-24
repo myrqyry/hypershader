@@ -31,10 +31,10 @@ void main() {
         self.assertNotIn('#version 300 es', output)
         self.assertNotIn('precision highp', output)
         self.assertNotIn('uniform vec2 u_resolution', output)
-        self.assertIn('void mainImage(out vec4 fragColor, in vec2 fragCoord)', output)
-        self.assertIn('fragCoord / iResolution.xy', output)
-        self.assertIn('sin(iTime)', output)
-        self.assertIn('HYPERSHADER_MAINIMAGE_WRAPPER', output)
+        self.assertIn('void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)', output)
+        self.assertIn('fragCoord / hs_resolution.xy', output)
+        self.assertIn('sin(hs_time)', output)
+        self.assertIn('HYPERSHADER_PIXEL_WRAPPER', output)
 
     def test_glsl_two_argument_atan_not_rewritten_as_one_argument(self):
         source = '''void main() { float angle = atan(uv.y, uv.x); float other = atan(uv.x); out_color = vec4(angle + other); }'''

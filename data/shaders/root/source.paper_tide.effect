@@ -16,10 +16,10 @@ float tideBand(int i) {
  if(i==4)return audio_band4;if(i==5)return audio_band5;
  if(i==6)return audio_band6;return audio_band7;
 }
-void mainImage(out vec4 fragColor,in vec2 fragCoord) {
- float2 size=max(iResolution.xy,float2(1,1)),uv=fragCoord/size;
+void hs_shade_pixel(out vec4 fragColor,in vec2 fragCoord) {
+ float2 size=max(hs_resolution.xy,float2(1,1)),uv=fragCoord/size;
  float2 p=float2(uv.x*size.x/size.y,uv.y);
- float time=iTime*flow;
+ float time=hs_time*flow;
  float grain=frac(sin(dot(floor(fragCoord)+floor(audio_beat_phase*4.0),
                        float2(37.71,113.5)))*22578.18);
  float3 color=paper_color*(0.95+grain*0.07);
@@ -41,4 +41,4 @@ void mainImage(out vec4 fragColor,in vec2 fragCoord) {
  color=lerp(color,low_ink,speck*0.13);
  fragColor=float4(saturate(color),1);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

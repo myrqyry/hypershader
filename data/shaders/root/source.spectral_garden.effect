@@ -25,9 +25,9 @@ float gardenBand(int index)
     return audio_band7;
 }
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 {
-    float2 size = max(iResolution.xy, float2(1.0,1.0));
+    float2 size = max(hs_resolution.xy, float2(1.0,1.0));
     float2 uv = fragCoord / size;
     float aspect = size.x / size.y;
     float2 p = float2((uv.x-0.5)*aspect,uv.y);
@@ -46,7 +46,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
         float rootY = 0.875;
         float stemHeight = 0.26 + 0.04*sin(index*1.63) + energy*0.105;
         float flowerY = rootY-stemHeight;
-        float sway = sin(iTime*wind_speed+index*1.73)*0.042*(0.48+energy*0.52);
+        float sway = sin(hs_time*wind_speed+index*1.73)*0.042*(0.48+energy*0.52);
         float topX = rootX+sway;
         float position = saturate((p.y-flowerY)/max(stemHeight,0.01));
         float stalkX = rootX+sway*(1.0-position)*(1.0-position);
@@ -76,4 +76,4 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 
     fragColor = float4(saturate(color),1.0);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

@@ -12,16 +12,16 @@ expected = {
     'source.brass_register.effect': ('audio_band0', 'audio_band7', 'audio_kick'),
     'source.paper_tide.effect': ('audio_envelope', 'audio_band2', 'audio_beat_phase'),
     'source.spectral_garden.effect': ('audio_band0', 'audio_band7', 'audio_kick'),
-    'filter.topographic_etch.effect': ('iSightDepthPresent', 'iSightDepth', 'audio_beat'),
-    'filter.contact_filaments.effect': ('iSightHandCount', 'iSightHands', 'iSightPinch0'),
-    'filter.afterimage_press.effect': ('iPreviousFrame', 'image', 'audio_flux'),
+    'filter.topographic_etch.effect': ('hs_sight_depth_present', 'hs_sight_depth', 'audio_beat'),
+    'filter.contact_filaments.effect': ('hs_sight_hand_count', 'hs_sight_hands', 'hs_sight_pinch0'),
+    'filter.afterimage_press.effect': ('hs_history', 'image', 'audio_flux'),
 }
 for filename, uniforms in expected.items():
     file = root / 'data/shaders/root' / filename
     assert file.is_file(), f'Missing original instrument: {filename}'
     text = file.read_text()
     assert '@label ' in text and '@description ' in text, filename
-    assert 'technique Draw' in text or 'HYPERSHADER_MAINIMAGE_WRAPPER' in text
+    assert 'technique Draw' in text or 'HYPERSHADER_PIXEL_WRAPPER' in text
     for uniform in uniforms:
         assert re.search(r'\b' + re.escape(uniform) + r'\b', text), (filename, uniform)
     digest = sha256(file.read_bytes()).hexdigest()[:16]

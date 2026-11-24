@@ -1,18 +1,18 @@
 // @label "Reactive Sprite"
 // @description "Animate existing OBS video or image sources with audio. Optional channels 0-2 provide active, strong, and accent replacement images."
 uniform texture2d image;
-uniform texture2d iChannel0;
-uniform texture2d iChannel1;
-uniform texture2d iChannel2;
-uniform float4 iChannelResolution0;
-uniform float4 iChannelAtlas0;
-uniform float4 iChannelResolution1;
-uniform float4 iChannelAtlas1;
-uniform float4 iChannelResolution2;
-uniform float4 iChannelAtlas2;
+uniform texture2d hs_input0;
+uniform texture2d hs_input1;
+uniform texture2d hs_input2;
+uniform float4 hs_input_resolution0;
+uniform float4 hs_input_atlas0;
+uniform float4 hs_input_resolution1;
+uniform float4 hs_input_atlas1;
+uniform float4 hs_input_resolution2;
+uniform float4 hs_input_atlas2;
 uniform float4x4 ViewProj;
-uniform float3 iResolution;
-uniform float iTime;
+uniform float3 hs_resolution;
+uniform float hs_time;
 uniform float4 audio_reaction_state; // host-owned: three state weights + spring position
 uniform float audio_kick;
 uniform float audio_snare;
@@ -64,20 +64,20 @@ VertData VSDefault(VertData v) {
 }
 
 float2 motionUV(float2 uv,float energy,float spring) {
-    float aspect=max(iResolution.x/max(iResolution.y,1.0),0.001);
+    float aspect=max(hs_resolution.x/max(hs_resolution.y,1.0),0.001);
     float2 anchor=float2(0.5,anchor_y);
-    float breath=sin(iTime*2.1)*idle_breathe*(1.0-energy);
+    float breath=sin(hs_time*2.1)*idle_breathe*(1.0-energy);
     float impact=spring*0.65+audio_kick*energy*0.35;
     float sy=1.0+stretch*(impact-0.5*audio_snare*energy)+breath;
     float sx=1.0/max(sy,0.25);
-    float angle=tilt*0.017453293*(temporal_response ? spring-energy : energy*sin(iTime*7.0));
+    float angle=tilt*0.017453293*(temporal_response ? spring-energy : energy*sin(hs_time*7.0));
     float2 p=(uv-anchor+float2(0,bounce*impact))*float2(aspect,1);
     p=float2(cos(angle)*p.x+sin(angle)*p.y,-sin(angle)*p.x+cos(angle)*p.y);
     p/=float2(sx,max(sy,0.25));
     return p/float2(aspect,1)+anchor;
 }
 float2 fitUV(float2 uv,float2 dimensions) {
-    float ratio=(iResolution.x/max(iResolution.y,1.0))/max(dimensions.x/max(dimensions.y,1.0),0.001);
+    float ratio=(hs_resolution.x/max(hs_resolution.y,1.0))/max(dimensions.x/max(dimensions.y,1.0),0.001);
     return (uv-0.5)*float2(max(ratio,1.0),max(1.0/max(ratio,0.001),1.0))+0.5;
 }
 bool outside(float2 uv) { return uv.x<0.0 || uv.x>1.0 || uv.y<0.0 || uv.y>1.0; }
@@ -89,51 +89,51 @@ float4 read_image(float2 uv,float2 dimensions) {
 }
 float4 read_iChannel0(float2 uv,float2 dimensions) {
     if(dimensions.x<1.0 || dimensions.y<1.0) return float4(0,0,0,0);
-    float2 grid=max(float2(1,1),min(iChannelAtlas0.xy,dimensions));
+    float2 grid=max(float2(1,1),min(hs_input_atlas0.xy,dimensions));
     float2 cell=floor(dimensions/grid);
     uv=fitUV(uv,cell);
     if(outside(uv)) return float4(0,0,0,0);
-    float frame=min(iChannelAtlas0.z,grid.x*grid.y-1.0);
+    float frame=min(hs_input_atlas0.z,grid.x*grid.y-1.0);
     float row=floor(frame/grid.x);
     float2 offset=float2(frame-row*grid.x,row)*cell;
     // Sample only inside this cell, including at the fitted image edges.
     if(grid.x*grid.y>1.0)
         uv=(offset+0.5+uv*max(cell-1.0,0.0))/dimensions;
-    return iChannel0.Sample(spriteSampler,uv);
+    return hs_input0.Sample(spriteSampler,uv);
 }
 float4 read_iChannel1(float2 uv,float2 dimensions) {
     if(dimensions.x<1.0 || dimensions.y<1.0) return float4(0,0,0,0);
-    float2 grid=max(float2(1,1),min(iChannelAtlas1.xy,dimensions));
+    float2 grid=max(float2(1,1),min(hs_input_atlas1.xy,dimensions));
     float2 cell=floor(dimensions/grid);
     uv=fitUV(uv,cell);
     if(outside(uv)) return float4(0,0,0,0);
-    float frame=min(iChannelAtlas1.z,grid.x*grid.y-1.0);
+    float frame=min(hs_input_atlas1.z,grid.x*grid.y-1.0);
     float row=floor(frame/grid.x);
     float2 offset=float2(frame-row*grid.x,row)*cell;
     // Sample only inside this cell, including at the fitted image edges.
     if(grid.x*grid.y>1.0)
         uv=(offset+0.5+uv*max(cell-1.0,0.0))/dimensions;
-    return iChannel1.Sample(spriteSampler,uv);
+    return hs_input1.Sample(spriteSampler,uv);
 }
 float4 read_iChannel2(float2 uv,float2 dimensions) {
     if(dimensions.x<1.0 || dimensions.y<1.0) return float4(0,0,0,0);
-    float2 grid=max(float2(1,1),min(iChannelAtlas2.xy,dimensions));
+    float2 grid=max(float2(1,1),min(hs_input_atlas2.xy,dimensions));
     float2 cell=floor(dimensions/grid);
     uv=fitUV(uv,cell);
     if(outside(uv)) return float4(0,0,0,0);
-    float frame=min(iChannelAtlas2.z,grid.x*grid.y-1.0);
+    float frame=min(hs_input_atlas2.z,grid.x*grid.y-1.0);
     float row=floor(frame/grid.x);
     float2 offset=float2(frame-row*grid.x,row)*cell;
     // Sample only inside this cell, including at the fitted image edges.
     if(grid.x*grid.y>1.0)
         uv=(offset+0.5+uv*max(cell-1.0,0.0))/dimensions;
-    return iChannel2.Sample(spriteSampler,uv);
+    return hs_input2.Sample(spriteSampler,uv);
 }
 float4 spriteAt(float2 uv,float3 weights) {
-    float4 col=read_image(uv,iResolution.xy);
-    if(iChannelResolution0.x>0.0) col=lerp(col,read_iChannel0(uv,iChannelResolution0.xy),weights.x);
-    if(iChannelResolution1.x>0.0) col=lerp(col,read_iChannel1(uv,iChannelResolution1.xy),weights.y);
-    if(iChannelResolution2.x>0.0) col=lerp(col,read_iChannel2(uv,iChannelResolution2.xy),weights.z);
+    float4 col=read_image(uv,hs_resolution.xy);
+    if(hs_input_resolution0.x>0.0) col=lerp(col,read_iChannel0(uv,hs_input_resolution0.xy),weights.x);
+    if(hs_input_resolution1.x>0.0) col=lerp(col,read_iChannel1(uv,hs_input_resolution1.xy),weights.y);
+    if(hs_input_resolution2.x>0.0) col=lerp(col,read_iChannel2(uv,hs_input_resolution2.xy),weights.z);
     return col;
 }
 
@@ -144,7 +144,7 @@ float4 PSMain(VertData v):TARGET {
     float2 uv=motionUV(v.uv,energy,spring);
     float4 col=spriteAt(uv,weights);
     if(glow>0.0 && energy>0.0) {
-        float2 px=4.0/max(iResolution.xy,float2(1,1));
+        float2 px=4.0/max(hs_resolution.xy,float2(1,1));
         float halo=0.25*(spriteAt(uv+float2(px.x,0),weights).a+
                          spriteAt(uv-float2(px.x,0),weights).a+
                          spriteAt(uv+float2(0,px.y),weights).a+

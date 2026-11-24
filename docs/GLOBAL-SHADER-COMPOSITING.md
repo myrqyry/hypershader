@@ -6,9 +6,9 @@ the controls to every shader, or replace/rename existing shader resources.
 
 ## Controls and defaults
 
-- **Global Animation Speed** (0–10, default 1): changes iTime, iTimeDelta, and
-  virtual iFrame. Reset Timer resets both iTime and virtual iFrame.
-  It does **not** freeze physical scene frame ingestion or iGraphFrame:
+- **Global Animation Speed** (0–10, default 1): changes hs_time, hs_delta_time, and
+  virtual hs_frame_index. Reset Timer resets both hs_time and virtual hs_frame_index.
+  It does **not** freeze physical scene frame ingestion or hs_graph_frame:
   those counters must still initialize/reset stateful shader buffers. A shader
   using wall-clock time, physical feedback, or custom speed uniforms may
   exhibit activity at host speed zero.
@@ -48,7 +48,7 @@ They keep their existing saved setting names (\`speed\`, \`reset_time\`,
 Shaders may also define local speed controls; global speed multiplies their
 host time, rather than replacing their own per-shader settings.
 
-The host-owned uniforms \`iProgress\` and \`iScale\` are never user-facing
+The host-owned uniforms \`hs_transition_progress\` and \`hs_scale\` are never user-facing
 shader parameters. The transition renderer still sets progress, and the
 rendering engine still supplies scale as before.
 
@@ -108,8 +108,8 @@ with resource errors are not thereby considered usable.
 - scripts/verify-shader-manager-catalog.sh
 
 Source example: Blurred Gradient is a *working* standalone animated procedural
-source (real libobs OpenGL). An iFrame-only shader also responds to global
-speed, proving the global control does not depend on iTime.
+source (real libobs OpenGL). An hs_frame_index-only shader also responds to global
+speed, proving the global control does not depend on hs_time.
 
 ## Cautions
 

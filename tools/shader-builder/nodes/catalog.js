@@ -30,19 +30,19 @@ const NODE_CATALOG = {
                     id: 'input_time',
                     name: 'Time',
                     category: 'Input',
-                    outputs: [{ name: 'output', type: 'float', label: 'iTime' }]
+                    outputs: [{ name: 'output', type: 'float', label: 'hs_time' }]
                 },
                 {
                     id: 'input_resolution',
                     name: 'Resolution',
                     category: 'Input',
-                    outputs: [{ name: 'output', type: 'float3', label: 'iResolution' }]
+                    outputs: [{ name: 'output', type: 'float3', label: 'hs_resolution' }]
                 },
                 {
                     id: 'input_mouse',
                     name: 'Mouse',
                     category: 'Input',
-                    outputs: [{ name: 'output', type: 'float4', label: 'iMouse' }]
+                    outputs: [{ name: 'output', type: 'float4', label: 'hs_pointer' }]
                 },
                 {
                     id: 'input_texture',

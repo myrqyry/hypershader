@@ -63,7 +63,7 @@ checks = [
     ("AI authoring is absent from runtime filters", "properties_add_ai_settings(props, s)" not in runtime),
     ("dock owns AI prompt", "m_aiPrompt" in dock_source),
     ("dock owns async generation", "onGenerateAiClicked" in dock_source and "std::thread" in dock_source),
-    ("dock finalizes generated mainImage with native wrapper", "HYPERSHADER_MAINIMAGE_WRAPPER" in dock_source),
+    ("dock finalizes generated hs_shade_pixel with native wrapper", "HYPERSHADER_PIXEL_WRAPPER" in dock_source),
     ("dock uses local LLM system prompt", "LLM_SYSTEM_PROMPT" in dock_source),
 ]
 

@@ -12,12 +12,14 @@ g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-stdlib-loader.cpp" \
     -o "$work/test-stdlib" $(pkg-config --libs libobs) -Wl,-rpath,"$libdir"
 mkdir -p "$work/hyperShaderFX"
 export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
-read -r -a modes <<< "${STDLIB_TEST_MODES:-math wrapper managed vector scalar macro bloom bloom_off sampling missing apply}"
+read -r -a modes <<< "${STDLIB_TEST_MODES:-math wrapper managed vector scalar macro bloom bloom_off sampling compat missing apply}"
 for mode in "${modes[@]}"; do
     echo "TEST: stdlib $mode"
     shader="$data/shaders/tests/stdlib_${mode}_probe.effect"
     if [[ "$mode" == "missing" ]]; then
         shader="$data/shaders/tests/stdlib_missing_include_probe.effect"
+    elif [[ "$mode" == "compat" ]]; then
+        shader="$data/shaders/tests/import/shadertoy_probe.effect"
     elif [[ "$mode" == "managed" ]]; then
         shader="$data/shaders/tests/stdlib_wrapper_probe.effect"
     elif [[ "$mode" == "apply" ]]; then
@@ -41,6 +43,8 @@ for mode in "${modes[@]}"; do
         { echo "FAIL: isolated managed shader did not compile and load"; exit 1; }
       grep -q 'STDLIB_LOADER mode=managed.*PASS=1' "$work/$mode.log" ||
         { echo "FAIL: managed shader did not render correct pixels"; exit 1; }
+    elif [[ "$mode" == "compat" ]]; then
+      grep -q "Loaded shader: shaders/tests/import/shadertoy_probe.effect" "$work/$mode.log"
     elif [[ "$mode" == "apply" ]]; then
       grep -q "Loaded shader: shaders/tests/stdlib_wrapper_probe.effect" "$work/$mode.log" ||
         { echo "FAIL: updated shader never loaded"; exit 1; }

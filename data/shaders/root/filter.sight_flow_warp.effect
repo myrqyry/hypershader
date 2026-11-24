@@ -2,10 +2,10 @@
 // @description "Refract current video by the measured local direction of motion. Not frame interpolation or stabilization."
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iSightFlow;
-uniform float iSightFlowPresent;
-uniform float iSightFlowInterval;
-uniform float iSightFlowCoverage;
+uniform texture2d hs_sight_flow;
+uniform float hs_sight_flow_present;
+uniform float hs_sight_flow_interval;
+uniform float hs_sight_flow_coverage;
 uniform float warp_strength; // @label "Warp Strength" @min 0 @max 8 @step 0.05 @default 2 @group "Motion"
 uniform bool debug_flow; // @label "View Direction" @default false @group "Debug"
 sampler_state sourceSampler {Filter=Linear;AddressU=Clamp;AddressV=Clamp;};
@@ -17,12 +17,12 @@ VertData VSDefault(VertData v){
 }
 float4 PSMain(VertData v):TARGET {
     float4 original=image.Sample(sourceSampler,v.uv);
-    if(iSightFlowPresent<0.5||iSightFlowInterval<=0.0||iSightFlowCoverage<0.2)return original;
+    if(hs_sight_flow_present<0.5||hs_sight_flow_interval<=0.0||hs_sight_flow_coverage<0.2)return original;
     if(debug_flow){
-        float4 m=iSightFlow.Sample(gridPoint,v.uv);
+        float4 m=hs_sight_flow.Sample(gridPoint,v.uv);
         return float4(saturate(0.5-12.0*m.xy*m.b),m.b,1);
     }
-    float4 f=iSightFlow.Sample(gridLinear,v.uv);
+    float4 f=hs_sight_flow.Sample(gridLinear,v.uv);
     if(warp_strength<=0.0 || length(f.xy)<0.0001)return original;
     return image.Sample(sourceSampler,saturate(v.uv+f.xy*f.b*warp_strength));
 }

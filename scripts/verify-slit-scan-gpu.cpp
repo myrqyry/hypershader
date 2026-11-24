@@ -39,9 +39,9 @@ Frame record(gs_effect_t *effect, gs_texrender_t *target, gs_texture_t *incoming
 {
 	Frame out;
 	auto *ip = gs_effect_get_param_by_name(effect, "image");
-	auto *pp = gs_effect_get_param_by_name(effect, "iPreviousFrame");
-	auto *rp = gs_effect_get_param_by_name(effect, "iResolution");
-	auto *fp = gs_effect_get_param_by_name(effect, "iFrame");
+	auto *pp = gs_effect_get_param_by_name(effect, "hs_history");
+	auto *rp = gs_effect_get_param_by_name(effect, "hs_resolution");
+	auto *fp = gs_effect_get_param_by_name(effect, "hs_frame_index");
 	if (!ip || !pp || !rp || !fp)
 		return out;
 	gs_effect_set_texture(ip, incoming);

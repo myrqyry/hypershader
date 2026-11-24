@@ -17,7 +17,7 @@ native_std = (root / "data/stdlib/hypershader_standard.glsl").read_text()
 compat = (root / "data/stdlib/shadertoy_compat.glsl").read_text()
 check("native stdlib does not depend on Shadertoy compatibility", "shadertoy" not in native_std.lower())
 check("Shadertoy adapter depends on native stdlib", '#include "hypershader_standard.glsl"' in compat)
-check("legacy wrapper alias exists only in adapter", "#define SHADERTOY_MAINIMAGE_WRAPPER HYPERSHADER_MAINIMAGE_WRAPPER" in compat)
+check("legacy wrapper alias exists only in adapter", "#define SHADERTOY_MAINIMAGE_WRAPPER HYPERSHADER_PIXEL_WRAPPER" in compat)
 
 forbidden_runtime_tokens = [
     "shadertoy_data",

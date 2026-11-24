@@ -35,6 +35,11 @@ jobs:
         run: |
           cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-graph-budget.c -o "$RUNNER_TEMP/hs-graph-budget-test"
           "$RUNNER_TEMP/hs-graph-budget-test"
+      - name: Verify native shader vocabulary and migration
+        run: |
+          python3 -B scripts/test-native-shader-vocabulary.py
+          python3 -B scripts/test-migrate-shader-vocabulary.py
+          python3 -B scripts/verify-native-boundary.py
       - name: Verify shader settings contracts
         run: node --test scripts/test-verify-settings.js && node scripts/verify-settings.js
       - name: Verify Linux installer layouts

@@ -12,16 +12,16 @@ uniform float opacity;      // @min 0.0 @max 1.0 @step 0.02 @default 1.0 @label 
 uniform float grid_opacity; // @min 0.0 @max 0.5 @step 0.01 @default 0.0 @label "Scope Graticule" @group "Appearance"
 uniform float3 trace_color; // @default "0.57,0.81,0.64" @label "Phosphor Color" @group "Appearance"
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 {
-    float2 size = max(iResolution.xy, float2(1.0, 1.0));
+    float2 size = max(hs_resolution.xy, float2(1.0, 1.0));
     float2 uv = fragCoord / size;
 
     // 512 source samples cover the most recent FFT window. Row 1 is real
     // PCM encoded from [-1,+1] to [0,255]. Zoom selects a narrower interval.
     // No generated waveform or sine oscillator is used for display.
     float audioX = clamp(0.5 + (uv.x - 0.5) / max(time_zoom, 1.0), 0.002, 0.998);
-    float sampleR8 = iChannel0.Sample(textureSampler, float2(audioX, 0.75)).r;
+    float sampleR8 = hs_input0.Sample(textureSampler, float2(audioX, 0.75)).r;
     float amplitude = (sampleR8 - 0.5) * 2.0;
     float lineY = 0.5 + clamp(amplitude * trace_height * trace_gain, -0.48, 0.48);
 
@@ -42,6 +42,6 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     float3 rgb = trace_color * (a + gridA * 0.36 * (1.0 - a));
     fragColor = float4(rgb, outA);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER
 
 // @audio (native audio inputs)

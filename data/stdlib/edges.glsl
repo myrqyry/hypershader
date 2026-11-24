@@ -99,10 +99,10 @@ float3 highPass(Texture2D tex, float2 uv, float2 texelSize, float radius) {
     // Simple blur for low frequency
     float3 blur = float3(0.0);
     float count = 0.0;
-    int iRadius = int(radius);
+    int radius_px = int(radius);
     
-    for (int y = -iRadius; y <= iRadius; y++) {
-        for (int x = -iRadius; x <= iRadius; x++) {
+    for (int y = -radius_px; y <= radius_px; y++) {
+        for (int x = -radius_px; x <= radius_px; x++) {
             blur += texture(tex, uv + float2(x, y) * texelSize).rgb;
             count += 1.0;
         }

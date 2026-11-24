@@ -3,18 +3,18 @@
 // Test-only: face coverage MUST come from GPU barycentric geometry, not the old ellipse mask.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iFaceSurface;
-uniform texture2d iFaceTriangles;
-uniform float iFacePresent;
+uniform texture2d hs_face_surface;
+uniform texture2d hs_face_triangles;
+uniform float hs_face_present;
 struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
 VertData VSDefault(VertData v) {VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;}
 float4 PSMain(VertData v):TARGET {
-    if (iFacePresent < 0.5) return float4(0,0,0,1);
+    if (hs_face_present < 0.5) return float4(0,0,0,1);
     int2 pixel=int2(v.uv * 256.0);
-    float4 surface=iFaceSurface.Load(int3(pixel,0));
+    float4 surface=hs_face_surface.Load(int3(pixel,0));
     if (surface.a < 0.5) return float4(0,0,0,1);
     int tri=(int)floor(surface.r * 898.0);
-    float3 verts=iFaceTriangles.Load(int3(tri,0,0)).rgb;
+    float3 verts=hs_face_triangles.Load(int3(tri,0,0)).rgb;
     if (min(min(verts.x,verts.y),verts.z)<0 || max(max(verts.x,verts.y),verts.z)>467)
         return float4(0,0,0,1);
     return float4(0.8,0.8,0.8,1.0);

@@ -2,7 +2,7 @@
 // Independent single-pass implementation of the strip-tape mechanism.
 //
 // Each frame writes a narrow group of columns from the live OBS source while
-// retaining every other column from iPreviousFrame. The displayed frame IS the
+// retaining every other column from hs_history. The displayed frame IS the
 // tape, so the normal output-feedback path is also the tape's persistent store.
 // This works without a separate history texture, but cannot provide an
 // independently transformed/scrubbed read or clean tape/live blend. Those
@@ -13,9 +13,9 @@
 // Do not call this a general arbitrary-pixel time-displacement engine.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iPreviousFrame;
-uniform float3 iResolution;
-uniform int iFrame;
+uniform texture2d hs_history;
+uniform float3 hs_resolution;
+uniform int hs_frame_index;
 
 sampler_state textureSampler {
     Filter = Linear;
@@ -53,16 +53,16 @@ uniform float tape_fade = 0.0;
 float4 PSMain(VertData v_in) : TARGET {
     float2 uv = v_in.uv;
     float4 incoming = image.Sample(textureSampler, uv);
-    float4 recorded = iPreviousFrame.Sample(textureSampler, uv);
+    float4 recorded = hs_history.Sample(textureSampler, uv);
     if (erase_tape > 0.5)
         return float4(0.0, 0.0, 0.0, 0.0);
     if (hold_tape > 0.5)
         return recorded;
 
-    float width = max(1.0, iResolution.x);
+    float width = max(1.0, hs_resolution.x);
     float step_width = clamp(columns_per_frame, 1.0, width);
     float x = min(width - 1.0, floor(uv.x * width));
-    float head = frac(float(iFrame) * step_width / width) * width;
+    float head = frac(float(hs_frame_index) * step_width / width) * width;
 
     // In either direction, exactly step_width cyclic pixel columns are
     // overwritten. Unwritten columns are one frame older, not resampled.

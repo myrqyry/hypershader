@@ -10,10 +10,10 @@
 // preprocessor dependencies. Built-in variables are managed by HyperShaderFX.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform float3 iResolution;
-uniform float iTime;
-uniform float iTimeDelta;
-uniform int iFrame;
+uniform float3 hs_resolution;
+uniform float hs_time;
+uniform float hs_delta_time;
+uniform int hs_frame_index;
 sampler_state textureSampler {
     Filter = Linear;
     AddressU = Clamp;
@@ -31,7 +31,7 @@ VertData VSDefault(VertData v_in) {
 }
 
 
-uniform texture2d iPreviousFrame;
+uniform texture2d hs_history;
 
 // @min 0.0 @max 1.0 @step 0.01 @default 0.88 @label "P-Frame Loss" @group "Prediction"
 uniform float pframe_loss;
@@ -77,21 +77,21 @@ float2 nearest_motion(float2 block_center,float2 pixel,float radius) {
     float2 shiftX = float2(pixel.x * radius,0.0);
     float2 shiftY = float2(0.0,pixel.y * radius);
     float2 best = float2(0.0,0.0);
-    float previous_luma = luma(iPreviousFrame.Sample(textureSampler,block_center).rgb);
+    float previous_luma = luma(hs_history.Sample(textureSampler,block_center).rgb);
     float best_error = abs(luma(now)-previous_luma);
-    float candidate_luma = luma(iPreviousFrame.Sample(textureSampler,
+    float candidate_luma = luma(hs_history.Sample(textureSampler,
         saturate(block_center+shiftX)).rgb);
     float error = abs(luma(now)-candidate_luma) + .018;
     if(error<best_error){best_error=error;best=shiftX;}
-    candidate_luma=luma(iPreviousFrame.Sample(textureSampler,
+    candidate_luma=luma(hs_history.Sample(textureSampler,
         saturate(block_center-shiftX)).rgb);
     error=abs(luma(now)-candidate_luma)+.018;
     if(error<best_error){best_error=error;best=-shiftX;}
-    candidate_luma=luma(iPreviousFrame.Sample(textureSampler,
+    candidate_luma=luma(hs_history.Sample(textureSampler,
         saturate(block_center+shiftY)).rgb);
     error=abs(luma(now)-candidate_luma)+.018;
     if(error<best_error){best_error=error;best=shiftY;}
-    candidate_luma=luma(iPreviousFrame.Sample(textureSampler,
+    candidate_luma=luma(hs_history.Sample(textureSampler,
         saturate(block_center-shiftY)).rgb);
     error=abs(luma(now)-candidate_luma)+.018;
     if(error<best_error){best_error=error;best=-shiftY;}
@@ -99,16 +99,16 @@ float2 nearest_motion(float2 block_center,float2 pixel,float radius) {
     return best;
 }
 
-void mainImage(out float4 fragColor,in float2 fragCoord) {
-    float2 res=max(iResolution.xy,float2(1.0,1.0));
+void hs_shade_pixel(out float4 fragColor,in float2 fragCoord) {
+    float2 res=max(hs_resolution.xy,float2(1.0,1.0));
     float2 uv=fragCoord/res;
     float4 incoming=image.Sample(textureSampler,uv);
     // No incoming source? No fabricated content, preserve source alpha.
-    if(pframe_loss<=.0001||force_keyframe>.5||iFrame<3) {
+    if(pframe_loss<=.0001||force_keyframe>.5||hs_frame_index<3) {
         fragColor=incoming;
         return;
     }
-    float4 prior=iPreviousFrame.Sample(textureSampler,uv);
+    float4 prior=hs_history.Sample(textureSampler,uv);
     // The ping-pong buffer is initially transparent; never bootstrap from
     // undefined/empty history. OBS filters may be attached to alpha sources.
     if(prior.a<.01) {
@@ -117,8 +117,8 @@ void mainImage(out float4 fragColor,in float2 fragCoord) {
     }
     if(iframe_interval>.05) {
         float period=max(iframe_interval,.25);
-        float key_width=max(.006,min(.22,iTimeDelta*1.6/period));
-        if(frac(iTime/period)<key_width) {
+        float key_width=max(.006,min(.22,hs_delta_time*1.6/period));
+        if(frac(hs_time/period)<key_width) {
             fragColor=incoming; // Clean intra frame: full reset of error chain.
             return;
         }
@@ -127,7 +127,7 @@ void mainImage(out float4 fragColor,in float2 fragCoord) {
     // not the motion estimator, which is always driven by source pixels.
     float loss_gate=1.0;
     if(burst_period>.05) {
-        float stage=frac(iTime/max(.25,burst_period));
+        float stage=frac(hs_time/max(.25,burst_period));
         loss_gate=1.0-step(saturate(burst_duty),stage);
     }
     if(loss_gate<.5) {
@@ -147,7 +147,7 @@ void mainImage(out float4 fragColor,in float2 fragCoord) {
     float2 motion=nearest_motion(center,1.0/res,
                                  min(cell_size*.55,16.0)) * vector_carry;
     float2 old_uv=saturate(uv+motion);
-    float4 predicted=iPreviousFrame.Sample(textureSampler,old_uv);
+    float4 predicted=hs_history.Sample(textureSampler,old_uv);
 
     // Motion prediction on damaged reference data propagates the visual
     // error forward every frame. No other frame history buffer is needed.
@@ -169,7 +169,7 @@ void mainImage(out float4 fragColor,in float2 fragCoord) {
 }
 float4 PSMain(VertData v_in) : TARGET {
     float4 color;
-    mainImage(color,v_in.uv*iResolution.xy);
+    hs_shade_pixel(color,v_in.uv*hs_resolution.xy);
     return color;
 }
 technique Draw {

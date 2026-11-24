@@ -523,7 +523,7 @@ void ShaderBuilderDock::setupUI()
 	m_codeEditor->setTabStopDistance(4 * m_codeEditor->fontMetrics().horizontalAdvance(' '));
 	m_codeEditor->setLineWrapMode(QPlainTextEdit::NoWrap);
 	m_codeEditor->setPlaceholderText("// Write or paste shader code here.\n"
-					 "// Entry point: float4 mainImage(VertData v_in) : TARGET\n"
+					 "// Entry point: float4 hs_shade_pixel(VertData v_in) : TARGET\n"
 					 "// Use Open File to load an existing shader, Save As to export.");
 	builderLayout->addWidget(m_codeEditor);
 	connect(m_codeEditor, &QPlainTextEdit::textChanged, this, [this]() {
@@ -1360,8 +1360,8 @@ QString ShaderBuilderDock::finalizeGeneratedShader(const QString &generatedCode)
 
 	const QString declarations = stripShaderComments(code);
 	const bool hasTechnique = QRegularExpression("\\btechnique\\s+").match(declarations).hasMatch();
-	const bool hasMainImage = QRegularExpression("\\bmainImage\\s*\\(").match(declarations).hasMatch();
-	const bool hasNativeWrapper = declarations.contains("HYPERSHADER_MAINIMAGE_WRAPPER");
+	const bool hasNativePixel = QRegularExpression("\\bhs_shade_pixel\\s*\\(").match(declarations).hasMatch();
+	const bool hasNativeWrapper = declarations.contains("HYPERSHADER_PIXEL_WRAPPER");
 	const bool hasNativeStandard = declarations.contains("hypershader_standard.glsl");
 
 	QString effect;
@@ -1375,15 +1375,15 @@ QString ShaderBuilderDock::finalizeGeneratedShader(const QString &generatedCode)
 		return effect;
 	}
 
-	// Simple mainImage effects use HyperShader's native standard layer.
-	if ((hasMainImage || hasNativeWrapper) && !hasNativeStandard)
+	// Simple hs_shade_pixel effects use HyperShader's native standard layer.
+	if ((hasNativePixel || hasNativeWrapper) && !hasNativeStandard)
 		effect += "#include \"hypershader_standard.glsl\"\n\n";
 
 	effect += code;
 	effect += "\n";
 
-	if (hasMainImage && !hasNativeWrapper)
-		effect += "\nHYPERSHADER_MAINIMAGE_WRAPPER\n";
+	if (hasNativePixel && !hasNativeWrapper)
+		effect += "\nHYPERSHADER_PIXEL_WRAPPER\n";
 
 	return effect;
 }

@@ -36,7 +36,7 @@ Frame draw(gs_effect_t* effect,gs_texture_t* input,float intensity,float thresho
   gs_ortho(0,float(W),0,float(H),-100,100);
   gs_effect_set_texture(gs_effect_get_param_by_name(effect,"image"),input);
   vec3 resolution{};vec3_set(&resolution,float(W),float(H),float(W)/H);
-  gs_effect_set_vec3(gs_effect_get_param_by_name(effect,"iResolution"),&resolution);
+  gs_effect_set_vec3(gs_effect_get_param_by_name(effect,"hs_resolution"),&resolution);
   fparam(effect,"foil_strength",intensity);
   fparam(effect,"foil_light_x",threshold);
   fparam(effect,"foil_light_y",0.75f);
@@ -46,7 +46,7 @@ Frame draw(gs_effect_t* effect,gs_texture_t* input,float intensity,float thresho
   fparam(effect,"foil_saturation",0.7f);
   fparam(effect,"foil_specular",0.65f);
   fparam(effect,"foil_speed",0.4f);
-  fparam(effect,"iTime",timeSeconds);
+  fparam(effect,"hs_time",timeSeconds);
   while(gs_effect_loop(effect,"Draw"))gs_draw_sprite(input,0,W,H);
   gs_matrix_pop();gs_projection_pop();gs_texrender_end(target);
   auto* tex=gs_texrender_get_texture(target);

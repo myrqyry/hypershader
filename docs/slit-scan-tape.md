@@ -30,7 +30,7 @@ video tape without an external texture feed.
 
 ## Rendering contract
 
-The effect uses `iPreviousFrame` as the actual **previous output** through
+The effect uses `hs_history` as the actual **previous output** through
 HyperShaderFX's current ping-pong render history. Only the new strip samples
 the *current* `image`; remaining pixels are read from the previous output at
 a shifted coordinate. There is no CPU framebuffer readback or external state.

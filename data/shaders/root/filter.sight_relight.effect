@@ -3,11 +3,11 @@
 // Reconstructs an approximate visible height field; not metric geometry or intrinsic albedo.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iSightDepth;
-uniform float iSightDepthPresent;
-uniform texture2d iSegmentation;
-uniform float iSightMattePresent;
-uniform float3 iResolution;
+uniform texture2d hs_sight_depth;
+uniform float hs_sight_depth_present;
+uniform texture2d hs_segmentation;
+uniform float hs_sight_matte_present;
+uniform float3 hs_resolution;
 
 uniform int light_mode; // @label "Key Light Type" @list "Directional,Point" @default 1 @group "Key Light"
 uniform float light_x; // @label "Light X" @min -1 @max 2 @step 0.01 @default 0.18 @group "Key Light"
@@ -42,7 +42,7 @@ uniform int debug_view; // @label "Preview" @list "Relit image,Surface normals,D
 sampler_state linearClamp { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
 struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
 VertData VSDefault(VertData v) { VertData o; o.pos=mul(float4(v.pos.xyz,1),ViewProj); o.uv=v.uv; return o; }
-float depthAt(float2 uv) { return saturate(iSightDepth.Sample(linearClamp,uv).r); }
+float depthAt(float2 uv) { return saturate(hs_sight_depth.Sample(linearClamp,uv).r); }
 
 // Reject samples on the far side of depth discontinuities. Use one-sided
 // estimates at silhouettes and borders instead of treating them as steep walls.
@@ -119,15 +119,15 @@ float ambientVisibility(float2 uv,float d,float2 res,float3 N) {
 float4 PSMain(VertData v):TARGET {
     float2 uv=v.uv;
     float4 src=image.Sample(linearClamp,uv);
-    if(iSightDepthPresent<0.5||effect_mix<=0.0||src.a<=0.0001||
-        (region!=0&&iSightMattePresent<0.5))return src;
-    float2 res=max(iResolution.xy,float2(1,1));
+    if(hs_sight_depth_present<0.5||effect_mix<=0.0||src.a<=0.0001||
+        (region!=0&&hs_sight_matte_present<0.5))return src;
+    float2 res=max(hs_resolution.xy,float2(1,1));
     float aspect=res.x/res.y;
     float d=depthAt(uv);
     float3 N=surfaceNormal(uv,d,res);
     float band=1.0-smoothstep(max(depth_width,0.05)*0.65,max(depth_width,0.05),abs(d-depth_center));
     if(region!=0) {
-        float subject=smoothstep(0.08,0.92,iSegmentation.Sample(linearClamp,uv).r);
+        float subject=smoothstep(0.08,0.92,hs_segmentation.Sample(linearClamp,uv).r);
         band*=region==1?subject:1.0-subject;
     }
     if(debug_view==1)return float4((N*0.5+0.5)*src.a,src.a);

@@ -245,11 +245,11 @@ void spawnParticle(inout ParticleSystem3D system, int type) {
     for (int i = 0; i < system.max_particles; i++) {
         if (!system.particles[i].active) {
             // Random velocity variation
-            float3 vel_variation = (noise3D(float3(i, iTime, 0)) - 0.5) * 2.0 * system.spawn_velocity_variation;
+            float3 vel_variation = (noise3D(float3(i, hs_time, 0)) - 0.5) * 2.0 * system.spawn_velocity_variation;
             float3 velocity = system.spawn_velocity + vel_variation;
 
             // Random position variation
-            float3 pos_variation = (noise3D(float3(i, iTime, 1)) - 0.5) * 2.0 * 0.1;
+            float3 pos_variation = (noise3D(float3(i, hs_time, 1)) - 0.5) * 2.0 * 0.1;
             float3 position = system.spawn_position + pos_variation;
 
             initParticle(system.particles[i], position, velocity,
@@ -281,7 +281,7 @@ void updateParticleSystem(inout ParticleSystem3D system, float delta_time) {
             applyWind(system.particles[i], system.wind_force);
 
             // Apply turbulence
-            applyTurbulence(system.particles[i], 2.0, 0.1, iTime);
+            applyTurbulence(system.particles[i], 2.0, 0.1, hs_time);
 
             // Update physics
             updateParticle(system.particles[i], delta_time);

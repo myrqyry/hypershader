@@ -2,7 +2,7 @@
 #include <cassert>
 #include <iostream>
 int main() {
-    const QString code = QStringLiteral("float4 mainImage(VertData v_in) : TARGET { return float4(1,0,0,1); }");
+    const QString code = QStringLiteral("float4 hs_shade_pixel(VertData v_in) : TARGET { return float4(1,0,0,1); }");
     const QString error = QStringLiteral("file.effect (8, 3): unexpected token");
     const QString prompt = makeShaderRepairPrompt(code, error);
     assert(prompt.contains(code));

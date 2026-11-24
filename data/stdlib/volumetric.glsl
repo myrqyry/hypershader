@@ -153,12 +153,12 @@ float3 volumetricRaymarch(float3 rayOrigin, float3 rayDir, float maxDist,
         float3 pos = rayOrigin + rayDir * t;
 
         // Sample density (implement your density function here)
-        float density = cloudDensity(pos, iTime);
+        float density = cloudDensity(pos, hs_time);
 
         if (density > 0.001) {
             // Light scattering
             float3 lightPos = pos + lightDir * 0.1; // Offset for shadow sampling
-            float lightDensity = cloudDensity(lightPos, iTime);
+            float lightDensity = cloudDensity(lightPos, hs_time);
             float lightTransmittance = beerLambert(lightDensity, absorption);
 
             float3 scatteredLight = lightColor * lightTransmittance * scattering;
@@ -195,7 +195,7 @@ float3 volumetricRaymarchMulti(float3 rayOrigin, float3 rayDir, float maxDist,
     for (int i = 0; i < steps; i++) {
         float3 pos = rayOrigin + rayDir * t;
 
-        float density = cloudDensity(pos, iTime);
+        float density = cloudDensity(pos, hs_time);
 
         if (density > 0.001) {
             // Multiple scattering
@@ -259,7 +259,7 @@ float volumetricShadow(float3 pos, float3 lightDir, float maxDist, float stepSiz
 
     for (int i = 0; i < steps; i++) {
         float3 samplePos = pos + lightDir * t;
-        float density = cloudDensity(samplePos, iTime);
+        float density = cloudDensity(samplePos, hs_time);
         shadow *= beerLambert(density, 1.0);
         t += stepSize;
 

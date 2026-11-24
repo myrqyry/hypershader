@@ -3,14 +3,14 @@
 //
 // HOW TO USE THIS DEMO:
 // 1. Add the compat include if needed.
-// 2. Keep the final wrapper as HYPERSHADER_MAINIMAGE_WRAPPER.
+// 2. Keep the final wrapper as HYPERSHADER_PIXEL_WRAPPER.
 
 #include "../../stdlib/shaderfilter_compat.glsl"
 
 // This shader uses obs-shaderfilter-style variable names
 // which are automatically mapped by the compat layer
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord)
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 {
     float time = elapsed_time;
     vec2 resolution = uv_size;
@@ -35,4 +35,4 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     fragColor = vec4(col, 1.0);
 }
 
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

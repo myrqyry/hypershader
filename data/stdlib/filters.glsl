@@ -47,7 +47,7 @@ float3 applyFilmGrain(float3 color, float2 uv, float time, float strength) {
 // --- Scanlines ---
 // count ~ 50.0 - 200.0, opacity ~ 0.5
 float3 applyScanlines(float3 color, float2 uv, float count, float opacity) {
-    float s = sin(uv.y * count * 6.28 + iTime * 10.0);
+    float s = sin(uv.y * count * 6.28 + hs_time * 10.0);
     float line = (s * 0.5 + 0.5);
     return color * (1.0 - line * opacity);
 }
@@ -56,7 +56,7 @@ float3 applyScanlines(float3 color, float2 uv, float count, float opacity) {
 // pixels = number of horizontal pixels (e.g. 320.0)
 float2 uvPixelate(float2 uv, float pixels) {
     float dx = 1.0 / pixels;
-    float dy = dx * (iResolution.y / iResolution.x); // preserve aspect
+    float dy = dx * (hs_resolution.y / hs_resolution.x); // preserve aspect
     return float2(floor(uv.x / dx) * dx, floor(uv.y / dy) * dy);
 }
 

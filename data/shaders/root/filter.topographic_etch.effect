@@ -3,9 +3,9 @@
 // Original first-party HyperShaderFX artwork. Requires a separate LLL.sight Depth Camera producer.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iSightDepth;
-uniform float iSightDepthPresent;
-uniform float3 iResolution;
+uniform texture2d hs_sight_depth;
+uniform float hs_sight_depth_present;
+uniform float3 hs_resolution;
 uniform float audio_beat;
 uniform float audio_envelope;
 uniform float contour_count; // @min 5 @max 90 @step 1 @default 30 @label "Contour Lines" @group "Terrain"
@@ -20,13 +20,13 @@ struct VertData {float4 pos:POSITION;float2 uv:TEXCOORD0;};
 VertData VSDefault(VertData v){
     VertData o;o.pos=mul(float4(v.pos.xyz,1),ViewProj);o.uv=v.uv;return o;
 }
-float depthRead(float2 uv){return saturate(iSightDepth.Sample(inkSampler,uv).r);}
+float depthRead(float2 uv){return saturate(hs_sight_depth.Sample(inkSampler,uv).r);}
 float4 PSMain(VertData v):TARGET{
     float2 uv=v.uv;
     float4 src=image.Sample(inkSampler,uv);
-    if(iSightDepthPresent<0.5||effect_mix<=0.0||src.a<=0.0001)return src;
+    if(hs_sight_depth_present<0.5||effect_mix<=0.0||src.a<=0.0001)return src;
     float d=depthRead(uv);
-    float2 px=1.0/max(iResolution.xy,float2(1.0,1.0));
+    float2 px=1.0/max(hs_resolution.xy,float2(1.0,1.0));
     float dx=abs(depthRead(uv+float2(px.x,0))-depthRead(uv-float2(px.x,0)));
     float dy=abs(depthRead(uv+float2(0,px.y))-depthRead(uv-float2(0,px.y)));
     float crease=saturate(length(float2(dx,dy))*edge_weight*5.0);

@@ -1,5 +1,5 @@
 // This comment mentions #include "../../stdlib/does_not_exist.glsl" and must remain commentary.
-// The text HYPERSHADER_MAINIMAGE_WRAPPER is prose, not a macro directive.
+// The text HYPERSHADER_PIXEL_WRAPPER is prose, not a macro directive.
 /* Multiline commentary:
    #include "../../stdlib/another_missing_module.glsl"
 */

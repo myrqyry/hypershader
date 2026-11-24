@@ -1,11 +1,11 @@
-// The literal HYPERSHADER_MAINIMAGE_WRAPPER in a comment must stay commentary.
+// The literal HYPERSHADER_PIXEL_WRAPPER in a comment must stay commentary.
 /* And neither may a standalone-looking token within a block comment:
-   HYPERSHADER_MAINIMAGE_WRAPPER
+   HYPERSHADER_PIXEL_WRAPPER
 */
 #include "../../stdlib/hypershader_standard.glsl"
-void mainImage(out float4 fragColor, in float2 fragCoord) {
-    float2 uv = fragCoord / iResolution.xy;
+void hs_shade_pixel(out float4 fragColor, in float2 fragCoord) {
+    float2 uv = fragCoord / hs_resolution.xy;
     float4 src = image.Sample(textureSampler, uv);
     fragColor = float4(src.rgb * .75, src.a);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

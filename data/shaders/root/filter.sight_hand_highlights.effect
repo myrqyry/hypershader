@@ -3,11 +3,11 @@
 // HyperShaderFX: enable "Use Sight Tracking" and set channel to hand.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iSightHands;
-uniform float iSightPresent;
-uniform int iSightHandCount;
-uniform float iSightPinch0;
-uniform float iSightPinch1;
+uniform texture2d hs_sight_hands;
+uniform float hs_sight_present;
+uniform int hs_sight_hand_count;
+uniform float hs_sight_pinch0;
+uniform float hs_sight_pinch1;
 uniform float radius; // @label "Marker Radius" @group "Sight Hands" @min 0.003 @max 0.08 @step 0.001 @default 0.022
 uniform float opacity; // @label "Marker Opacity" @group "Sight Hands" @min 0 @max 1 @step 0.01 @default 0.9
 uniform float4 markerColor; // @label "Marker Color" @group "Sight Hands" @default "0.96,0.65,0.22,1.0"
@@ -32,21 +32,21 @@ float sightMarker(float2 uv, float2 point, float r) {
 }
 float4 PSMain(VertData v) : TARGET {
     float4 original = image.Sample(textureSampler, v.uv);
-    if (iSightPresent < 0.5 || iSightHandCount < 1)
+    if (hs_sight_present < 0.5 || hs_sight_hand_count < 1)
         return original;
 
-    float2 thumb0 = iSightHands.Load(int3(4,0,0)).xy;
-    float2 index0 = iSightHands.Load(int3(8,0,0)).xy;
+    float2 thumb0 = hs_sight_hands.Load(int3(4,0,0)).xy;
+    float2 index0 = hs_sight_hands.Load(int3(8,0,0)).xy;
     float amount = max(sightMarker(v.uv,thumb0,radius),
                        sightMarker(v.uv,index0,radius));
-    if (iSightHandCount >= 2) {
-        float2 thumb1 = iSightHands.Load(int3(4,1,0)).xy;
-        float2 index1 = iSightHands.Load(int3(8,1,0)).xy;
+    if (hs_sight_hand_count >= 2) {
+        float2 thumb1 = hs_sight_hands.Load(int3(4,1,0)).xy;
+        float2 index1 = hs_sight_hands.Load(int3(8,1,0)).xy;
         amount = max(amount,sightMarker(v.uv,thumb1,radius));
         amount = max(amount,sightMarker(v.uv,index1,radius));
     }
     // Pinch increases brightness without implying calibrated gesture distance.
-    float pinch = max(iSightPinch0, iSightPinch1);
+    float pinch = max(hs_sight_pinch0, hs_sight_pinch1);
     float strength = saturate(opacity) * amount;
     return float4(lerp(original.rgb,markerColor.rgb*(1.0+pinch*0.3),strength),
                   original.a);

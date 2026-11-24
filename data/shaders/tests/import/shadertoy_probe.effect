@@ -1,0 +1,8 @@
+// External-format compatibility fixture, not native authoring.
+#include "../../../stdlib/shadertoy_compat.glsl"
+void mainImage(out float4 fragColor, in float2 fragCoord) {
+    float2 uv = fragCoord / iResolution.xy;
+    float4 src = image.Sample(textureSampler, uv);
+    fragColor = float4(src.rgb * .75, src.a);
+}
+SHADERTOY_MAINIMAGE_WRAPPER

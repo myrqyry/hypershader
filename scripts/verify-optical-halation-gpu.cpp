@@ -35,7 +35,7 @@ Frame draw(gs_effect_t* effect,gs_texture_t* input,float intensity,float thresho
   gs_ortho(0,float(W),0,float(H),-100,100);
   gs_effect_set_texture(gs_effect_get_param_by_name(effect,"image"),input);
   vec3 resolution{};vec3_set(&resolution,float(W),float(H),float(W)/H);
-  gs_effect_set_vec3(gs_effect_get_param_by_name(effect,"iResolution"),&resolution);
+  gs_effect_set_vec3(gs_effect_get_param_by_name(effect,"hs_resolution"),&resolution);
   fparam(effect,"bloom_intensity",intensity);
   fparam(effect,"bloom_threshold",threshold);
   fparam(effect,"bloom_knee",.18f);

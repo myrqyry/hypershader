@@ -1,12 +1,12 @@
 // @label "Afterimage Press"
 // @description "Video is repeatedly impressed into a slowly fading two-ink plate using the actual prior rendered output. Spectral flux loosens registration."
-// Original first-party HyperShaderFX artwork. Requires iPreviousFrame history, owned by HyperShaderFX.
+// Original first-party HyperShaderFX artwork. Requires hs_history history, owned by HyperShaderFX.
 // Source alpha is preserved; disable the filter to release its history.
 uniform float4x4 ViewProj;
 uniform texture2d image;
-uniform texture2d iPreviousFrame;
-uniform float3 iResolution;
-uniform float iTime;
+uniform texture2d hs_history;
+uniform float3 hs_resolution;
+uniform float hs_time;
 uniform float audio_flux;
 uniform float history; // @min 0 @max 0.995 @step 0.005 @default 0.87 @label "Ink Memory" @group "Feedback"
 uniform float offset_px; // @min 0 @max 20 @step 0.5 @default 4 @label "Plate Misregistration (px)" @group "Printing"
@@ -25,15 +25,15 @@ float4 PSMain(VertData v):TARGET{
     float2 uv=v.uv;
     float4 src=image.Sample(pressSampler,uv);
     if(effect_mix<=0.0||src.a<=0.0001)return src;
-    float2 pixel=1.0/max(iResolution.xy,float2(1,1));
+    float2 pixel=1.0/max(hs_resolution.xy,float2(1,1));
     float drift=offset_px*(1.0+saturate(audio_flux)*audio_response);
     float2 registration=float2(drift,drift*0.39)*pixel;
-    float4 prev=iPreviousFrame.Sample(pressSampler,saturate(uv+registration));
+    float4 prev=hs_history.Sample(pressSampler,saturate(uv+registration));
     float fade=saturate(history);
     float freshL=luminance(src.rgb);
     float oldL=luminance(prev.rgb);
-    float shift=sin(iTime*0.19+uv.y*17.0)*grain*0.15;
-    float field=frac(sin(dot(floor(uv*iResolution.xy),float2(91.7,37.9)))*43758.5);
+    float shift=sin(hs_time*0.19+uv.y*17.0)*grain*0.15;
+    float field=frac(sin(dot(floor(uv*hs_resolution.xy),float2(91.7,37.9)))*43758.5);
     float paper=0.87+(field-0.5)*grain*0.18;
     float3 cream=float3(0.93,0.87,0.76)*paper;
     float3 currentInk=lerp(cream,cool_ink,saturate(1.1-freshL)*0.86);

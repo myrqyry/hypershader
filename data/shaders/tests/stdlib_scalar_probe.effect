@@ -2,7 +2,7 @@
 #include "../../stdlib/hypershader_standard.glsl"
 // @default 0.75 @label "Test Gain"
 uniform float gain;
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord) {
     fragColor = vec4(gain, gain, gain, 1.0);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

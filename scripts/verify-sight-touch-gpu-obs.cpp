@@ -46,14 +46,14 @@ Frame render(gs_effect_t* effect,gs_texture_t* source,gs_texrender_t* render_tar
     scalar(effect,"touch_waves",2.5f);
     scalar(effect,"touch_speed",1.2f);
     scalar(effect,"touch_pinch_boost",0.f);
-    scalar(effect,"iTime",.5f);
+    scalar(effect,"hs_time",.5f);
     vec3 res{};vec3_set(&res,float(Width),float(Height),float(Width)/Height);
-    gs_effect_set_vec3(gs_effect_get_param_by_name(effect,"iResolution"),&res);
-    vec(effect,"iSightTouch0",.5f,.5f,0.f,0.f);
-    vec(effect,"iSightTouch1",.5f,.5f,0.f,0.f);
+    gs_effect_set_vec3(gs_effect_get_param_by_name(effect,"hs_resolution"),&res);
+    vec(effect,"hs_sight_touch0",.5f,.5f,0.f,0.f);
+    vec(effect,"hs_sight_touch1",.5f,.5f,0.f,0.f);
     for(int i=0;i<8;++i) {
         char key[32];
-        std::snprintf(key,sizeof(key),"iSightRipple%d",i);
+        std::snprintf(key,sizeof(key),"hs_sight_ripple%d",i);
         vec(effect,key,.5f,.5f,age,i==0?intensity:0.f);
     }
     while(gs_effect_loop(effect,"Draw"))

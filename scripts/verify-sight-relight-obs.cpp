@@ -36,11 +36,11 @@ int main(int argc,char** argv){
         auto p=[&](const char* name){return gs_effect_get_param_by_name(e,name);};
         auto f=[&](const char* name,float v){if(auto* a=p(name))gs_effect_set_float(a,v);};
         gs_effect_set_texture(p("image"),input);
-        if(auto* a=p("iSightDepth"))gs_effect_set_texture(a,map);
-        if(auto* a=p("iSegmentation"))gs_effect_set_texture(a,mask);
+        if(auto* a=p("hs_sight_depth"))gs_effect_set_texture(a,map);
+        if(auto* a=p("hs_segmentation"))gs_effect_set_texture(a,mask);
         struct vec3 size;vec3_set(&size,W,H,float(W)/H);
-        if(auto* a=p("iResolution"))gs_effect_set_vec3(a,&size);
-        f("iSightDepthPresent",present);f("iSightMattePresent",matte_present);
+        if(auto* a=p("hs_resolution"))gs_effect_set_vec3(a,&size);
+        f("hs_sight_depth_present",present);f("hs_sight_matte_present",matte_present);
         auto i=[&](const char* name,int v){if(auto* a=p(name))gs_effect_set_int(a,v);};
         auto rgb=[&](const char* name,float r,float g,float b){if(auto* a=p(name)){struct vec3 c;vec3_set(&c,r,g,b);gs_effect_set_vec3(a,&c);}};
         i("light_mode",mode);f("light_x",x);f("light_y",.5f);f("light_height",height);

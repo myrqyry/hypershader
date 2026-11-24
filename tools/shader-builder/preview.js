@@ -142,9 +142,9 @@ class ShaderPreviewRenderer {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
         gl.uniform1i(gl.getUniformLocation(this.program, 'uSource'), 0);
-        gl.uniform1f(gl.getUniformLocation(this.program, 'iTime'), milliseconds / 1000);
-        gl.uniform3f(gl.getUniformLocation(this.program, 'iResolution'), width, height, 1);
-        gl.uniform4f(gl.getUniformLocation(this.program, 'iMouse'), 0, 0, 0, 0);
+        gl.uniform1f(gl.getUniformLocation(this.program, 'hs_time'), milliseconds / 1000);
+        gl.uniform3f(gl.getUniformLocation(this.program, 'hs_resolution'), width, height, 1);
+        gl.uniform4f(gl.getUniformLocation(this.program, 'hs_pointer'), 0, 0, 0, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         const error = gl.getError();
         if (error !== gl.NO_ERROR) throw new Error('WebGL2 preview drawing failed: ' + error);

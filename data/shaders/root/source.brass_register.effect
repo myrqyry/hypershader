@@ -26,8 +26,8 @@ float readBand(int index) {
 float lineMask(float dist,float halfWidth,float pixel) {
     return 1.0-smoothstep(halfWidth,halfWidth+pixel,abs(dist));
 }
-void mainImage(out vec4 fragColor,in vec2 fragCoord) {
-    float2 size=max(iResolution.xy,float2(1,1));
+void hs_shade_pixel(out vec4 fragColor,in vec2 fragCoord) {
+    float2 size=max(hs_resolution.xy,float2(1,1));
     float2 uv=fragCoord/size;
     float aspect=size.x/size.y;
     float2 p=float2((uv.x-0.5)*aspect,uv.y);
@@ -41,7 +41,7 @@ void mainImage(out vec4 fragColor,in vec2 fragCoord) {
     for(int i=0;i<8;i++){
         float n=float(i),x=(n-3.5)*spacing;
         float band=saturate(readBand(i)*motion_gain);
-        float bend=(0.006+0.047*band)*sin(iTime*drift_rate*(0.7+0.08*n)+n*1.27);
+        float bend=(0.006+0.047*band)*sin(hs_time*drift_rate*(0.7+0.08*n)+n*1.27);
         float tipY=0.36+0.04*sin(n*1.7)+band*0.11;
         float stem=(p.y-0.52)/(0.80-0.52);
         float center=x+bend*saturate(1.0-stem);
@@ -63,4 +63,4 @@ void mainImage(out vec4 fragColor,in vec2 fragCoord) {
     float centerGlow=exp(-dot(p-float2(0.0,0.45),p-float2(0.0,0.45))*2.5)*0.06;
     fragColor=float4(saturate(ink+metal_color*centerGlow),1.0);
 }
-HYPERSHADER_MAINIMAGE_WRAPPER
+HYPERSHADER_PIXEL_WRAPPER

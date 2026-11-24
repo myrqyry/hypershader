@@ -131,7 +131,7 @@ Voxel3D createVoxelFromTexture(vec2 uv, vec2 grid_pos, vec2 grid_res, float time
     voxel.active = false;
 
     // Sample texture
-    vec4 tex_color = texture(iChannel0, (grid_pos + 0.5) / grid_res);
+    vec4 tex_color = texture(hs_input0, (grid_pos + 0.5) / grid_res);
     if (tex_color.a < 0.1) return voxel;
 
     // Random seed for this voxel

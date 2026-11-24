@@ -186,7 +186,7 @@ struct hypershader_data {
 	gs_effect_t *effect;
 	float time_scale;
 	float time_accumulator;
-    float shader_frame_count; /* iFrame scales with global speed; physical frame_count does not */
+    float shader_frame_count; /* hs_frame_index scales with global speed; physical frame_count does not */
     float compose_base_opacity;
     float compose_effect_opacity;
     int compose_blend_mode;
@@ -236,28 +236,28 @@ struct hypershader_data {
 	gs_texture_t *channel_textures[4]; /* The final texture to bind (either from image or source) */
 
 	/* Cached effect params (NULL if not present in the effect) */
-	gs_eparam_t *ep_iTime;
-	gs_eparam_t *ep_iScale; /* RESTORED */
-	gs_eparam_t *ep_iResolution;
+	gs_eparam_t *ep_time;
+	gs_eparam_t *ep_scale; /* RESTORED */
+	gs_eparam_t *ep_resolution;
 	gs_eparam_t *ep_screen_size; /* Helper for some shaders */
-	gs_eparam_t *ep_iMouse;
+	gs_eparam_t *ep_pointer;
 	/* gs_eparam_t *ep_iMouseClick; REMOVED */
-	gs_eparam_t *ep_iDate;
-	gs_eparam_t *ep_iChannel[4];
-	gs_eparam_t *ep_iChannelResolution
+	gs_eparam_t *ep_date;
+	gs_eparam_t *ep_input[4];
+	gs_eparam_t *ep_input_resolution
 		[4]; /* ChRes is often an array in GLSL but individual in standard OBS effects? Using array of params to be safe. */
-	gs_eparam_t *ep_iChannelTime[4];
-	gs_eparam_t *ep_iTimeDelta;  /* optional */
-	gs_eparam_t *ep_iFrame;      /* optional */
-	gs_eparam_t *ep_iFrameRate;  /* optional */
-	gs_eparam_t *ep_iSampleRate; /* optional */
+	gs_eparam_t *ep_input_time[4];
+	gs_eparam_t *ep_delta_time;  /* optional */
+	gs_eparam_t *ep_frame_index;      /* optional */
+	gs_eparam_t *ep_frame_rate;  /* optional */
+	gs_eparam_t *ep_sample_rate; /* optional */
 
 	/* Audio Inputs */
 	gs_eparam_t *ep_audio_reaction_state; /* opt-in three gates + spring position */
 	struct hs_reaction_state reaction_state;
 	uint64_t reaction_frame_ns;
 	uint64_t reaction_input_key;
-	gs_eparam_t *ep_iChannelAtlas[4];
+	gs_eparam_t *ep_input_atlas[4];
 	struct hs_atlas_clock atlas_clock[4];
 	struct vec4 atlas_value[4];
 	gs_eparam_t *ep_audio_level;
@@ -286,7 +286,7 @@ struct hypershader_data {
 	int history_idx;
 	uint32_t feedback_width, feedback_height;
 	bool feedback_first_render_logged;
-	gs_eparam_t *ep_iPreviousFrame;
+	gs_eparam_t *ep_history;
 	/* Opt-in two-buffer simulation graph: A -> B -> Draw.
 	 * Each buffer has a previous-frame read texture and current write texture.
 	 * Only the graphics thread touches these objects. */
@@ -306,10 +306,10 @@ struct hypershader_data {
 	bool graph_flow_announced;
 	bool graph_valid;
 	bool graph_enabled;
-	gs_eparam_t *ep_iBufferA, *ep_iBufferB;
-	gs_eparam_t *ep_iBufferAPrevious, *ep_iBufferBPrevious;
-	gs_eparam_t *ep_iGraphFrame;
-	/* Note: Removed duplicate 'inputs' array - channels ARE the shader inputs (iChannel0-3) */
+	gs_eparam_t *ep_buffer_a, *ep_buffer_b;
+	gs_eparam_t *ep_buffer_a_previous, *ep_buffer_b_previous;
+	gs_eparam_t *ep_graph_frame;
+	/* Note: Removed duplicate 'inputs' array - channels ARE the shader inputs (hs_input0-3) */
 
 	/* Channel Source Rendering */
 	gs_texrender_t *channel_renders[4]; /* Render targets for OBS source inputs */
@@ -480,42 +480,42 @@ struct hypershader_data {
 	hs_face_surface *mp_face_surface;       /* Per-instance GPU face-surface raster */
 	bool mp_analyze_trigger;            /* Trigger to analyze current frame for reference */
 
-	gs_eparam_t *ep_iSightFlow, *ep_iSightFlowPresent, *ep_iSightFlowInterval, *ep_iSightFlowCoverage, *ep_iSightFlowStep;
+	gs_eparam_t *ep_sight_flow, *ep_sight_flow_present, *ep_sight_flow_interval, *ep_sight_flow_coverage, *ep_sight_flow_step;
 	gs_texture_t *sight_flow_texture;
 	uint64_t sight_flow_sequence;
 	float sight_flow_interval, sight_flow_coverage;
 	bool sight_flow_present, sight_flow_announced;
-	gs_eparam_t *ep_iSightTextPresent, *ep_iSightTextCount;
-	gs_eparam_t *ep_iSightTextMask, *ep_iSightTextBounds;
+	gs_eparam_t *ep_sight_text_present, *ep_sight_text_count;
+	gs_eparam_t *ep_sight_text_mask, *ep_sight_text_bounds;
 	gs_texture_t *sight_text_mask, *sight_text_bounds;
 	uint64_t sight_text_sequence;
 	uint32_t sight_text_count;
 	bool sight_text_present, sight_text_announced;
-	gs_eparam_t *ep_iSightMotionPresent;
-	gs_eparam_t *ep_iSightMotionEnergy;
+	gs_eparam_t *ep_sight_motion_present;
+	gs_eparam_t *ep_sight_motion_energy;
 	float sight_motion_energy;
 	bool sight_motion_present, sight_motion_announced;
-	gs_eparam_t *ep_iSightMattePresent;
-	gs_eparam_t *ep_iSightDepth, *ep_iSightDepthPresent;
+	gs_eparam_t *ep_sight_matte_present;
+	gs_eparam_t *ep_sight_depth, *ep_sight_depth_present;
 	gs_texture_t *sight_depth_tex;
 	uint64_t sight_depth_sequence;
 	bool sight_depth_present, sight_depth_announced;
-	gs_eparam_t *ep_iSightSubjectPresent;
-	gs_eparam_t *ep_iSightSubjectBounds;
-	gs_eparam_t *ep_iSightSubjectCenter;
-	gs_eparam_t *ep_iSightSubjectCoverage;
+	gs_eparam_t *ep_sight_subject_present;
+	gs_eparam_t *ep_sight_subject_bounds;
+	gs_eparam_t *ep_sight_subject_center;
+	gs_eparam_t *ep_sight_subject_coverage;
 	float sight_subject_bounds[4], sight_subject_center[2], sight_subject_coverage;
 	bool sight_subject_present;
 	gs_texture_t *sight_matte_tex;
 	uint64_t sight_matte_sequence;
 	bool sight_matte_present;
 	bool sight_matte_announced;
-	gs_eparam_t *ep_iSegmentation;       /* Shader uniform: sampler2D iSegmentation */
-	gs_eparam_t *ep_iLandmarks;          /* Shader uniform: sampler2D iLandmarks */
-	gs_eparam_t *ep_iFacePresent;        /* Shader uniform: valid current face detection */
-	gs_eparam_t *ep_iReferenceLandmarks; /* Shader uniform: sampler2D iReferenceLandmarks */
-	gs_eparam_t *ep_iFaceSurface;       /* Shader uniform: RGBA32F barycentric coverage */
-	gs_eparam_t *ep_iFaceTriangles;     /* Shader uniform: triangle-to-landmark lookup */
+	gs_eparam_t *ep_segmentation;       /* Shader uniform: sampler2D hs_segmentation */
+	gs_eparam_t *ep_landmarks;          /* Shader uniform: sampler2D hs_landmarks */
+	gs_eparam_t *ep_face_present;        /* Shader uniform: valid current face detection */
+	gs_eparam_t *ep_reference_landmarks; /* Shader uniform: sampler2D hs_reference_landmarks */
+	gs_eparam_t *ep_face_surface;       /* Shader uniform: RGBA32F barycentric coverage */
+	gs_eparam_t *ep_face_triangles;     /* Shader uniform: triangle-to-landmark lookup */
 	/* Optional Sight Tracking Signal Bus consumer. Sight owns inference; this
 	 * instance reads snapshots from a private receiver source via libobs. */
 	bool sight_use_tracking;
@@ -535,20 +535,20 @@ struct hypershader_data {
 	gs_texture_t *sight_blendshape_tex;   /* RGBA32F, 64 x 1; score in R */
 	gs_texture_t *sight_transform_tex;    /* RGBA32F, 4 x 1 raw matrix rows */
 	hs_face_surface *sight_face_surface;
-	gs_eparam_t *ep_iSightPoints;
-	gs_eparam_t *ep_iSightHands;
+	gs_eparam_t *ep_sight_points;
+	gs_eparam_t *ep_sight_hands;
     struct hs_sight_touch sight_touch;
-    gs_eparam_t *ep_iSightTouch[2], *ep_iSightRipple[HS_TOUCH_CAPACITY];
-	gs_eparam_t *ep_iSightBlendshapes;
-	gs_eparam_t *ep_iSightHeadRows;
-	gs_eparam_t *ep_iSightPresent;
-	gs_eparam_t *ep_iSightKind;
-	gs_eparam_t *ep_iSightPointCount;
-	gs_eparam_t *ep_iSightHandCount;
-	gs_eparam_t *ep_iSightPinch0;
-	gs_eparam_t *ep_iSightPinch1;
-	gs_eparam_t *ep_iSightGesture0;
-	gs_eparam_t *ep_iSightGesture1;
+    gs_eparam_t *ep_sight_touch[2], *ep_sight_ripple[HS_TOUCH_CAPACITY];
+	gs_eparam_t *ep_sight_blendshapes;
+	gs_eparam_t *ep_sight_head_rows;
+	gs_eparam_t *ep_sight_present;
+	gs_eparam_t *ep_sight_kind;
+	gs_eparam_t *ep_sight_point_count;
+	gs_eparam_t *ep_sight_hand_count;
+	gs_eparam_t *ep_sight_pinch0;
+	gs_eparam_t *ep_sight_pinch1;
+	gs_eparam_t *ep_sight_gesture0;
+	gs_eparam_t *ep_sight_gesture1;
 
 	/* Staging buffer for GPU->CPU readback */
 	gs_stagesurf_t *mp_staging_tex;
@@ -606,27 +606,26 @@ static inline bool is_builtin_uniform(const char *name)
 {
 	if (!name)
 		return false;
-	if (strcmp(name, "iTime") == 0)
+	if (strcmp(name, "hs_time") == 0)
 		return true;
-	if (strcmp(name, "iTimeDelta") == 0)
+	if (strcmp(name, "hs_delta_time") == 0)
 		return true;
-	if (strcmp(name, "iFrame") == 0)
+	if (strcmp(name, "hs_frame_index") == 0)
 		return true;
-	if (strcmp(name, "iFrameRate") == 0)
+	if (strcmp(name, "hs_frame_rate") == 0)
 		return true;
-	if (strcmp(name, "iDate") == 0)
+	if (strcmp(name, "hs_date") == 0)
 		return true;
-	if (strcmp(name, "iSampleRate") == 0)
+	if (strcmp(name, "hs_sample_rate") == 0)
 		return true;
-	if (strcmp(name, "iResolution") == 0)
+	if (strcmp(name, "hs_resolution") == 0)
 		return true;
-	if (strcmp(name, "iProgress") == 0 || strcmp(name, "iScale") == 0)
+	if (strcmp(name, "hs_transition_progress") == 0 || strcmp(name, "hs_scale") == 0)
 		return true; /* Engine-injected transition progress and source scale */
-	if (strcmp(name, "iMouse") == 0)
+	if (strcmp(name, "hs_pointer") == 0)
 		return true;
-	/* if (strcmp(name, "iMouseClick") == 0) return true; // Removed */
-	if (strncmp(name, "iChannel", 8) == 0)
-		return true; /* iChannelX, iChannelTime, iChannelResolution */
+	if (strncmp(name, "hs_input", 8) == 0)
+		return true; /* hs_inputX, hs_input_time, hs_input_resolution */
 	/* Reserve precisely the native audio signals, never arbitrary audio_*
 	 * controls (audio_gain, audio_attack and other shader-owned parameters). */
 	static const char *const audio_names[] = {
@@ -649,18 +648,18 @@ static inline bool is_builtin_uniform(const char *name)
 		return true;
 	if (strcmp(name, "image") == 0)
 		return true;
-	if (strncmp(name, "iSight", 6) == 0)
+	if (strncmp(name, "hs_sight_", 9) == 0)
 		return true; /* Sight-owned tracking snapshots, never editable metadata sliders */
-	if (strcmp(name, "iFacePresent") == 0 || strcmp(name, "iFaceSurface") == 0 ||
-	    strcmp(name, "iFaceTriangles") == 0 || strcmp(name, "iLandmarks") == 0 ||
-	    strcmp(name, "iReferenceLandmarks") == 0 || strcmp(name, "iSegmentation") == 0)
+	if (strcmp(name, "hs_face_present") == 0 || strcmp(name, "hs_face_surface") == 0 ||
+	    strcmp(name, "hs_face_triangles") == 0 || strcmp(name, "hs_landmarks") == 0 ||
+	    strcmp(name, "hs_reference_landmarks") == 0 || strcmp(name, "hs_segmentation") == 0)
 		return true;
-	if (strcmp(name, "iPreviousFrame") == 0)
+	if (strcmp(name, "hs_history") == 0)
 		return true;
-	if (strcmp(name, "iGraphFrame") == 0 || strcmp(name, "iGraphOutputResolution") == 0 ||
-	    strcmp(name, "iGraphBudgetMiB") == 0 ||
-	    strncmp(name, "iBufferA", 8) == 0 ||
-	    strncmp(name, "iBufferB", 8) == 0)
+	if (strcmp(name, "hs_graph_frame") == 0 || strcmp(name, "hs_graph_output_resolution") == 0 ||
+	    strcmp(name, "hs_graph_budget_mib") == 0 ||
+	    strncmp(name, "hs_buffer_a", 11) == 0 ||
+	    strncmp(name, "hs_buffer_b", 11) == 0)
 		return true;
 	return false;
 }

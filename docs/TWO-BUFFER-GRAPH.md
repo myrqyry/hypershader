@@ -8,23 +8,23 @@ Opt-in fixed three-stage sequence, executed by the production HyperShaderFX filt
 4. Run technique Draw, sampling both **current** A and B.
 5. Swap both history targets only after successful rendering.
 
-Existing one-pass effects keep their existing Draw and iPreviousFrame paths.
+Existing one-pass effects keep their existing Draw and hs_history paths.
 BufferA and BufferB support independent bounded resolutions and optional RGBA16F storage. There is no generic graph JSON or configurable pass order yet.
 
 ## Contract
-A graph effect must declare all four texture uniforms iBufferA,
-iBufferB, iBufferAPrevious, iBufferBPrevious, and techniques BufferA,
+A graph effect must declare all four texture uniforms hs_buffer_a,
+hs_buffer_b, hs_buffer_a_previous, hs_buffer_b_previous, and techniques BufferA,
 BufferB, Draw. A normal effect with only Draw is unchanged.
 
-In BufferA, iBufferA and iBufferB refer to prior-frame buffers.
-In BufferB, iBufferA is current frame A and iBufferB is prior-frame B.
-In Draw, iBufferA and iBufferB refer to current frame buffers.
-In all stages, iBufferAPrevious and iBufferBPrevious refer to the prior frame.
+In BufferA, hs_buffer_a and hs_buffer_b refer to prior-frame buffers.
+In BufferB, hs_buffer_a is current frame A and hs_buffer_b is prior-frame B.
+In Draw, hs_buffer_a and hs_buffer_b refer to current frame buffers.
+In all stages, hs_buffer_a_previous and hs_buffer_b_previous refer to the prior frame.
 
 On the first frame after a shader change or resize, prior textures are
-initialized to opaque black at their actual configured sizes and formats, never uninitialized GPU contents or a one-pixel substitute. Optional int iGraphFrame
+initialized to opaque black at their actual configured sizes and formats, never uninitialized GPU contents or a one-pixel substitute. Optional int hs_graph_frame
 starts at 0, resets on shader replacement or render-target resize,
-and increases only after a successful graph frame. This is separate from OBS iFrame.
+and increases only after a successful graph frame. This is separate from OBS hs_frame_index.
 
 The same original input image is bound into all three stages. Per-shader
 metadata controls are rebound before each stage because effect parameters
@@ -38,14 +38,14 @@ user controls. They are read once at shader load, before allocating graph
 resources, and never from saved slider values.
 
 ```hlsl
-uniform int iBufferADivisor = 2; // half width and height
-uniform int iBufferBDivisor = 4; // quarter width and height
-uniform int iBufferAFormat = 1;  // RGBA16F signed/HDR data
-uniform int iBufferBFormat = 1;
-uniform float3 iResolution;
-uniform float3 iBufferAResolution;
-uniform float3 iBufferBResolution;
-uniform float3 iGraphOutputResolution;
+uniform int hs_buffer_a_divisor = 2; // half width and height
+uniform int hs_buffer_b_divisor = 4; // quarter width and height
+uniform int hs_buffer_a_format = 1;  // RGBA16F signed/HDR data
+uniform int hs_buffer_b_format = 1;
+uniform float3 hs_resolution;
+uniform float3 hs_buffer_a_resolution;
+uniform float3 hs_buffer_b_resolution;
+uniform float3 hs_graph_output_resolution;
 ```
 
 Divisors must be 1, 2, 4 or 8. The default is 1; each dimension is
@@ -57,7 +57,7 @@ full resolution and uses the source/output format. The original image
 remains full resolution in every stage.
 
 All resolution vectors contain width, height and aspect ratio. Within
-BufferA/B, iResolution is that pass's actual target size; within Draw it
+BufferA/B, hs_resolution is that pass's actual target size; within Draw it
 is the full output size. The other three resolution uniforms retain
 their respective resource dimensions across all stages, including the
 first initialized history. Use those sizes for integer texel fetches
@@ -72,10 +72,10 @@ It is not an end-to-end performance benchmark.
 
 ## External texture inputs in every stage
 
-The graph rebinds existing `iChannel0` through `iChannel3` textures,
-their `iChannelResolution0` through `iChannelResolution3` dimensions
+The graph rebinds existing `hs_input0` through `hs_input3` textures,
+their `hs_input_resolution0` through `hs_input_resolution3` dimensions
 (float4: width, height, aspect, reserved), and their
-`iChannelTime0` through `iChannelTime3` values before each technique.
+`hs_input_time0` through `hs_input_time3` values before each technique.
 All stages use the same current resource snapshot; rebinding does not
 decode or advance an animated image again. Missing textures sample
 opaque black and report zero width and height. Check logical dimensions
@@ -117,7 +117,7 @@ named resources are a future extension, not provided by this change.
 ## Resource allocation budget
 
 Graph color-target payload is capped per filter instance at 512 MiB.
-The optional shader declaration `uniform int iGraphBudgetMiB = 64;`
+The optional shader declaration `uniform int hs_graph_budget_mib = 64;`
 can request a smaller cap (integer 1 through 512). This is immutable
 metadata, not a live control. The calculation reserves the full-size
 input capture, both full-size compositor surfaces, a transparent pixel,
@@ -172,8 +172,8 @@ the requested allocation. Graph mode remains intentionally opt-in.
 
 ## Current limits
 - Not wired to the standalone source or transition lanes.
-- The legacy iPreviousFrame feedback path is separate; graph effects
-  use iBufferAPrevious / iBufferBPrevious.
+- The legacy hs_history feedback path is separate; graph effects
+  use hs_buffer_a_previous / hs_buffer_b_previous.
 - Real-time full-resolution performance, HDR correctness on other
   GPU drivers, and Windows/macOS were not established by Mesa tests.
 - No arbitrary pass graph, dynamic/adaptive per-pass resolution, general
