@@ -446,7 +446,7 @@ int main(int argc,char** argv) {
  pass=pass&&muted;
  std::cout<<"TWO_BUFFER_CONTROL muted_A="<<mutedA
           <<" muted_B="<<mutedB<<" PASS="<<muted<<"\n";
- if(mode=="scaled"){
+ if(mode=="scaled"||mode=="ordered"||mode=="ordered-eight"){
   auto* restored=obs_source_get_settings(filter);
   obs_data_set_double(restored,"param_output_gain",1.0);
   obs_data_set_double(restored,"compose_effect_opacity",0.0);
@@ -498,6 +498,26 @@ int main(int argc,char** argv) {
   bool resized=reset<15&&later>reset+15&&blue<=3;
   pass=pass&&resized;
   std::cout<<"TWO_BUFFER_RESIZE reset_A="<<reset<<" later_A="<<later<<" blue="<<blue<<" PASS="<<resized<<"\n";
+
+  if(mode=="ordered"){
+   if(argc!=6)return 2;
+   unsigned accepted=0;
+   for(const char* name:{"duplicate","gap","missing","divisor","orphan","excess"}){
+    auto* opts=obs_source_get_settings(filter);
+    std::string path=std::string(argv[5])+"/bad-"+name+".effect";
+    obs_data_set_string(opts,"shader_file",path.c_str());
+    obs_source_update(filter,opts);obs_data_release(opts);
+    size_t retained=0;
+    for(int i=0;i<14;i++){
+     auto out=render(source);drain_ui();
+     if(i>5&&out.size()==W*H*4&&out[center]>=later&&out[center+2]<=3)++retained;
+     std::this_thread::sleep_for(50ms);
+    }
+    if(retained==8)++accepted;
+   }
+   pass=pass&&accepted==6;
+   std::cout<<"TWO_BUFFER_ORDERED_INVALID retained_cases="<<accepted<<" PASS="<<(accepted==6)<<"\n";
+  }
  }
  obs_source_dec_showing(source);
  obs_source_filter_remove(source,filter);

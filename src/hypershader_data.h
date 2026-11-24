@@ -8,6 +8,7 @@
 #include "audio/music_timing.h"
 #include "audio/reaction_dynamics.h"
 #include "sprite_atlas.h"
+#include "shader/graph-budget.h"
 #include <graphics/graphics.h>
 #include "channel_image_compat.h"
 #include <pthread.h>
@@ -37,6 +38,22 @@
 #define INPUT_MODE_GLOBAL_CURSOR 1
 #define INPUT_MODE_AUDIO 2
 #define CHANNEL_COUNT 4
+
+/* One schedule for both fixed A/B and author-named persistent passes.
+ * Effect pointers belong to the compiled candidate and swap with it. */
+struct hs_graph_plan {
+    unsigned count;
+    bool enabled, named, valid;
+    uint32_t budget_mib;
+    char technique[HS_GRAPH_MAX_PASSES][48];
+    char resource[HS_GRAPH_MAX_PASSES][48];
+    uint32_t divisor[HS_GRAPH_MAX_PASSES];
+    bool float16[HS_GRAPH_MAX_PASSES];
+    gs_eparam_t *current[HS_GRAPH_MAX_PASSES];
+    gs_eparam_t *previous[HS_GRAPH_MAX_PASSES];
+    gs_eparam_t *resolution[HS_GRAPH_MAX_PASSES];
+    gs_eparam_t *output_resolution;
+};
 
 /* Instance kind: filter, source, or transition */
 enum hypershader_instance_kind {
@@ -289,27 +306,18 @@ struct hypershader_data {
 	uint32_t feedback_width, feedback_height;
 	bool feedback_first_render_logged;
 	gs_eparam_t *ep_history;
-	/* Opt-in two-buffer simulation graph: A -> B -> Draw.
-	 * Each buffer has a previous-frame read texture and current write texture.
-	 * Only the graphics thread touches these objects. */
-	gs_texrender_t *graph_history[2][2]; /* [buffer A/B][ping/pong] */
+	/* Persistent render graph: two textures per scheduled pass. */
+	struct hs_graph_plan graph;
+	gs_texrender_t *graph_history[HS_GRAPH_MAX_PASSES][2];
 	uint32_t graph_width, graph_height;
 	enum gs_color_format graph_format;
-	uint32_t graph_divisor[2]; /* immutable shader-declared 1, 2, 4 or 8 */
-	bool graph_float16[2];
-	bool graph_config_valid;
-	uint32_t graph_budget_mib;
 	bool graph_budget_rejected;
-	gs_eparam_t *ep_graph_buffer_resolution[2], *ep_graph_output_resolution;
 
 	unsigned graph_write_idx;
 	uint32_t graph_frame; /* reset on reload/resize, independent of OBS source age */
 	uint64_t graph_flow_sequence; /* last successfully rendered Sight flow snapshot */
 	bool graph_flow_announced;
 	bool graph_valid;
-	bool graph_enabled;
-	gs_eparam_t *ep_buffer_a, *ep_buffer_b;
-	gs_eparam_t *ep_buffer_a_previous, *ep_buffer_b_previous;
 	gs_eparam_t *ep_graph_frame;
 	/* Note: Removed duplicate 'inputs' array - channels ARE the shader inputs (hs_input0-3) */
 
@@ -653,7 +661,7 @@ static inline bool is_builtin_uniform(const char *name)
 		return true;
 	if (strcmp(name, "hs_history") == 0)
 		return true;
-	if (strcmp(name, "hs_graph_frame") == 0 || strcmp(name, "hs_graph_output_resolution") == 0 ||
+	if (strncmp(name, "hs_pass_", 8) == 0 || strcmp(name, "hs_graph_frame") == 0 || strcmp(name, "hs_graph_output_resolution") == 0 ||
 	    strcmp(name, "hs_graph_budget_mib") == 0 ||
 	    strncmp(name, "hs_buffer_a", 11) == 0 ||
 	    strncmp(name, "hs_buffer_b", 11) == 0)

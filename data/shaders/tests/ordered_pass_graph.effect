@@ -1,0 +1,95 @@
+// Opt-in sizes and floating point data buffers.
+uniform int hs_pass_resolve_order = 2;
+uniform int hs_pass_diffuse_order = 1;
+uniform int hs_pass_integrate_order = 0;
+uniform int hs_pass_resolve_divisor = 8;
+uniform int hs_pass_resolve_format = 1;
+uniform texture2d hs_pass_resolve;
+uniform texture2d hs_pass_resolve_previous;
+uniform float3 hs_pass_resolve_resolution;
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d hs_pass_integrate;
+uniform texture2d hs_pass_diffuse;
+uniform texture2d hs_pass_integrate_previous;
+uniform texture2d hs_pass_diffuse_previous;
+uniform int hs_pass_integrate_divisor = 2;
+uniform int hs_pass_diffuse_divisor = 4;
+uniform int hs_pass_integrate_format = 1;
+uniform int hs_pass_diffuse_format = 1;
+uniform float3 hs_resolution;
+uniform float3 hs_pass_integrate_resolution;
+uniform float3 hs_pass_diffuse_resolution;
+uniform float3 hs_graph_output_resolution;
+uniform int hs_graph_frame;
+uniform float output_gain; // @min 0.0 @max 1.0 @step 0.01 @default 1.0 @label "Output Gain"
+sampler_state simSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v) {
+ VertData o; o.pos=mul(float4(v.pos.xyz,1.0),ViewProj);o.uv=v.uv;return o;
+}
+float4 PSA(VertData v):TARGET {
+ float value=hs_pass_integrate_previous.Sample(simSampler,v.uv).r;
+ float inputLevel=image.Sample(simSampler,v.uv).r;
+ float2 expected=ceil(hs_graph_output_resolution.xy / 2.0);
+ bool good=length(hs_resolution.xy-expected)<0.01 && length(hs_pass_integrate_resolution.xy-expected)<0.01;
+ // A not-yet-executed stage must expose its previous texture, not its write target.
+ float4 later=hs_pass_resolve.Sample(simSampler,v.uv);
+ float4 laterPrev=hs_pass_resolve_previous.Sample(simSampler,v.uv);
+ good=good && length(later-laterPrev)<0.01 &&
+   (hs_graph_frame==0 ? abs(later.a-1.0)<0.01 : abs(later.a-2.0)<0.01);
+ if(hs_graph_frame>0) {
+  float4 prev=hs_pass_integrate_previous.Sample(simSampler,v.uv);
+  good=good && abs(prev.b+0.5)<0.01 && abs(prev.a-1.5)<0.01;
+ } else {
+  float4 seed=hs_pass_integrate_previous.Load(int3(int2(hs_pass_integrate_resolution.xy)-int2(1,1),0));
+  good=good && length(seed.rgb)<0.01 && abs(seed.a-1.0)<0.01;
+ }
+ return float4(min(value+0.008+inputLevel*0.01,0.85),v.uv.x,good?-0.5:0.5,1.5);
+}
+float4 PSB(VertData v):TARGET {
+ float4 a=hs_pass_integrate.Sample(simSampler,v.uv);
+ float history=hs_pass_diffuse_previous.Sample(simSampler,v.uv).g;
+ float2 expected=ceil(hs_graph_output_resolution.xy / 4.0);
+ // Exact last texel must be rendered at the reduced size.
+ int2 last=int2(hs_pass_integrate_resolution.xy)-int2(1,1);
+ float4 edge=hs_pass_integrate.Load(int3(last,0));
+ bool good=length(hs_resolution.xy-expected)<0.01 && length(hs_pass_diffuse_resolution.xy-expected)<0.01
+   && abs(a.b+0.5)<0.01 && abs(a.a-1.5)<0.01 && edge.g>0.98;
+ if(hs_graph_frame>0) {
+  float4 prev=hs_pass_diffuse_previous.Sample(simSampler,v.uv);
+  good=good && abs(prev.b+0.75)<0.01 && abs(prev.a-1.75)<0.01;
+ } else {
+  float4 seed=hs_pass_diffuse_previous.Load(int3(int2(hs_pass_diffuse_resolution.xy)-int2(1,1),0));
+  good=good && length(seed.rgb)<0.01 && abs(seed.a-1.0)<0.01;
+ }
+ return float4(v.uv.x,min(history+0.006+a.r*0.008,0.7),good?-0.75:0.75,1.75);
+}
+float4 PSResolve(VertData v):TARGET {
+ float4 a=hs_pass_integrate.Sample(simSampler,v.uv);
+ float4 b=hs_pass_diffuse.Sample(simSampler,v.uv);
+ float4 edge=hs_pass_diffuse.Load(int3(int2(hs_pass_diffuse_resolution.xy)-int2(1,1),0));
+ bool good=edge.r>0.98 && length(hs_resolution.xy-hs_pass_resolve_resolution.xy)<0.01
+  && length(hs_pass_integrate_resolution.xy-ceil(hs_graph_output_resolution.xy/2.0))<0.01
+  && length(hs_pass_diffuse_resolution.xy-ceil(hs_graph_output_resolution.xy/4.0))<0.01
+  && abs(a.b+0.5)<0.01 && abs(a.a-1.5)<0.01 && abs(b.b+0.75)<0.01 && abs(b.a-1.75)<0.01;
+ if(hs_graph_frame>0) {
+  float4 prevA=hs_pass_integrate_previous.Sample(simSampler,v.uv);
+  float4 prevB=hs_pass_diffuse_previous.Sample(simSampler,v.uv);
+  good=good && abs(prevA.b+0.5)<0.01 && abs(prevB.b+0.75)<0.01;
+ }
+ float4 old=hs_pass_resolve_previous.Sample(simSampler,v.uv);
+ good=good && length(hs_resolution.xy-ceil(hs_graph_output_resolution.xy/8.0))<0.01
+   && length(hs_resolution.xy-hs_pass_resolve_resolution.xy)<0.01
+   && (hs_graph_frame==0 ? length(old.rgb)<0.01 : abs(old.a-2.0)<0.01);
+ return float4(a.r,b.g,good?0.0:1.0,2.0);
+}
+technique Pass_integrate { pass {vertex_shader=VSDefault(v);pixel_shader=PSA(v);} }
+technique Pass_diffuse { pass {vertex_shader=VSDefault(v);pixel_shader=PSB(v);} }
+float4 PSFinal(VertData v):TARGET {
+ float4 c=hs_pass_resolve.Sample(simSampler,v.uv);
+ bool good=c.b<0.01 && abs(c.a-2.0)<0.01 && length(hs_resolution.xy-hs_graph_output_resolution.xy)<0.01;
+ return float4(c.rg*output_gain,good?0.0:1.0,1);
+}
+technique Pass_resolve { pass {vertex_shader=VSDefault(v);pixel_shader=PSResolve(v);} }
+technique Draw { pass {vertex_shader=VSDefault(v);pixel_shader=PSFinal(v);} }

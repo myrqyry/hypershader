@@ -86,7 +86,7 @@ photographs are committed to this repository.
 - **Previous-frame feedback** through `hs_history`.
 - **Named texture inputs** with semantic names, custom labels and optional resolution/time uniforms, backed by the existing four input slots.
 - **Live source textures** from already-showing OBS sources and independent scenes, with real capture dimensions.
-- **Native two-buffer graphs** with independent A/B history, configurable per-buffer resolution and optional RGBA16F data storage, and bounded per-instance graph allocations for multi-stage temporal effects.
+- **Native persistent render graphs** with up to eight named ordered passes, independent history, configurable resolution, optional RGBA16F data storage and bounded per-instance allocations.
 - **Source compositing** and host-level blend modes without forcing every shader to reimplement them.
 - **Typed controls** for scalar, boolean, vector, and enumerated shader parameters.
 - **Readable shader names and categories** while preserving stored paths and scene compatibility.

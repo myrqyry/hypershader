@@ -171,6 +171,18 @@ recursive inputs are unavailable. Optionally declare an integer `hs_graph_budget
 reduce the default logical graph allocation cap of 512 MiB. See the [two-buffer graph contract](../../docs/TWO-BUFFER-GRAPH.md)
 for declarations, defaults, reset behavior and verification scope.
 
+### Named persistent passes
+
+New native filter graphs can use up to eight shader-defined passes,
+with a required integer `hs_pass_<id>_order` starting at zero, a matching
+`Pass_<id>` technique and current/previous texture2d uniforms.
+For example `hs_pass_diffuse` and `hs_pass_diffuse_previous`.
+The optional `_divisor`, `_format` and float3 `_resolution` companions
+define and describe each target. Final Draw remains full resolution.
+All passes use the same scheduler and budget as the existing A/B
+contract. See [named ordered passes](../../docs/TWO-BUFFER-GRAPH.md#named-ordered-passes)
+for the complete binding rules and limits.
+
 ## 6. Standard Library
 
 You can include helper functions from `data/stdlib/` (source effects live in `data/shaders/root/`):

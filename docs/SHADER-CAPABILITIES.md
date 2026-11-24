@@ -44,7 +44,7 @@ signed and above-one history values, last-texel addressing, per-instance
 isolation, user controls and compositing, odd-dimension resizing and invalid descriptors.
 See [the graph contract](TWO-BUFFER-GRAPH.md). HDR input/output behavior,
 other platforms, dynamic scaling, and end-to-end performance are not
-yet qualified. A general scheduler remains next.
+yet qualified. Named ordered passes now extend the same scheduler.
 
 ## Qualified third slice: resource admission
 
@@ -90,6 +90,18 @@ source also passes the existing live capture lifecycle checks.
 See [native shader vocabulary](NATIVE-SHADER-API.md#named-texture-inputs).
 An expanded slot pool and name-keyed saved settings remain future work.
 
+## Qualified seventh slice: ordered persistent pass schedules
+
+One to eight shader-named passes run through the existing graph
+renderer and per-instance admission budget. Compiled uniform defaults
+define explicit order, dimensions and formats. Each stage sees the
+latest completed texture plus an explicit previous-frame texture.
+The three-stage native fixture checks signed and above-one histories,
+resource dimensions, same-frame dependencies, forward history reads,
+controls, compositing, isolation and resize. Malformed plans reject
+before replacement. This is a bounded ordered scheduler, not an
+automatic dependency sorter or transient-resource allocator.
+
 ## Capability matrix
 
 | Primitive | Current boundary | Next |
@@ -98,7 +110,7 @@ An expanded slot pool and name-keyed saved settings remain future work.
 | Texture inputs | Four named or numbered input slots, source image, auxiliary signals; image and showing-source capture verified | Expand resource pool, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
-| Render passes | Fixed BufferA, BufferB, Draw; independent size and RGBA16F qualified on Linux; filter only | Named dependency graph for filter/source/transition; aggregate resource admission |
+| Render passes | One to eight named ordered persistent passes or existing A/B, Draw; independent size and RGBA16F; filter only | Explicit dependency DAG, transient resources, source/transition lanes and aggregate admission |
 | Temporal state | Previous output and two persistent buffers with sized initial histories and resize reset | Named history, lifetime and aggregate memory budgets |
 | Scene buffers | Sight depth, flow, matte and tracking; estimated, not engine G-buffer | Unified sampling contract with valid/fresh/provenance and camera-space metadata |
 | Geometry | Fullscreen draw and shader-side helpers | Subdivided planes, mesh vertex attributes, transforms, depth and instance drawing |
@@ -115,8 +127,9 @@ An expanded slot pool and name-keyed saved settings remain future work.
 2. Independent pass dimensions/formats, resource-resolution uniforms
    and resize tests are implemented for the two-buffer filter.
    Per-instance logical graph allocation budget is implemented.
-   Generalize the scheduler from that verified contract; aggregate GPU
-   admission remains planned.
+   Named ordered schedules use the same renderer and admission budget.
+   Automatic dependency scheduling, transient resource reuse and
+   aggregate GPU admission remain planned.
 3. Expose scene inputs through one provider-independent API. Never label
    monocular estimated depth, optical flow or derived normals as genuine
    game-engine geometry. Missing/stale inputs must be explicit.

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define HS_GRAPH_MAX_MIB 512
+#define HS_GRAPH_MAX_PASSES 8
 #define HS_GRAPH_MIB UINT64_C(1048576)
 
 static inline uint32_t hs_graph_extent(uint32_t full, uint32_t divisor)
@@ -29,13 +30,15 @@ static inline bool hs_graph_add_surface(uint64_t *total, uint32_t width, uint32_
  * per persistent buffer. Excludes unrelated source/ML/channel resources,
  * graphics-driver overhead and the caller's output target. */
 static inline bool hs_graph_budget_bytes(uint32_t width, uint32_t height,
-                                         uint32_t output_bpp, const uint32_t divisor[2],
-                                         const uint32_t buffer_bpp[2], uint64_t *out)
+                                         uint32_t output_bpp, const uint32_t *divisor,
+                                         const uint32_t *buffer_bpp, unsigned count, uint64_t *out)
 {
+    if (!count || count > HS_GRAPH_MAX_PASSES)
+        return false;
     uint64_t total = 4;
     if (!hs_graph_add_surface(&total, width, height, output_bpp, 3))
         return false;
-    for (unsigned i = 0; i < 2; i++) {
+    for (unsigned i = 0; i < count; i++) {
         uint32_t d = divisor[i];
         if (d != 1 && d != 2 && d != 4 && d != 8)
             return false;

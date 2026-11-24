@@ -1,4 +1,4 @@
-# Two-buffer graph — native OBS effect runtime
+# Persistent render graphs — native OBS effect runtime
 
 ## Available now
 Opt-in fixed three-stage sequence, executed by the production HyperShaderFX filter:
@@ -9,7 +9,60 @@ Opt-in fixed three-stage sequence, executed by the production HyperShaderFX filt
 5. Swap both history targets only after successful rendering.
 
 Existing one-pass effects keep their existing Draw and hs_history paths.
-BufferA and BufferB support independent bounded resolutions and optional RGBA16F storage. There is no generic graph JSON or configurable pass order yet.
+BufferA and BufferB support independent bounded resolutions and optional
+RGBA16F storage. Their existing contract is implemented by the same
+scheduler as the named pass form below.
+
+## Named ordered passes
+
+For new effects, declare one to eight named persistent passes. The order
+uniform is immutable metadata, not a slider. For example, the following
+is one pass declaration (a complete effect also needs its vertex/pixel
+functions, a matching Pass_integrate technique and final Draw technique):
+
+```hlsl
+uniform int hs_pass_integrate_order = 0;
+uniform int hs_pass_integrate_divisor = 2;
+uniform int hs_pass_integrate_format = 1;
+uniform texture2d hs_pass_integrate;
+uniform texture2d hs_pass_integrate_previous;
+uniform float3 hs_pass_integrate_resolution;
+```
+
+Use lowercase identifiers starting with a letter (up to 24 characters,
+letters, digits and underscores). Resource companion suffixes
+`_order`, `_previous`, `_resolution`, `_divisor`, `_format` are
+reserved at the end of pass identifiers. Orders must be unique and
+contiguous from zero, regardless of declaration or technique order.
+For each id, declare a matching `Pass_<id>` technique, the two texture2d
+bindings, and optionally the float3 resolution binding. Use divisor 1,
+2, 4 or 8 and format 0 (source format) or 1 (RGBA16F), as for A/B.
+The final Draw technique renders at full source resolution.
+
+Before each pass, the unsuffixed resource represents the most recently
+completed result: current-frame output for earlier stages, previous
+frame for the current or later stages. The explicit `_previous`
+resource always refers to the previous successful graph frame.
+In Draw all unsuffixed resources refer to current-frame results.
+The full-sized original image, controls, external texture inputs and
+resolution/time built-ins are rebound through the existing renderer.
+This is an ordered schedule with implicit texture sampling dependencies,
+not an automatically sorted DAG or shader-language dependency analysis.
+Every declared stage owns two persistent surfaces. Use explicit
+`_previous` for intentional temporal dependencies.
+
+The loader rejects noncontiguous or duplicate orders, out-of-range
+orders, unknown reserved resource names, missing techniques, incorrect
+resource types and invalid allocation descriptors. A rejected named
+schedule leaves the previous working effect in place. Do not mix the
+named form with BufferA/BufferB. Named schedules are filter-only.
+The existing A/B contract remains supported, not a second renderer.
+
+The native fixture
+[`ordered_pass_graph.effect`](../data/shaders/tests/ordered_pass_graph.effect)
+contains a complete integrate/diffuse/resolve schedule. The regression
+runner also derives an eight-pass chain and six malformed schedules
+inside an isolated copy of the plugin data directory.
 
 ## Contract
 A graph effect must declare all four texture uniforms hs_buffer_a,
@@ -137,8 +190,9 @@ included. An over-budget graph releases its graph targets and passes the
 upstream image through without silently changing its resolution or
 precision. Logging occurs once per rejection episode. When the source
 size fits again, fresh histories are allocated; old state is not reused.
-Existing full-resolution 4K SDR and RGBA16F graphs fit the default
-budget; some 8K graphs now require smaller intermediate buffers.
+Existing two-buffer full-resolution 4K SDR and RGBA16F graphs fit the
+default budget. Larger schedules and some 8K graphs require smaller
+intermediate targets.
 
 The budget calculator also has a dependency-free C test:
 
@@ -178,12 +232,13 @@ the requested allocation. Graph mode remains intentionally opt-in.
 
 ## Current limits
 - Not wired to the standalone source or transition lanes.
-- The legacy hs_history feedback path is separate; graph effects
-  use hs_buffer_a_previous / hs_buffer_b_previous.
+- The single-output hs_history feedback path is separate; graph effects
+  use explicit per-pass previous textures.
 - Real-time full-resolution performance, HDR correctness on other
   GPU drivers, and Windows/macOS were not established by Mesa tests.
-- No arbitrary pass graph, dynamic/adaptive per-pass resolution, general
-  compute shaders, or spatial ML input integration yet.
+- No automatic DAG sorting, transient-target reuse, dynamic/adaptive
+  per-pass resolution, general compute shaders, or spatial ML input
+  integration yet.
 - Graph-enabled audio/animated channels and per-pass audio
   controls need dedicated integration regression coverage.
 

@@ -27,7 +27,7 @@ remain unchanged. This is a shader API change, not a new renderer.
 | `hs_sight_*` | Sight provider-specific signals |
 | `hs_segmentation`, `hs_face_*`, `hs_landmarks` | Existing analysis resources |
 
-The full graph allocation contract lives in [Two-buffer graph](TWO-BUFFER-GRAPH.md).
+The full graph allocation contract, including [named ordered passes](TWO-BUFFER-GRAPH.md#named-ordered-passes), lives in [Persistent render graphs](TWO-BUFFER-GRAPH.md).
 See [shader authoring](../data/shaders/SHADERS.md) for declarations and
 sampling primitives.
 

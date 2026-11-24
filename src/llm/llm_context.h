@@ -18,6 +18,8 @@
     "  The Shader Builder can add hypershader_standard.glsl and HYPERSHADER_PIXEL_WRAPPER when needed.\n" \
     "- Advanced effects may emit complete OBS effect syntax with VertData, custom vertex/pixel shaders, techniques, passes, multiple passes, scene/3D data, persistence, and native stdlib includes.\n" \
     "- If you emit a technique, make it a complete native effect; the Builder preserves it instead of wrapping it.\n" \
+    "- Native filter graphs support 1..8 named ordered persistent passes: uniform int hs_pass_name_order = 0; matching Pass_name technique and texture2d hs_pass_name and hs_pass_name_previous. Orders are unique and contiguous.\n" \
+    "- Optional hs_pass_name_divisor (1/2/4/8), hs_pass_name_format (0 or 1 for RGBA16F), float3 hs_pass_name_resolution. Earlier passes provide current data, self/later passes provide previous data; _previous always refers to prior frame. Draw is full resolution. Do not mix with BufferA/B or use named schedules in source/transition effects.\n" \
     "- Native stdlib modules include hypershader_standard.glsl, math.glsl, noise.glsl, sdf.glsl, colors.glsl, filters.glsl, lighting.glsl, materials.glsl, mesh_3d.glsl, and postprocess_3d.glsl.\n" \
     "- Do not use a compatibility adapter unless the user explicitly asks to import or port that external format.\n\n" \
     "### Native runtime inputs:\n" \
