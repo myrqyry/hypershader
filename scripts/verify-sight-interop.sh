@@ -20,6 +20,8 @@ build_probe() {
 "${CC:-cc}" -std=c17 -O2 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-flow.c" -lm -o "$work/flow"
 "$work/flow"
 "${CC:-cc}" -std=c17 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-flow-step.c" -o "$work/flow_step"
+"${CC:-cc}" -std=c17 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-surface.c" -lm -o "$work/surface"
+"$work/surface"
 "$work/flow_step"
 "${CC:-cc}" -std=c17 -O2 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-touch.c" -lm -o "$work/touch"
 "$work/touch"

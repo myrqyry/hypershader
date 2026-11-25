@@ -49,14 +49,17 @@ int main(int argc,char**argv){
  float flows[3][4]={{.06f,0,1,0},{-.06f,0,1,0},{.06f,0,0,0}};
  gs_texture_t* flow[3];
  for(int i=0;i<3;i++){data=(const uint8_t*)flows[i];flow[i]=gs_texture_create(1,1,GS_RGBA32F,1,&data,0);}
+ float anchors[3][4]={{0,0,1,0},{-.08f,.04f,1,0},{-.08f,.04f,0,0}};
+ gs_texture_t* anchor[3];
+ for(int i=0;i<3;i++){data=(const uint8_t*)anchors[i];anchor[i]=gs_texture_create(1,1,GS_RGBA32F,1,&data,0);}
  auto* target=gs_texrender_create(GS_RGBA,GS_ZS_NONE);auto* stage=gs_stagesurface_create(W,H,GS_RGBA);
- if(!input||!coverage||!boxes||!metadata||!df||!dr||!matte||!flow[0]||!flow[1]||!flow[2]||!target||!stage)return 6;
+ if(!input||!coverage||!boxes||!metadata||!df||!dr||!matte||!flow[0]||!flow[1]||!flow[2]||!anchor[0]||!anchor[1]||!anchor[2]||!target||!stage)return 6;
  auto p=[&](const char*n){return gs_effect_get_param_by_name(effect,n);};
  auto integer=[&](const char*n,int x){if(auto*a=p(n))gs_effect_set_int(a,x);};
  auto real=[&](const char*n,float x){if(auto*a=p(n))gs_effect_set_float(a,x);};
  auto texture=[&](const char*n,gs_texture_t*x){if(auto*a=p(n))gs_effect_set_texture(a,x);};
  auto color=[&](const char*n,float r,float g,float b){vec4 q;vec4_set(&q,r,g,b,1);if(auto*a=p(n))gs_effect_set_vec4(a,&q);};
- auto render=[&](bool present,int count,int a,int b,int style,float time,float mix,bool reverse=false,int c=-1,int depth=0,int motion=0,bool subject=false,float fusion=1){
+ auto render=[&](bool present,int count,int a,int b,int style,float time,float mix,bool reverse=false,int c=-1,int depth=0,int motion=0,bool subject=false,float fusion=1,int history=0,float lock=1){
   Frame result;gs_texrender_reset(target);if(!gs_texrender_begin(target,W,H))return result;
   gs_projection_push();gs_matrix_push();gs_matrix_identity();gs_ortho(0,W,0,H,-100,100);
   gs_blend_state_push();gs_enable_blending(false);
@@ -76,6 +79,8 @@ int main(int argc,char**argv){
   real("hs_sight_depth_present",depth!=0);real("hs_sight_matte_present",subject);
   real("hs_sight_flow_present",motion!=0);real("hs_sight_flow_interval",.033f);
   real("hs_sight_flow_coverage",1);
+  texture("hs_sight_surface_uv",anchor[history>0?history-1:0]);
+  real("hs_sight_surface_present",history>0);real("surface_lock",lock);integer("surface_preview",0);
   real("depth_mix",fusion);real("surface_relief",.5f);real("flow_mix",fusion);
   real("matte_mix",fusion);real("normal_radius",4);real("edge_tolerance",.2f);
   real("mix_a",mix);real("mix_b",mix);real("mix_c",mix);real("scale",8);real("speed",1);real("hs_time",time);
@@ -112,8 +117,16 @@ int main(int argc,char**argv){
  auto cutout=render(true,3,1,0,0,0,1,false,-1,0,0,true);
  bool matte_ok=rgb(cutout,20,20,255,0,0)&&same(cutout,20,42)&&same(cutout,70,42)&&same(cutout,2,2);
  bool bypass=render(true,3,1,0,3,0,1,false,-1,1,1,true,0)==metal;
- bool pass=routing&&order&&fallback&&reassigned&&animated&&third&&styles&&depth_ok&&flow_ok&&matte_ok&&bypass;
- printf("SEMANTIC_MATERIALS_GPU routing=%d order=%d fallback=%d reassigned=%d animated=%d third=%d styles=%d depth=%d flow=%d matte=%d fusion_bypass=%d PASS=%d\n",routing,order,fallback,reassigned,animated,third,styles,depth_ok,flow_ok,matte_ok,bypass,pass);
+ auto pinned=render(true,3,1,0,2,0,1,false,-1,0,0,false,1,1);
+ auto advected=render(true,3,1,0,2,0,1,false,-1,0,0,false,1,2);
+ bool anchored=pinned!=advected&&rgb(advected,70,32,0,255,0)&&same(advected,2,2)&&
+    render(true,3,1,0,2,0,1,false,-1,0,0,false,1,3)==h0&&
+    render(true,3,1,0,2,0,1,false,-1,0,0,false,1,2,0)==h0;
+ // A fully locked coordinate should not also apply instantaneous motion.
+ bool no_double=render(true,3,1,0,2,0,1,false,-1,0,1,false,1,2)==advected;
+ bool pass=routing&&order&&fallback&&reassigned&&animated&&third&&styles&&depth_ok&&flow_ok&&matte_ok&&bypass&&anchored&&no_double;
+ printf("SEMANTIC_MATERIALS_GPU routing=%d order=%d fallback=%d reassigned=%d animated=%d third=%d styles=%d depth=%d flow=%d matte=%d fusion_bypass=%d anchored=%d no_double=%d PASS=%d\n",routing,order,fallback,reassigned,animated,third,styles,depth_ok,flow_ok,matte_ok,bypass,anchored,no_double,pass);
+ for(auto*t:anchor)gs_texture_destroy(t);
  for(auto*t:flow)gs_texture_destroy(t);gs_texture_destroy(matte);gs_texture_destroy(dr);gs_texture_destroy(df);
  gs_stagesurface_destroy(stage);gs_texrender_destroy(target);gs_texture_destroy(metadata);gs_texture_destroy(boxes);gs_texture_destroy(coverage);gs_texture_destroy(input);gs_effect_destroy(effect);
  obs_leave_graphics();obs_shutdown();return pass?0:1;

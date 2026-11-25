@@ -1612,6 +1612,7 @@ static void filter_destroy(void *data)
 	if (s->sight_depth_tex) gs_texture_destroy(s->sight_depth_tex);
     if (s->sight_text_mask) gs_texture_destroy(s->sight_text_mask);
     if (s->sight_flow_texture) gs_texture_destroy(s->sight_flow_texture);
+    if (s->sight_surface_texture) gs_texture_destroy(s->sight_surface_texture);
     hs_sight_upload_rgba32f(&s->sight_text_bounds,0,0,NULL);
     hs_sight_upload_rgba32f(&s->sight_semantic_bounds,0,0,NULL);
     hs_sight_upload_rgba32f(&s->sight_semantic_meta,0,0,NULL);
@@ -3133,12 +3134,29 @@ static void sight_matte_tick(struct hypershader_data *s, bool enabled)
 
 static void sight_flow_tick(struct hypershader_data *s,bool enabled)
 {
-    s->sight_flow_present=false;
+    s->sight_flow_present=false;s->sight_surface_present=false;
+    const bool surface=s->ep_sight_surface_uv||s->ep_sight_surface_present;
+    if(!enabled||!surface){hs_surface_reset(&s->sight_surface);s->sight_surface_uploaded=0;}
     s->sight_flow_interval=0;s->sight_flow_coverage=0;
     if(!enabled||(!s->ep_sight_flow&&!s->ep_sight_flow_present&&
-       !s->ep_sight_flow_interval&&!s->ep_sight_flow_coverage&&!s->ep_sight_flow_step))return;
+       !s->ep_sight_flow_interval&&!s->ep_sight_flow_coverage&&!s->ep_sight_flow_step&&!surface))return;
     sight_flow_v1 snap;
-    if(!hs_sight_flow_read(s->context,&snap))return;
+    uint64_t predecessor=0;bool linked=false;
+    if(!hs_sight_flow_read_linked(s->context,&snap,&predecessor,surface?&linked:NULL))return;
+    if(surface&&linked){
+        hs_surface_update(&s->sight_surface,&snap,predecessor);
+        if(s->sight_surface_uploaded!=snap.sequence){
+            obs_enter_graphics();
+            if(!s->sight_surface_texture)
+                s->sight_surface_texture=gs_texture_create(SIGHT_FLOW_WIDTH,SIGHT_FLOW_HEIGHT,GS_RGBA32F,1,NULL,GS_DYNAMIC);
+            if(s->sight_surface_texture){
+                gs_texture_set_image(s->sight_surface_texture,(const uint8_t*)s->sight_surface.field,SIGHT_FLOW_WIDTH*16,false);
+                s->sight_surface_uploaded=snap.sequence;
+            }
+            obs_leave_graphics();
+        }
+        s->sight_surface_present=s->sight_surface_texture&&s->sight_surface_uploaded==snap.sequence;
+    }else if(surface){hs_surface_reset(&s->sight_surface);s->sight_surface_uploaded=0;}
     if(snap.sequence!=s->sight_flow_sequence) {
         obs_enter_graphics();
         if(!s->sight_flow_texture)
@@ -3158,6 +3176,13 @@ static void sight_flow_tick(struct hypershader_data *s,bool enabled)
             blog(LOG_INFO,"[HyperShaderFX] SIGHT_FLOW_BRIDGE_20261117: 32x18 backward motion grid");
         }
     }
+}
+
+static void sight_surface_bind(struct hypershader_data *s,bool selected)
+{
+    const bool present=selected&&s->sight_surface_present;
+    if(s->ep_sight_surface_present)gs_effect_set_float(s->ep_sight_surface_present,present?1.f:0.f);
+    if(s->ep_sight_surface_uv)gs_effect_set_texture(s->ep_sight_surface_uv,present?s->sight_surface_texture:s->dummy_texture);
 }
 
 static void sight_text_tick(struct hypershader_data *s,bool enabled)
@@ -3635,6 +3660,9 @@ static void shader_load_complete_task(void *param)
         s->ep_sight_flow_interval=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_interval");
         s->ep_sight_flow_coverage=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_coverage");
         s->ep_sight_flow_step=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_step");
+        s->ep_sight_surface_uv=gs_effect_get_param_by_name(s->effect,"hs_sight_surface_uv");
+        s->ep_sight_surface_present=gs_effect_get_param_by_name(s->effect,"hs_sight_surface_present");
+        hs_surface_reset(&s->sight_surface);s->sight_surface_uploaded=0;s->sight_surface_present=false;
         s->ep_sight_text_present = gs_effect_get_param_by_name(s->effect, "hs_sight_text_present");
         s->ep_sight_semantic_present = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_present");
         s->ep_sight_semantic_count = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_count");
@@ -4503,6 +4531,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
     if(s->ep_sight_flow_interval)gs_effect_set_float(s->ep_sight_flow_interval,flow?s->sight_flow_interval:0.f);
     if(s->ep_sight_flow_coverage)gs_effect_set_float(s->ep_sight_flow_coverage,flow?s->sight_flow_coverage:0.f);
     if(s->ep_sight_flow_step)gs_effect_set_float(s->ep_sight_flow_step,0.f);
+    sight_surface_bind(s,sight_selected);
     sight_semantic_bind(s,sight_selected);
     const bool text = sight_selected && s->sight_text_present;
     if(s->ep_sight_text_present)gs_effect_set_float(s->ep_sight_text_present,text?1.f:0.f);
@@ -4879,6 +4908,7 @@ static void graph_bind_builtins(struct hypershader_data *s, uint32_t width, uint
     const bool depth=sight_selected&&s->sight_depth_present&&s->sight_depth_tex;
     if(s->ep_sight_depth)gs_effect_set_texture(s->ep_sight_depth,depth?s->sight_depth_tex:s->dummy_texture);
     if(s->ep_sight_depth_present)gs_effect_set_float(s->ep_sight_depth_present,depth?1.f:0.f);
+    sight_surface_bind(s,sight_selected);
     sight_semantic_bind(s,sight_selected);
     const bool matte=sight_selected&&s->sight_matte_present&&s->sight_matte_tex;
     if(s->ep_sight_matte_present)gs_effect_set_float(s->ep_sight_matte_present,matte?1.f:0.f);

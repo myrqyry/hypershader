@@ -98,7 +98,39 @@ shader.
 
 These independent asynchronous snapshots are spatially aligned, not
 frame-synchronized; the normals and texture mapping are approximate.
-The shader does not reconstruct geometry or persistent surface UVs.
+The shader does not reconstruct metric geometry or true mesh UVs.
+
+### Persistent surface coordinates
+
+The optional **Persistent Surface Coordinates** slider is off by default
+to preserve existing material presets. Set it to 1 for full locking.
+The new linked Sight flow procedure reports the actual predecessor
+sequence of each backward motion snapshot. HyperShader transports a
+32×18 coordinate-offset field once per linked snapshot, not once per
+render or graph pass. A missing predecessor, replacement, resize, or
+skipped snapshot reseeds the field; low-confidence cells and samples
+outside the previous image are rejected. Temporarily unavailable flow
+hides the field, and a subsequently valid linked snapshot can resume it.
+Reload the shader or disable shared Sight snapshots to clear history.
+
+| Native uniform | Meaning |
+| --- | --- |
+| `hs_sight_surface_uv` | RGBA32F 32×18; RG = reference UV minus current UV, B = confidence, A reserved |
+| `hs_sight_surface_present` | float; 1 if a valid linked coordinate field is available |
+
+For custom effects, sample the field at current source UV, then add its
+RG offset to recover the approximate reference coordinate. Respect B
+confidence and the present flag. Older Sight versions retain ordinary
+instantaneous motion but do not provide persistent coordinates. Semantic
+Materials blends region-local coordinates toward scene-relative reference
+coordinates, using square pattern units; fully locked pixels skip the
+instantaneous motion offset. The preview can show encoded displacement
+(RG = 0.5 + 4 × offset, B = confidence) or grayscale confidence.
+
+The field is coarse, shared across the image, and not an instance-specific
+surface parameterization. Occlusion, poor texture, independent snapshot
+timing, missed captures and prolonged motion may cause drift or reseeding.
+It does not preserve hidden geometry or guarantee physical attachment.
 No HDR, cross-platform, or real-time throughput claim is made.
 
 The controlled OpenGL test checks opposite depth slopes, opposite flow
@@ -108,7 +140,10 @@ existing semantic fixture variables plus `SIGHT_MATERIAL_DEPTH_MODEL`,
 `SIGHT_MATERIAL_MATTE_MODEL`, and optionally
 `SIGHT_MATERIAL_FLOW_SHIFT_IMAGE` (same-sized translated image).
 This checks the real depth and matte rendering response, disabling and
-restoring producers, and nonzero measured flow in the composed chain.
+restoring producers, nonzero measured flow, linked history and a retained
+coordinate offset after motion settles in the composed chain. The
+controlled shader test additionally verifies coordinate-lock pattern
+response, invalid-confidence fallback, and no double application of flow.
 
 ## Named texture inputs
 

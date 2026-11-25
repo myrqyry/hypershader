@@ -32,6 +32,7 @@
 #include "mediapipe/mp_wrapper.h"
 #include "mediapipe/face_surface.h"
 #include "interop/sight_touch.h"
+#include "interop/sight_surface.h"
 #include "interop/data_driver.h"
 
 /* Input mode choices */
@@ -496,6 +497,11 @@ struct hypershader_data {
 
 	gs_eparam_t *ep_sight_flow, *ep_sight_flow_present, *ep_sight_flow_interval, *ep_sight_flow_coverage, *ep_sight_flow_step;
 	gs_texture_t *sight_flow_texture;
+    gs_eparam_t *ep_sight_surface_uv,*ep_sight_surface_present;
+    gs_texture_t *sight_surface_texture;
+    struct hs_sight_surface sight_surface;
+    bool sight_surface_present;
+    uint64_t sight_surface_uploaded;
 	uint64_t sight_flow_sequence;
 	float sight_flow_interval, sight_flow_coverage;
 	bool sight_flow_present, sight_flow_announced;

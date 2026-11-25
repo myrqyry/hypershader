@@ -202,8 +202,11 @@ static inline bool hs_sight_depth_read(obs_source_t *consumer,uint64_t known,sig
         out->width&&out->height&&out->width<=SIGHT_DEPTH_MAX_EDGE&&out->height<=SIGHT_DEPTH_MAX_EDGE;
 }
 
-static inline bool hs_sight_flow_read(obs_source_t *consumer,sight_flow_v1 *out)
+static inline bool hs_sight_flow_read_linked(obs_source_t *consumer,sight_flow_v1 *out,
+                                             uint64_t *predecessor,bool *linked)
 {
+    if(predecessor)*predecessor=0;
+    if(linked)*linked=false;
     obs_source_t *producer=hs_sight_local_producer(consumer,"sight_spatial_motion_filter");
     if(!producer)return false;
     out->abi_version=SIGHT_FLOW_ABI_V1;out->struct_size=sizeof(*out);out->sequence=0;
@@ -212,12 +215,27 @@ static inline bool hs_sight_flow_read(obs_source_t *consumer,sight_flow_v1 *out)
     calldata_set_ptr(&params,"snapshot",out);
     bool available=false;
     proc_handler_t *handler=obs_source_get_proc_handler(producer);
-    if(handler&&proc_handler_call(handler,"sight_flow_read_v1",&params))
-        calldata_get_bool(&params,"available",&available);
+    if(handler){
+        bool called=false;
+        if(linked){
+            called=proc_handler_call(handler,"sight_flow_linked_v1",&params);
+            long long previous=0;
+            if(called&&calldata_get_int(&params,"previous_sequence",&previous)&&previous>=0){
+                *linked=true;
+                if(predecessor)*predecessor=(uint64_t)previous;
+            }
+        }
+        if(!called)called=proc_handler_call(handler,"sight_flow_read_v1",&params);
+        if(called)calldata_get_bool(&params,"available",&available);
+    }
     calldata_free(&params);
     const uint32_t width=obs_source_get_base_width(producer),height=obs_source_get_base_height(producer);
     obs_source_release(producer);
     return available&&hs_sight_flow_valid(out,width,height);
+}
+static inline bool hs_sight_flow_read(obs_source_t *consumer,sight_flow_v1 *out)
+{
+    return hs_sight_flow_read_linked(consumer,out,NULL,NULL);
 }
 
 static inline bool hs_sight_text_read(obs_source_t *consumer,sight_text_v1 *out)

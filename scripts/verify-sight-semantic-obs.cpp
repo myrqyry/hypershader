@@ -263,6 +263,7 @@ int main(int argc,char**argv){
      if(!flow)return 15;
      obs_source_filter_add(source,flow);obs_source_filter_add(source,filter);
      set("param_flow_mix",1);set("param_matte_mix",1);set("param_material_a",2);
+     set("param_surface_lock",1);set("param_surface_preview",1);
      sight_flow_v1 snap{};
      auto stationary=[&](){
        if(!hs_sight_flow_read(filter,&snap))return false;
@@ -270,7 +271,16 @@ int main(int argc,char**argv){
        for(auto& c:snap.cells)moving+=c.confidence>.5f&&(std::abs(c.dx)>.002f||std::abs(c.dy)>.002f);
        return moving<5;
      };
-     bool ready=check(stationary,200);
+     auto offset_pixels=[&](bool translated){
+       size_t n=0;
+       for(size_t j=0;j+3<current.size();j+=4)
+         n+=current[j+2]>170&&(translated?current[j]<119:
+             (current[j]>=124&&current[j]<=132&&current[j+1]>=124&&current[j+1]<=132));
+       return n;
+     };
+     bool ready=check([&](){return stationary()&&offset_pixels(false)>1000;},200);
+     uint64_t predecessor=0;bool linked=false;
+     bool link_ready=hs_sight_flow_read_linked(filter,&snap,&predecessor,&linked)&&linked;
      auto image=[&](const char* path){
        auto* cfg=obs_data_create();obs_data_set_string(cfg,"file",path);
        obs_source_update(source,cfg);obs_data_release(cfg);
@@ -283,15 +293,21 @@ int main(int argc,char**argv){
        for(auto& c:snap.cells)moving+=c.confidence>.5f&&(std::abs(c.dx)>.003f||std::abs(c.dy)>.003f);
        return moving>30;
      },120);
+     // Once a translated frame is followed by a stationary pair, the
+     // uploaded offset must remain nonzero: not just instantaneous flow.
+     bool anchored=check([&](){return offset_pixels(true)>1000;},100);
+     bool retained=check([&](){return stationary()&&offset_pixels(true)>1000;},100);
+     printf("SEMANTIC_SURFACE_REAL linked=%d anchored=%d retained=%d pixels=%zu\n",
+          link_ready,anchored,retained,offset_pixels(true));
      obs_source_set_enabled(flow,false);
      bool lost=check([&](){return !hs_sight_flow_read(filter,&snap);});
      image(argv[8]);obs_source_set_enabled(flow,true);
      bool restored=check(stationary,200);
      printf("SEMANTIC_FLOW_REAL ready=%d moved=%d cells=%u lost=%d restored=%d PASS=%d\n",
          ready,moved,moving,lost,restored,ready&&moved&&lost&&restored);
-     fusion_ok=fusion_ok&&ready&&moved&&lost&&restored;
+     fusion_ok=fusion_ok&&ready&&moved&&lost&&restored&&link_ready&&anchored&&retained;
      obs_source_filter_remove(source,flow);obs_source_release(flow);
-     set("param_matte_mix",0);
+     set("param_matte_mix",0);set("param_surface_preview",0);
      // Restore original image before the final no-producer fallback check.
    }
 

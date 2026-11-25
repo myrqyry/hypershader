@@ -17,6 +17,8 @@ uniform texture2d hs_sight_flow;
 uniform float hs_sight_flow_present;
 uniform float hs_sight_flow_interval;
 uniform float hs_sight_flow_coverage;
+uniform texture2d hs_sight_surface_uv;
+uniform float hs_sight_surface_present;
 uniform int category_a; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default 1 @group "Material A (priority 1)"
 uniform int material_a; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic" @default 2 @group "Material A (priority 1)"
 uniform float4 color_a; // @label "Tint" @default "0.24,0.88,0.77,1.0" @group "Material A (priority 1)"
@@ -36,6 +38,8 @@ uniform float surface_relief; // @label "Surface Relief" @min 0 @max 2 @step 0.0
 uniform float normal_radius; // @label "Normal Sample Radius (px)" @min 1 @max 32 @step 1 @default 8 @group "Surface" @show_if "depth_mix > 0"
 uniform float edge_tolerance; // @label "Depth Edge Tolerance" @min 0.01 @max 0.4 @step 0.005 @default 0.12 @group "Surface" @show_if "depth_mix > 0"
 uniform float flow_mix; // @label "Motion Response" @min 0 @max 1 @step 0.01 @default 0.7 @group "Surface"
+uniform float surface_lock; // @label "Persistent Surface Coordinates" @min 0 @max 1 @step 0.01 @default 0 @group "Surface"
+uniform int surface_preview; // @label "Surface Preview" @list "Material,Coordinate offset,Confidence" @default 0 @group "Surface"
 uniform float matte_mix; // @label "Foreground Clipping" @min 0 @max 1 @step 0.01 @default 0 @group "Surface"
 #include "../../stdlib/semantic_regions.glsl"
 sampler_state sourceSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
@@ -84,13 +88,25 @@ float3 shade_material(int mode,float3 original,float3 tint,float2 uv,float4 b,fl
     float phase=hs_time*speed+frac(m.z*0.61803399);
     // Only procedural pattern modes need auxiliary geometry.
     float3 N=float3(0,0,1);
+    float locked=0.0;
+    if(surface_lock>0.0&&hs_sight_surface_present>0.5&&(mode==1||mode==2||mode==3)){
+        float4 anchor=hs_sight_surface_uv.Sample(sourceSampler,uv);
+        locked=saturate(surface_lock)*smoothstep(0.25,0.65,anchor.b);
+        // Reference UV is scene-relative, with square pattern units.
+        float2 reference=(uv+anchor.xy)*float2(resolution.x/resolution.y,1.0);
+        local=lerp(local,reference,locked);
+    }
     bool has_depth=depth_mix>0.0&&hs_sight_depth_present>0.5&&(mode==1||mode==2||mode==3);
     if(has_depth) {
         N=semantic_normal(uv,b,resolution);
-        local=saturate(local+float2(N.x,-N.y)*0.12*saturate(depth_mix));
+        local+=float2(N.x,-N.y)*0.12*saturate(depth_mix);
+        if(locked<=0.0)local=saturate(local);
     }
     if(mode==1||mode==2||mode==3)
-        local=saturate(local+semantic_motion(uv,b));
+        {
+        local+=semantic_motion(uv,b)*(1.0-locked);
+        if(locked<=0.0)local=saturate(local);
+    }
     if(mode==1) {
         float q=floor(saturate(l)*4.0+0.5)/4.0;
         float hatch=step(0.85,frac((local.x+local.y)*scale*2.0))*(1.0-q);
@@ -128,6 +144,11 @@ float4 PSMain(VertData v):TARGET {
     float4 b,m;
     int slot=hs_semantic_route(v.uv,mix_a>0?category_a:-1,mix_b>0?category_b:-1,mix_c>0?category_c:-1,b,m);
     if(slot<0)return original;
+    if(surface_preview>0&&hs_sight_surface_present>0.5){
+        float4 f=hs_sight_surface_uv.Sample(sourceSampler,v.uv);
+        if(surface_preview==2)return float4(f.b,f.b,f.b,original.a);
+        return float4(saturate(0.5+4.0*f.xy),f.b,original.a);
+    }
     int mode=slot==0?material_a:(slot==1?material_b:material_c);
     float4 color=slot==0?color_a:(slot==1?color_b:color_c);
     float blend_amount=slot==0?mix_a:(slot==1?mix_b:mix_c);
