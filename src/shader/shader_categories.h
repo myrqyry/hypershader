@@ -19,6 +19,15 @@ static inline const char *hs_shader_category_role(const char *label)
     return NULL;
 }
 
+/* Runtime collections are deliberate shader folders, not generated previews,
+ * platform copies or test/quarantine storage. Shared by both UI catalogs. */
+static inline bool hs_shader_catalog_collection_allowed(const char *name)
+{
+    return name && *name && name[0] != '.' &&
+           strcmp(name, "previews") != 0 && strcmp(name, "tests") != 0 &&
+           strcmp(name, "platform") != 0 && strcmp(name, "quarantined_shaders") != 0;
+}
+
 /* The installed catalog is one collection deep (root/<folder>/<file>). */
 static inline bool hs_shader_collection(const char *id, char *out, size_t cap)
 {

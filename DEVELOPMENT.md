@@ -105,6 +105,31 @@ The pixel probe checks compiler success and measurable pixel output, **not**
 visual equivalence to WebGL, temporal behavior or real OBS GUI/NVIDIA behavior.
 Do not classify 22 compiled shaders as 22 correct visual effects.
 
+## Live shader catalog
+
+The native preset/category dropdown and Shader Manager discover the current
+installed shader folder, not a fixed inventory. In Qt-enabled OBS, the dock's
+filesystem watcher coalesces changes and refreshes native source properties
+on the UI thread, even when the dock is hidden. New files, removals, renames,
+metadata edits and atomic editor saves are covered. Reopening native properties
+or changing categories also rescans the folder, including in non-Qt builds.
+The watcher does not choose or apply a different shader. Existing saved
+relative-path preset IDs stay stable; a removed active shader is not replaced
+automatically. The runtime picker intentionally offers native .effect files,
+while Shader Manager can also browse its separate draft/import categories.
+Preview, test and platform collections are excluded from the installed library.
+
+Run the regression against a staged build (the harness copies data into a
+disposable directory and does not touch the user's OBS installation):
+
+```sh
+scripts/verify-live-shader-catalog.sh /path/to/hyperShaderFX.so /path/to/data
+```
+
+This exercises real libobs properties, update-properties signals, and the Qt
+watcher/catalog on Linux. Native GUI restart and other OS backends still
+require their own acceptance checks.
+
 ## Verify Shader Manager discovery
 
 The Qt dock browses shader files in `data/shaders/` (loose),

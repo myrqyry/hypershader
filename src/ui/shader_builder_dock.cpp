@@ -6,6 +6,10 @@
 #include "shader_builder_dock.hpp"
 #include "shader_reload_request.hpp"
 #include "shader_catalog.hpp"
+#include "shader_catalog_watch.hpp"
+#include "shader_catalog_refresh.hpp"
+
+extern "C" bool scan_shaders_dir(void);
 #include "shader_code_classification.hpp"
 #include "shader_repair_prompt.hpp"
 
@@ -135,14 +139,28 @@ ShaderBuilderDock::ShaderBuilderDock(QWidget *parent)
 	setupUI();
 	setupCallbacks();
 	setupHotkeys();
+	m_catalogWatch = new ShaderCatalogWatch(getShaderFolderPath(), [this] {
+		// This runs from a debounced Qt timer, never from a property callback
+		// or the render thread. The catalog lock is released before notification.
+		scan_shaders_dir();
+		refreshHyperShaderProperties();
+		refreshManagerLists();
+	}, this);
 
 	obs_data_t *settings = obs_data_create();
 	loadSettings(settings);
 	obs_data_release(settings);
 }
 
+void ShaderBuilderDock::stopCatalogWatch()
+{
+	if (m_catalogWatch)
+		m_catalogWatch->stop();
+}
+
 ShaderBuilderDock::~ShaderBuilderDock()
 {
+	stopCatalogWatch();
 	m_closing.store(true);
 	if (m_compilePollTimer)
 		m_compilePollTimer->stop();
@@ -756,13 +774,8 @@ void ShaderBuilderDock::updateShaderSelection()
 
 QString ShaderBuilderDock::getShaderFolderPath() const
 {
-	char *path = obs_module_file("shaders");
-	QString shaderPath;
-	if (path) {
-		shaderPath = QString(path);
-		bfree(path);
-	}
-	return shaderPath;
+	const char *path = obs_get_module_data_path(obs_current_module());
+	return path && *path ? QDir(QString::fromUtf8(path)).filePath("shaders") : QString();
 }
 
 static bool isShaderBuilderTargetSourceId(const char *id)
@@ -1595,6 +1608,9 @@ void ShaderBuilderDock::loadSettings(obs_data_t *settings)
 void ShaderBuilderDock::onFrontendEvent(obs_frontend_event event)
 {
 	switch (event) {
+	case OBS_FRONTEND_EVENT_EXIT:
+		stopCatalogWatch();
+		break;
 	case OBS_FRONTEND_EVENT_THEME_CHANGED:
 		style()->unpolish(this);
 		style()->polish(this);
@@ -1699,6 +1715,7 @@ static void deferred_dock_callback(obs_frontend_event event, void *data)
 			shaderBuilderDock->update();
 	} else if (event == OBS_FRONTEND_EVENT_EXIT) {
 		if (shaderBuilderDock) {
+			shaderBuilderDock->stopCatalogWatch();
 #if LIBOBS_API_VER >= MAKE_SEMANTIC_VERSION(30, 0, 0)
 			remove_shader_dock_toggle();
 			obs_frontend_remove_dock("ShaderBuilderDock");
@@ -1727,6 +1744,7 @@ extern "C" void unregister_shader_builder_dock(void)
 	remove_deferred_dock_callback();
 
 	if (shaderBuilderDock) {
+		shaderBuilderDock->stopCatalogWatch();
 #if LIBOBS_API_VER >= MAKE_SEMANTIC_VERSION(30, 0, 0)
 		remove_shader_dock_toggle();
 		obs_frontend_remove_dock("ShaderBuilderDock");

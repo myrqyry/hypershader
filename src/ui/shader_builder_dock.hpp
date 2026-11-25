@@ -25,6 +25,7 @@ class QLineEdit;
 class QComboBox;
 class QPushButton;
 class QTimer;
+class ShaderCatalogWatch;
 struct llm_instance;
 
 class ShaderBuilderDock : public QDockWidget {
@@ -42,6 +43,7 @@ class ShaderBuilderDock : public QDockWidget {
 public:
 	explicit ShaderBuilderDock(QWidget *parent = nullptr);
 	~ShaderBuilderDock() override;
+	void stopCatalogWatch();
 
 	QString getShaderOutputPath() const;
 
@@ -116,6 +118,7 @@ private:
 	QLabel *m_compileStatusLabel;
 	QPlainTextEdit *m_compileDiagnostics;
 	QTimer *m_compilePollTimer;
+	ShaderCatalogWatch *m_catalogWatch = nullptr;
 	QPushButton *m_aiRepairButton;
 	obs_source_t *m_validationSource = nullptr;
 	QPushButton *m_openShaderButton;

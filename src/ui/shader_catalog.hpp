@@ -3,6 +3,7 @@
 // Only catalog files; discovery never compiles, applies, or modifies a shader.
 #include <QCryptographicHash>
 #include "../shader/shader_display_name.h"
+#include "../shader/shader_categories.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -68,7 +69,7 @@ inline QList<HyperShaderCatalogEntry> discoverHyperShaderFiles(const QString &sh
     auto addDirectory = [&](const QDir &dir, const QString &category) {
         if (!dir.exists())
             return;
-        for (const QFileInfo &file : dir.entryInfoList(suffixes, QDir::Files | QDir::Readable,
+        for (const QFileInfo &file : dir.entryInfoList(suffixes, QDir::Files | QDir::Readable | QDir::NoSymLinks,
                                                        QDir::Name | QDir::IgnoreCase)) {
             const QString canonical = file.canonicalFilePath();
             if (canonical.isEmpty() || seen.contains(canonical))
@@ -87,6 +88,8 @@ inline QList<HyperShaderCatalogEntry> discoverHyperShaderFiles(const QString &sh
     for (const QFileInfo &child : root.entryInfoList(
              QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable | QDir::NoSymLinks, QDir::Name)) {
         const QString folderName = child.fileName();
+        if (!hs_shader_catalog_collection_allowed(folderName.toUtf8().constData()))
+            continue;
         const QString category = folderName.compare(QStringLiteral("rikiya"), Qt::CaseInsensitive) == 0
             ? QStringLiteral("Rikiya Daily Practice")
             : QStringLiteral("Collection / ") + folderName;

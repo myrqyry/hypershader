@@ -1010,19 +1010,6 @@ void hyper_ui_migrate_legacy_preset(obs_data_t *settings)
 	obs_data_set_int(settings, "preset_schema", 2);
 }
 
-static int find_shader_example_index(const char *path)
-{
-	if (!path || !path[0] || !dynamic_examples)
-		return -1;
-
-	for (size_t i = 0; i < dynamic_examples_count; i++) {
-		if (dynamic_examples[i].file && strcmp(dynamic_examples[i].file, path) == 0)
-			return (int)i;
-	}
-
-	return -1;
-}
-
 /* Scan the user presets directory and populate in-memory lists */
 /* Helper to extract tags from shader file (looks for @tags values) */
 static char *extract_tags(const char *path)
@@ -1431,14 +1418,18 @@ static bool shader_category_changed2(void *priv, obs_properties_t *props,
         return false;
 
     pthread_mutex_lock(&global_metadata_mutex);
-    if (!dynamic_examples_count)
-        scan_shaders_dir_internal();
+    scan_shaders_dir_internal();
     if (!presets_loaded)
         load_user_presets_internal();
     const char *category = obs_data_get_string(settings, "shader_category");
     if (!shader_category_available(category)) {
         category = "all";
         obs_data_set_string(settings, "shader_category", category);
+    }
+    obs_property_t *categories = obs_properties_get(props, "shader_category");
+    if (categories) {
+        obs_property_list_clear(categories);
+        shader_category_fill_options(categories, category);
     }
     shader_picker_fill(obs_properties_get(props, "preset"), category, settings);
     pthread_mutex_unlock(&global_metadata_mutex);
@@ -1943,10 +1934,10 @@ bool create_from_raw_clicked(obs_properties_t *props, obs_property_t *property, 
 
 		/* Load it */
 		obs_data_set_string(settings, "shader_file", full_path.array);
-		int shader_index = find_shader_example_index(full_path.array);
-		obs_data_set_int(settings, "preset",
-				 shader_index >= 0 ? shader_example_preset_id(dynamic_examples[shader_index].id)
-				                   : hyper_ui_custom_preset_index());
+		pthread_mutex_lock(&global_metadata_mutex);
+		int64_t preset_id = shader_ui_preset_for(full_path.array);
+		pthread_mutex_unlock(&global_metadata_mutex);
+		obs_data_set_int(settings, "preset", preset_id);
 		obs_source_update(s->context, settings);
 
 		/* Clear name field to prevent accidental overwrite next time */
@@ -2651,6 +2642,7 @@ bool example_selection_changed2(void *priv, obs_properties_t *props, obs_propert
 	/* Internal/not user-facing: legacy key used only by deprecated example callbacks. */
 	const char *sel = obs_data_get_string(live, "example_list");
 	const char *info = "(no description)";
+	pthread_mutex_lock(&global_metadata_mutex);
 	if (sel && sel[0]) {
 		/* first check dynamic_examples (scanned) */
 		for (size_t i = 0; i < dynamic_examples_count; ++i) {
@@ -2664,6 +2656,7 @@ bool example_selection_changed2(void *priv, obs_properties_t *props, obs_propert
 	obs_property_t *pinfo = obs_properties_get(props, "example_info");
 	if (pinfo)
 		obs_property_set_long_description(pinfo, info);
+	pthread_mutex_unlock(&global_metadata_mutex);
 
 	if (tmp)
 		obs_data_release(tmp);
@@ -2691,14 +2684,16 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 		return false;
 	}
 
-	const char *file = NULL;
+	char *file = NULL;
+	pthread_mutex_lock(&global_metadata_mutex);
 	/* check dynamic list first */
 	for (size_t i = 0; i < dynamic_examples_count; ++i) {
 		if (strcmp(sel, dynamic_examples[i].id) == 0) {
-			file = dynamic_examples[i].file;
+			file = bstrdup(dynamic_examples[i].file);
 			break;
 		}
 	}
+	pthread_mutex_unlock(&global_metadata_mutex);
 	if (!file) {
 		blog(LOG_WARNING, "[HyperShader] Selected example not found");
 		obs_data_release(settings);
@@ -2710,6 +2705,7 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 	if (!path) {
 		blog(LOG_ERROR, "[HyperShader] ┌─ Example load failed");
 		blog(LOG_ERROR, "[HyperShader] └─ File : %s", file);
+		bfree(file);
 		obs_data_release(settings);
 		return false;
 	}
@@ -2717,6 +2713,7 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 	obs_data_set_string(settings, "shader_file", path);
 	// obs_source_update(s->context, settings); // Removed to prevent re-entrant deadlock
 	blog(LOG_INFO, "[HyperShader] Loaded example shader: %s", file);
+	bfree(file);
 
 	bfree(path);
 	obs_data_release(settings);
@@ -3028,8 +3025,9 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 	if (!presets_loaded)
 		load_user_presets_internal();
 
-    if (!dynamic_examples_count)
-        scan_shaders_dir_internal();
+    /* A reopened properties panel must reflect the actual installed folder,
+     * even in a headless/non-Qt build or if an OS watch was unavailable. */
+    scan_shaders_dir_internal();
 
     const char *initial_category = preferred_role;
     if (!shader_category_available(initial_category))
@@ -3238,7 +3236,7 @@ static bool scan_shaders_dir_internal(void)
 		if (collections) {
 			struct dirent *entry;
 			while ((entry = readdir(collections)) != NULL) {
-				if (entry->d_name[0] == '.')
+				if (!hs_shader_catalog_collection_allowed(entry->d_name))
 					continue;
 				char folder[PATH_MAX], relative[PATH_MAX];
 				int f = snprintf(folder, sizeof(folder), "%s/%s", root, entry->d_name);
@@ -3287,12 +3285,13 @@ bool scan_shaders_dir(void)
 char *shaders_dir_from_known(void)
 {
 	const char *obs_data_path = obs_get_module_data_path(obs_current_module());
-	if (obs_data_path) {
+	if (obs_data_path && *obs_data_path) {
 		char candidate[PATH_MAX];
 		snprintf(candidate, sizeof(candidate), "%s/shaders", obs_data_path);
 		struct stat st;
 		if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode))
 			return bstrdup(candidate);
+		return NULL;
 	}
 
 	const char *module_file = obs_get_module_file_name(obs_current_module());
