@@ -167,6 +167,8 @@ typedef DARRAY(struct shader_param_meta) shader_meta_t;
 
 struct shader_capabilities {
 	bool audio_required;
+	bool sight_required;
+	bool shared_analysis_required;
 	bool mediapipe_enabled;
 	bool mediapipe_has_modes;
 };
@@ -607,6 +609,37 @@ struct hypershader_data {
 #endif
 };
 
+/* Exact native audio ABI, shared by parameter ownership and dependency
+ * discovery. An arbitrary audio_gain control is not an audio input. */
+static inline bool hs_audio_uniform(const char *name)
+{
+	if (!name)
+		return false;
+	/* Reserve precisely the native audio signals, never arbitrary audio_*
+	 * controls (audio_gain, audio_attack and other shader-owned parameters). */
+	static const char *const audio_names[] = {
+		"audio_level", "audio_peak", "audio_beat", "audio_envelope",
+		"audio_kick", "audio_snare", "audio_flux", "audio_bpm",
+		"audio_beat_phase", "audio_bar_phase", "audio_beat_confidence",
+		"audio_reaction_state"
+	};
+	for (size_t i = 0; i < sizeof(audio_names) / sizeof(audio_names[0]); ++i)
+		if (strcmp(name, audio_names[i]) == 0)
+			return true;
+	if (strncmp(name, "audio_band", 10) == 0 &&
+	    name[10] >= '0' && name[10] <= '7' && name[11] == '\0')
+		return true;
+	return false;
+}
+
+static inline bool hs_shared_analysis_uniform(const char *name)
+{
+	return name && (strcmp(name, "hs_face_present") == 0 ||
+		strcmp(name, "hs_face_surface") == 0 || strcmp(name, "hs_face_triangles") == 0 ||
+		strcmp(name, "hs_landmarks") == 0 || strcmp(name, "hs_reference_landmarks") == 0 ||
+		strcmp(name, "hs_segmentation") == 0);
+}
+
 static inline bool is_builtin_uniform(const char *name)
 {
 	if (!name)
@@ -631,19 +664,7 @@ static inline bool is_builtin_uniform(const char *name)
 		return true;
 	if (strncmp(name, "hs_input", 8) == 0)
 		return true; /* hs_inputX, hs_input_time, hs_input_resolution */
-	/* Reserve precisely the native audio signals, never arbitrary audio_*
-	 * controls (audio_gain, audio_attack and other shader-owned parameters). */
-	static const char *const audio_names[] = {
-		"audio_level", "audio_peak", "audio_beat", "audio_envelope",
-		"audio_kick", "audio_snare", "audio_flux", "audio_bpm",
-		"audio_beat_phase", "audio_bar_phase", "audio_beat_confidence",
-		"audio_reaction_state"
-	};
-	for (size_t i = 0; i < sizeof(audio_names) / sizeof(audio_names[0]); ++i)
-		if (strcmp(name, audio_names[i]) == 0)
-			return true;
-	if (strncmp(name, "audio_band", 10) == 0 &&
-	    name[10] >= '0' && name[10] <= '7' && name[11] == '\0')
+	if (hs_audio_uniform(name))
 		return true;
 	if (strcmp(name, "ViewProj") == 0)
 		return true;
@@ -655,9 +676,7 @@ static inline bool is_builtin_uniform(const char *name)
 		return true;
 	if (strncmp(name, "hs_sight_", 9) == 0)
 		return true; /* Sight-owned tracking snapshots, never editable metadata sliders */
-	if (strcmp(name, "hs_face_present") == 0 || strcmp(name, "hs_face_surface") == 0 ||
-	    strcmp(name, "hs_face_triangles") == 0 || strcmp(name, "hs_landmarks") == 0 ||
-	    strcmp(name, "hs_reference_landmarks") == 0 || strcmp(name, "hs_segmentation") == 0)
+	if (hs_shared_analysis_uniform(name))
 		return true;
 	if (strcmp(name, "hs_history") == 0)
 		return true;

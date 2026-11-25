@@ -15,7 +15,7 @@ include 545e0df2ddcfb2f11f157159ce03af8657b1046f data/shaders/SHADERS.md
 include 3caf8512c8b32edf73d7fc2907c56e332264c46e data/shaders/root/audio_demo.effect
 include fed51679c0e462479a97f5d6eff9f7c99e274258 data/shaders/root/filter.afterimage_press.effect
 include 53857e1150d4fa34f11738c09155cb34ac63c482 data/shaders/root/filter.contact_filaments.effect
-include d6d3299e6d0d1bd3555572dee734964cd4622da9 data/shaders/root/filter.face_mesh_wireframe.effect
+include 49b30323a9c035e8532ee6341b0c41b85a60c3a8 data/shaders/root/filter.face_mesh_wireframe.effect
 include fb613e5c7213278e31b6edfb83ed5999adb5457c data/shaders/root/filter.ink_currents.effect
 include eb640c2ca7cc08f95365d3da5df05cd0f516b946 data/shaders/root/filter.liquid_light.effect
 include 55f735af059be6c2a3ce7a71cc5f088a54910202 data/shaders/root/filter.reactive_sprite.effect

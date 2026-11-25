@@ -105,6 +105,34 @@ The pixel probe checks compiler success and measurable pixel output, **not**
 visual equivalence to WebGL, temporal behavior or real OBS GUI/NVIDIA behavior.
 Do not classify 22 compiled shaders as 22 correct visual effects.
 
+## Shader-driven input controls
+
+The first controls after Category, Shader and Custom File are the external
+inputs requested by the successfully loaded effect. Audio, Sight and native
+analysis, then numbered or named texture slots precede shader parameters and
+global overrides. Unused controls are hidden. Texture slots selecting Audio
+Spectrum also reveal the audio-source selector immediately.
+
+The existing recursive metadata scanner recognizes executable native audio
+and Sight identifiers and the audio_band helper, as well as explicit audio
+annotations and the existing named/numbered texture contract. Shared face
+and segmentation resources can use Sight or native analysis; the user's
+provider selection is not changed automatically. Standard-library uniform
+declarations, comments and shader-owned audio_gain parameters are not input
+requests. This is conservative lexical discovery, not shader call-graph
+analysis. The existing Sight channel inventory and audio opt-in remain intact.
+
+```sh
+scripts/verify-input-ui-obs.sh /path/to/hyperShaderFX.so /path/to/data
+```
+
+The isolated regression compiles real effects and switches a real filter
+between different input contracts, checks actual libobs property order and
+visibility, named labels, and audio-spectrum selection. It also verifies the
+Face Mesh Wireframe shader's native sampler syntax. No models are required
+to exercise the UI; inference quality and ordinary OBS GUI operation are
+separate checks.
+
 ## Live shader catalog
 
 The native preset/category dropdown and Shader Manager discover the current

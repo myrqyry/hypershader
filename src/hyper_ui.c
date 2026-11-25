@@ -135,6 +135,7 @@ static void load_user_presets(void);
 static void load_user_presets_internal(void);
 
 static void sync_ui_visibility(struct hypershader_data *s, obs_properties_t *props, obs_data_t *settings);
+static void sync_input_visibility(struct hypershader_data *s, obs_properties_t *props, obs_data_t *settings);
 
 #ifdef HAVE_SHADER_BUILDER_DOCK
 extern void shader_builder_dock_show(void);
@@ -817,7 +818,7 @@ void properties_add_audio_settings(obs_properties_t *props, struct hypershader_d
 {
 	obs_properties_add_bool(props, "enable_sound", obs_module_text("EnableSound"));
 	obs_property_set_long_description(obs_properties_get(props, "enable_sound"),
-						"Enables audio input for shaders that declare audio-reactive parameters.");
+						"Enable audio input for this shader. Select an audio source below; the source-mode audio presets can also use the OBS mix.");
 
 	obs_property_t *audio_source = obs_properties_add_list(props, "audio_source", obs_module_text("AudioSource"),
 								 OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
@@ -826,11 +827,19 @@ void properties_add_audio_settings(obs_properties_t *props, struct hypershader_d
 
 }
 
-void properties_add_advanced_settings(obs_properties_t *props, struct hypershader_data *s)
+static bool sight_provider_changed(void *priv, obs_properties_t *props, obs_property_t *p,
+                                   obs_data_t *settings)
 {
-	UNUSED_PARAMETER(s);
+	UNUSED_PARAMETER(p);
+	sync_input_visibility(priv, props, settings);
+	return true;
+}
+
+void properties_add_sight_settings(obs_properties_t *props, struct hypershader_data *s)
+{
 	obs_property_t *sight_enable = obs_properties_add_bool(
-		props, "sight_use_tracking", "Use Sight shared snapshots (tracking, matte, text, flow, depth)");
+		props, "sight_use_tracking", "Use Sight");
+	obs_property_set_modified_callback2(sight_enable, sight_provider_changed, s);
 	obs_property_set_long_description(sight_enable,
 		"Opt in to Face/Body/Hand Motion data published by Latent Lab Sight in the same OBS process. "
 		"Requires Sight's producer filter on the chosen channel. Add one enabled Subject Cutout in Original source diagnostic view and/or Spatial Motion in Original source mode on this source. No second MediaPipe inference. "
@@ -838,17 +847,22 @@ void properties_add_advanced_settings(obs_properties_t *props, struct hypershade
 	obs_data_t *sight_settings = s && s->context ? obs_source_get_settings(s->context) : NULL;
 	const char *saved_channel = sight_settings ? obs_data_get_string(sight_settings, "sight_tracking_channel") : "face";
 	obs_property_t *sight_channel = obs_properties_add_list(props, "sight_tracking_channel",
-		"Sight Tracking Channel", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+		"Sight Channel", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	if (!hs_sight_populate_channels(sight_channel, saved_channel)) {
 		/* Older/missing producer module: retain old manual entry behavior. */
 		obs_properties_remove_by_name(props, "sight_tracking_channel");
 		sight_channel = obs_properties_add_text(props, "sight_tracking_channel",
-			"Sight Tracking Channel", OBS_TEXT_DEFAULT);
+			"Sight Channel", OBS_TEXT_DEFAULT);
 	}
 	if (sight_settings) obs_data_release(sight_settings);
 	obs_property_set_long_description(sight_channel,
 		"Choose a compatible configured Sight channel. Reopen properties to update the inventory. Older Sight modules accept a channel name manually. "
 		"Coordinates refer to the Sight producer's camera, not automatically to this source.");
+}
+
+void properties_add_advanced_settings(obs_properties_t *props, struct hypershader_data *s)
+{
+	UNUSED_PARAMETER(s);
 	obs_property_t *mp_graph_prop = obs_properties_add_list(props, "mp_controlnet_model", "MediaPipe Graph",
 								OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(mp_graph_prop, "Face Region Mask (approximate)", MP_GRAPH_SELFIE_SEGMENTATION);
@@ -1532,26 +1546,71 @@ static void set_property_visible_if_present(obs_properties_t *props, const char 
 }
 
 /* Centralized UI Visibility Management */
-static void sync_ui_visibility(struct hypershader_data *s, obs_properties_t *props, obs_data_t *settings)
+static void sync_input_visibility(struct hypershader_data *s, obs_properties_t *props, obs_data_t *settings)
 {
 	if (!settings || !props)
 		return;
-
-	int custom_index = 1 + user_preset_count;
-	int64_t current_preset = obs_data_get_int(settings, "preset");
-	bool is_custom = (current_preset == custom_index);
 	bool audio_required = false;
+	bool sight_required = false;
+	bool channels[CHANNEL_COUNT] = {0};
 	bool mediapipe_enabled = false;
 	bool mediapipe_has_modes = false;
 	if (s) {
 		pthread_mutex_lock(&s->mutex);
 		if (s->metadata_rc) {
 			audio_required = s->metadata_rc->capabilities.audio_required;
+			sight_required = s->metadata_rc->capabilities.sight_required ||
+				s->metadata_rc->capabilities.shared_analysis_required;
 			mediapipe_enabled = s->metadata_rc->capabilities.mediapipe_enabled;
 			mediapipe_has_modes = s->metadata_rc->capabilities.mediapipe_has_modes;
 		}
+		memcpy(channels, s->channel_required, sizeof(channels));
 		pthread_mutex_unlock(&s->mutex);
+	}
+	for (int i = 0; i < CHANNEL_COUNT; i++) {
+		char key[64];
+		snprintf(key, sizeof(key), "channel%d_group", i);
+		bool channel_needed = channels[i] &&
+			(!s || s->kind != HYPER_KIND_TRANSITION || i >= 2);
+		set_property_visible_if_present(props, key, channel_needed);
 
+		char type_key[64];
+		snprintf(type_key, sizeof(type_key), "channel%d_type", i);
+		int ch_type = (int)obs_data_get_int(settings, type_key);
+		if (channel_needed && ch_type == 3)
+			audio_required = true;
+		char file_key[64], src_key[64];
+		snprintf(file_key, sizeof(file_key), "channel%d_file", i);
+		snprintf(src_key, sizeof(src_key), "channel%d_source", i);
+        obs_property_t *channel_group = obs_properties_get(props, key);
+        obs_properties_t *inputs = channel_group
+            ? obs_property_group_content(channel_group) : NULL;
+        set_property_visible_if_present(inputs, file_key, channel_needed && ch_type == 1);
+        set_property_visible_if_present(inputs, src_key, channel_needed && ch_type == 2);
+	}
+
+	set_property_visible_if_present(props, "enable_sound", audio_required);
+	set_property_visible_if_present(props, "audio_source", audio_required);
+	set_property_visible_if_present(props, "sight_use_tracking", sight_required);
+	set_property_visible_if_present(props, "sight_tracking_channel", sight_required);
+	set_property_visible_if_present(props, "mp_controlnet_model",
+				       !obs_data_get_bool(settings, "sight_use_tracking") &&
+				       mediapipe_enabled && mediapipe_has_modes);
+}
+
+static void sync_ui_visibility(struct hypershader_data *s, obs_properties_t *props, obs_data_t *settings)
+{
+	if (!settings || !props)
+		return;
+	int custom_index = 1 + user_preset_count;
+	int64_t current_preset = obs_data_get_int(settings, "preset");
+	bool is_custom = (current_preset == custom_index);
+	bool audio_required = false;
+	if (s) {
+		pthread_mutex_lock(&s->mutex);
+		if (s->metadata_rc)
+			audio_required = s->metadata_rc->capabilities.audio_required;
+		pthread_mutex_unlock(&s->mutex);
 	}
 	set_property_visible_if_present(props, "global_overrides_group", true);
 	set_property_visible_if_present(props, "preset", true);
@@ -1584,30 +1643,7 @@ static void sync_ui_visibility(struct hypershader_data *s, obs_properties_t *pro
 		obs_property_next(&prop_ptr);
 	}
 
-	for (int i = 0; i < CHANNEL_COUNT; i++) {
-		char key[64];
-		snprintf(key, sizeof(key), "channel%d_group", i);
-		bool channel_needed = s ? s->channel_required[i] : true;
-		set_property_visible_if_present(props, key, channel_needed);
-
-		char type_key[64];
-		snprintf(type_key, sizeof(type_key), "channel%d_type", i);
-		int ch_type = (int)obs_data_get_int(settings, type_key);
-		char file_key[64], src_key[64];
-		snprintf(file_key, sizeof(file_key), "channel%d_file", i);
-		snprintf(src_key, sizeof(src_key), "channel%d_source", i);
-        obs_property_t *channel_group = obs_properties_get(props, key);
-        obs_properties_t *inputs = channel_group
-            ? obs_property_group_content(channel_group) : NULL;
-        set_property_visible_if_present(inputs, file_key, channel_needed && ch_type == 1);
-        set_property_visible_if_present(inputs, src_key, channel_needed && ch_type == 2);
-	}
-
-	set_property_visible_if_present(props, "enable_sound", audio_required);
-	set_property_visible_if_present(props, "audio_source", audio_required);
-	set_property_visible_if_present(props, "mp_controlnet_model",
-				       !obs_data_get_bool(settings, "sight_use_tracking") &&
-				       mediapipe_enabled && mediapipe_has_modes);
+	sync_input_visibility(s, props, settings);
 }
 
 static const char *get_name(void *unused)
@@ -2758,7 +2794,6 @@ bool log_audio_mixes_clicked(obs_properties_t *props, obs_property_t *property, 
 
 bool channel_type_changed(void *priv, obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
 {
-	UNUSED_PARAMETER(priv);
 	const char *name = obs_property_name(p);
 
 	/* name is like "channel0_type" */
@@ -2770,14 +2805,10 @@ bool channel_type_changed(void *priv, obs_properties_t *props, obs_property_t *p
 		return false;
 	}
 
-	long long val = obs_data_get_int(settings, name);
-
-	char key_file[32], key_source[32];
-	snprintf(key_file, sizeof(key_file), "channel%d_file", idx);
-	snprintf(key_source, sizeof(key_source), "channel%d_source", idx);
-
-	obs_property_set_visible(obs_properties_get(props, key_file), val == 1);
-	obs_property_set_visible(obs_properties_get(props, key_source), val == 2);
+	obs_properties_t *root = props;
+	while (obs_properties_get_parent(root))
+		root = obs_properties_get_parent(root);
+	sync_input_visibility(priv, root, settings);
 
 	return true;
 }
@@ -3065,6 +3096,13 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 	pthread_mutex_unlock(&global_metadata_mutex);
 
 	properties_add_header(props);
+
+	/* External data bindings come first; artistic controls follow. */
+	properties_add_audio_settings(props, s);
+	properties_add_sight_settings(props, s);
+	properties_add_advanced_settings(props, s);
+	properties_add_input_settings(props, s);
+
 	obs_properties_add_button2(props, "open_shader_builder", obs_module_text("OpenShaderBuilder"),
 				   open_shader_dock_clicked, s);
 
@@ -3086,16 +3124,6 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 						      "Changing this requires removing and re-adding the source.");
 	}
 
-	/* Sound shader controls */
-	/* Audio / Advanced Settings */
-	properties_add_audio_settings(props, s);
-
-	properties_add_advanced_settings(props, s);
-
-	/* Channel samplers (hs_input0..hs_input3) — grouped per-channel */
-	/* Image Channel Inputs */
-	properties_add_input_settings(props, s);
-
 	/* Match the current shader on the FIRST opening, not just after a
 	 * preset callback. This is read-only: never update source settings or
 	 * refresh the properties tree while building it. */
@@ -3112,6 +3140,8 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 		set_property_visible_if_present(props, "shader_file", false);
 		set_property_visible_if_present(props, "enable_sound", false);
 		set_property_visible_if_present(props, "audio_source", false);
+		set_property_visible_if_present(props, "sight_use_tracking", false);
+		set_property_visible_if_present(props, "sight_tracking_channel", false);
 		set_property_visible_if_present(props, "mp_controlnet_model", false);
 	}
 

@@ -132,16 +132,16 @@ static char *metadata_include_directive(char *line, bool *in_block_comment)
     return NULL;
 }
 
-/* Only executable shader references should expose optional texture slots.
+/* Executable shader references expose external data inputs.
  * A substring-only scan counted stdlib uniform declarations,
  * comments, and GLSL metadata includes; every Shabon source then falsely
  * claimed active channels even though the shader never samples them.
  * Track block comments across lines and match full identifiers only.
- * Included helper FUNCTIONS still count if they actually reference channels. */
-static void metadata_scan_channel_use(const char *line, bool *in_block_comment,
-                                      bool *channel_usage)
+ * Included helper functions count if they reference native inputs. */
+static void metadata_scan_input_use(const char *line, bool *in_block_comment,
+                                    bool *channel_usage, struct shader_capabilities *caps)
 {
-    if (!channel_usage || !line || !in_block_comment)
+    if (!line || !in_block_comment)
         return;
     char code[1024];
     size_t out = 0;
@@ -183,17 +183,32 @@ static void metadata_scan_channel_use(const char *line, bool *in_block_comment,
         (strncmp(active, "uniform", 7) == 0 &&
          isspace((unsigned char)active[7])))
         return;
-    for (const char *cursor = active; *cursor; cursor++) {
-        if ((strncmp(cursor, "hs_input", 8) != 0 &&
-             strncmp(cursor, "iChannel", 8) != 0) ||
-            cursor[8] < '0' || cursor[8] > '3')
+    for (const char *cursor = active; *cursor;) {
+        if (!isalpha((unsigned char)*cursor) && *cursor != '_') {
+            ++cursor;
             continue;
-        const unsigned char preceding = (cursor == active) ? 0 : (unsigned char)cursor[-1];
-        const unsigned char following = (unsigned char)cursor[9];
-        if ((isalnum(preceding) || preceding == '_') ||
-            (isalnum(following) || following == '_'))
+        }
+        const char *start = cursor++;
+        while (isalnum((unsigned char)*cursor) || *cursor == '_')
+            ++cursor;
+        const size_t n = (size_t)(cursor - start);
+        if (n >= 128)
             continue;
-        channel_usage[cursor[8] - '0'] = true;
+        char token[128];
+        memcpy(token, start, n);
+        token[n] = '\0';
+        if (channel_usage && n == 9 &&
+            (strncmp(token, "hs_input", 8) == 0 || strncmp(token, "iChannel", 8) == 0) &&
+            token[8] >= '0' && token[8] <= '3')
+            channel_usage[token[8] - '0'] = true;
+        if (caps) {
+            if (hs_audio_uniform(token) || strcmp(token, "audio_band") == 0)
+                caps->audio_required = true;
+            if (strncmp(token, "hs_sight_", 9) == 0)
+                caps->sight_required = true;
+            if (hs_shared_analysis_uniform(token))
+                caps->shared_analysis_required = true;
+        }
     }
 }
 
@@ -290,7 +305,7 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 
 	while (fgets(line, sizeof(line), f)) {
         const bool started_in_block = in_channel_block_comment;
-        metadata_scan_channel_use(line, &in_channel_block_comment, channel_usage);
+        metadata_scan_input_use(line, &in_channel_block_comment, channel_usage, capabilities);
 
 		char *inc = metadata_include_directive(line, &in_include_block_comment);
 		if (inc) {
