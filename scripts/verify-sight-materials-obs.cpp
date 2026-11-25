@@ -124,8 +124,26 @@ int main(int argc,char**argv){
     render(true,3,1,0,2,0,1,false,-1,0,0,false,1,2,0)==h0;
  // A fully locked coordinate should not also apply instantaneous motion.
  bool no_double=render(true,3,1,0,2,0,1,false,-1,0,1,false,1,2)==advected;
- bool pass=routing&&order&&fallback&&reassigned&&animated&&third&&styles&&depth_ok&&flow_ok&&matte_ok&&bypass&&anchored&&no_double;
- printf("SEMANTIC_MATERIALS_GPU routing=%d order=%d fallback=%d reassigned=%d animated=%d third=%d styles=%d depth=%d flow=%d matte=%d fusion_bypass=%d anchored=%d no_double=%d PASS=%d\n",routing,order,fallback,reassigned,animated,third,styles,depth_ok,flow_ok,matte_ok,bypass,anchored,no_double,pass);
+ auto pearl=render(true,3,1,0,5,0,1,false,-1,1);
+ auto glaze=render(true,3,1,0,6,0,1,false,-1,1);
+ auto circuit=render(true,3,1,0,7,0,1,false,-1,1);
+ auto relief=render(true,3,1,0,8,0,1,false,-1,1);
+ bool new_styles=pearl!=solid&&glaze!=solid&&circuit!=solid&&relief!=solid&&
+    pearl!=glaze&&pearl!=circuit&&pearl!=relief&&glaze!=circuit&&glaze!=relief&&circuit!=relief;
+ for(const auto* f:{&pearl,&glaze,&circuit,&relief})
+    new_styles=new_styles&&rgb(*f,70,32,0,255,0)&&same(*f,2,2);
+ bool surface_styles=true;
+ for(int mode=5;mode<=8;++mode){
+    auto plain=render(true,3,1,0,mode,0,1);
+    auto locked=render(true,3,1,0,mode,0,1,false,-1,0,0,false,1,2);
+    auto locked0=render(true,3,1,0,mode,0,1,false,-1,0,0,false,1,1);
+    surface_styles=surface_styles&&plain!=solid&&locked!=locked0&&same(locked,2,2)&&
+      render(true,3,1,0,mode,0,1,false,-1,0,0,false,1,2,0)==plain;
+ }
+ bool animation=render(true,3,1,0,7,.37f,1)!=render(true,3,1,0,7,0,1)&&
+     render(true,3,1,0,8,.37f,1)!=render(true,3,1,0,8,0,1);
+ bool pass=routing&&order&&fallback&&reassigned&&animated&&third&&styles&&depth_ok&&flow_ok&&matte_ok&&bypass&&anchored&&no_double&&new_styles&&surface_styles&&animation;
+ printf("SEMANTIC_MATERIALS_GPU routing=%d order=%d fallback=%d reassigned=%d animated=%d third=%d styles=%d depth=%d flow=%d matte=%d fusion_bypass=%d anchored=%d no_double=%d new_styles=%d surface_styles=%d new_animation=%d PASS=%d\n",routing,order,fallback,reassigned,animated,third,styles,depth_ok,flow_ok,matte_ok,bypass,anchored,no_double,new_styles,surface_styles,animation,pass);
  for(auto*t:anchor)gs_texture_destroy(t);
  for(auto*t:flow)gs_texture_destroy(t);gs_texture_destroy(matte);gs_texture_destroy(dr);gs_texture_destroy(df);
  gs_stagesurface_destroy(stage);gs_texrender_destroy(target);gs_texture_destroy(metadata);gs_texture_destroy(boxes);gs_texture_destroy(coverage);gs_texture_destroy(input);gs_effect_destroy(effect);

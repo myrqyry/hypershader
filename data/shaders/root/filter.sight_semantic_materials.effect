@@ -20,15 +20,15 @@ uniform float hs_sight_flow_coverage;
 uniform texture2d hs_sight_surface_uv;
 uniform float hs_sight_surface_present;
 uniform int category_a; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default 1 @group "Material A (priority 1)"
-uniform int material_a; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic" @default 2 @group "Material A (priority 1)"
+uniform int material_a; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic,Iridescence,Ceramic glaze,Emissive circuitry,Animated relief" @default 2 @group "Material A (priority 1)"
 uniform float4 color_a; // @label "Tint" @default "0.24,0.88,0.77,1.0" @group "Material A (priority 1)"
 uniform float mix_a; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.9 @group "Material A (priority 1)"
 uniform int category_b; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default 0 @group "Material B (priority 2)"
-uniform int material_b; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic" @default 3 @group "Material B (priority 2)"
+uniform int material_b; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic,Iridescence,Ceramic glaze,Emissive circuitry,Animated relief" @default 3 @group "Material B (priority 2)"
 uniform float4 color_b; // @label "Tint" @default "0.85,0.56,0.32,1.0" @group "Material B (priority 2)"
 uniform float mix_b; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.85 @group "Material B (priority 2)"
 uniform int category_c; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default -1 @group "Material C (priority 3)"
-uniform int material_c; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic" @default 1 @group "Material C (priority 3)"
+uniform int material_c; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic,Iridescence,Ceramic glaze,Emissive circuitry,Animated relief" @default 1 @group "Material C (priority 3)"
 uniform float4 color_c; // @label "Tint" @default "0.68,0.51,0.9,1.0" @group "Material C (priority 3)"
 uniform float mix_c; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.85 @group "Material C (priority 3)"
 uniform float scale; // @label "Pattern Scale" @min 2 @max 48 @step 1 @default 8 @group "Pattern"
@@ -88,21 +88,22 @@ float3 shade_material(int mode,float3 original,float3 tint,float2 uv,float4 b,fl
     float phase=hs_time*speed+frac(m.z*0.61803399);
     // Only procedural pattern modes need auxiliary geometry.
     float3 N=float3(0,0,1);
+    bool procedural=(mode>=1&&mode<=3)||(mode>=5&&mode<=8);
     float locked=0.0;
-    if(surface_lock>0.0&&hs_sight_surface_present>0.5&&(mode==1||mode==2||mode==3)){
+    if(surface_lock>0.0&&hs_sight_surface_present>0.5&&procedural){
         float4 anchor=hs_sight_surface_uv.Sample(sourceSampler,uv);
         locked=saturate(surface_lock)*smoothstep(0.25,0.65,anchor.b);
         // Reference UV is scene-relative, with square pattern units.
         float2 reference=(uv+anchor.xy)*float2(resolution.x/resolution.y,1.0);
         local=lerp(local,reference,locked);
     }
-    bool has_depth=depth_mix>0.0&&hs_sight_depth_present>0.5&&(mode==1||mode==2||mode==3);
+    bool has_depth=depth_mix>0.0&&hs_sight_depth_present>0.5&&procedural;
     if(has_depth) {
         N=semantic_normal(uv,b,resolution);
         local+=float2(N.x,-N.y)*0.12*saturate(depth_mix);
         if(locked<=0.0)local=saturate(local);
     }
-    if(mode==1||mode==2||mode==3)
+    if(procedural)
         {
         local+=semantic_motion(uv,b)*(1.0-locked);
         if(locked<=0.0)local=saturate(local);
@@ -128,6 +129,45 @@ float3 shade_material(int mode,float3 original,float3 tint,float2 uv,float4 b,fl
             reflection=lerp(reflection,saturate(spec+0.4*fresnel),saturate(depth_mix));
         }
         return saturate(tint*(0.16+0.7*l+0.12*brushed)+reflection*0.55);
+    }
+    if(mode>=5&&mode<=8) {
+        N=normalize(lerp(float3(0,0,1),N,saturate(depth_mix)));
+        float3 L=normalize(float3(cos(phase*0.65),0.55,0.9));
+        float3 H=normalize(L+float3(0,0,1));
+        float diffuse=0.3+0.7*saturate(dot(N,L));
+        float spec=pow(saturate(dot(N,H)),32.0);
+        float grazing=pow(1.0-saturate(N.z),2.0);
+        float2 p=local*scale;
+        if(mode==5) {
+            float film=(1.0-saturate(N.z))*2.4+0.17*sin(p.x*2.0+p.y*1.7)+0.08*p.y;
+            float3 spectrum=0.5+0.5*cos(6.2831853*(film+float3(0,0.33333,0.66667)));
+            return saturate(lerp(tint,spectrum,0.72)*(0.3+0.5*l+0.3*diffuse)+0.35*spec);
+        }
+        if(mode==6) {
+            float grain=0.5+0.5*sin(p.x*15.0+sin(p.y*13.0))*sin(p.y*17.0);
+            float vein=pow(saturate(0.5+0.5*sin(p.x*3.0+p.y*2.0+sin(p.y*2.7))),16.0);
+            float3 body=lerp(tint*0.22,lerp(tint,float3(1,1,1),0.55),0.3+0.7*l);
+            return saturate(body*diffuse*(0.92+0.08*grain)*(1.0-0.35*vein)+spec*0.7+grazing*0.2);
+        }
+        if(mode==7) {
+            float2 cell=frac(p)-0.5;
+            float2 tile=floor(p);
+            float branch=frac(sin(dot(tile,float2(12.9898,78.233)))*43758.5453);
+            float rail=min(abs(cell.x),abs(cell.y));
+            float trace=1.0-smoothstep(0.025,0.085,rail);
+            float pad=1.0-smoothstep(0.09,0.15,length(cell));
+            float pulse=pow(saturate(0.5+0.5*sin(6.2831853*(p.x*0.2+p.y*0.35-phase))),8.0);
+            float emission=saturate(max(trace*(0.35+0.65*pulse),pad*(0.4+0.6*branch)));
+            return saturate(tint*(0.09+0.26*l)+tint*emission*1.2+emission*pulse*0.4);
+        }
+        float wave=6.2831853*(p.x*0.5+p.y*0.5-phase*0.5);
+        float ridge=0.5+0.5*sin(wave+0.5*sin(p.y*2.0));
+        float3 perturbed=normalize(N+float3(-cos(wave)*0.35,cos(wave)*0.35,0));
+        float lit=0.25+0.75*saturate(dot(perturbed,L));
+        float highlight=pow(saturate(dot(perturbed,H)),18.0);
+        float2 offset=float2(cos(wave),sin(wave))*min(8.0,scale)/resolution;
+        float3 displaced=image.Sample(sourceSampler,clamp(uv+offset,b.xy,b.zw)).rgb;
+        return saturate(lerp(displaced,tint,0.55)*(0.4+0.6*ridge)*lit+highlight*0.4);
     }
     if(mode==4) {
         float cell=max(scale,1.0);

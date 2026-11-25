@@ -58,7 +58,8 @@ The shipped **Sight: Semantic Prism** effect demonstrates category selection and
 three region treatments. It uses the union mask fast path for all categories.
 
 **Sight: Semantic Materials** assigns three category IDs to independent
-materials (solid, illustrated ink, hologram, brushed metal, mosaic), tint
+materials (solid, illustrated ink, hologram, brushed metal, mosaic,
+iridescence, ceramic glaze, emissive circuitry, animated relief), tint
 and mix. Slots A, B, C have descending priority at overlaps. Set category
 to -1 or mix to zero to disable a slot. Unmapped regions pass through.
 The helper `data/stdlib/semantic_regions.glsl` exposes
@@ -131,6 +132,28 @@ The field is coarse, shared across the image, and not an instance-specific
 surface parameterization. Occlusion, poor texture, independent snapshot
 timing, missed captures and prolonged motion may cause drift or reseeding.
 It does not preserve hidden geometry or guarantee physical attachment.
+
+When source-local depth is available, the transport also caches a coarse
+depth observation at each flow step. Between distinct depth publications
+with matching source dimensions, it rejects correspondence if relative
+inverse depth differs by more than 76/255 from the previous warped cell.
+That cell is invalid for the step and can reseed on a later reliable
+observation. Missing or repeated depth does not trigger the comparison.
+This is a disocclusion heuristic, not synchronized geometry: normalization
+changes or fast depth motion can also cause a reset.
+
+### Additional material looks
+
+The four appended material choices preserve the numeric IDs of existing
+presets. Iridescence uses a procedural thin-film-like spectrum influenced
+by estimated orientation; ceramic glaze combines grain, veins and
+specular lighting; emissive circuitry uses a reference-coordinate grid
+with animated pulses and pads; animated relief adds procedural lighting
+and bounded source-image displacement. All four consume the same
+persistent coordinate field and depth/motion controls. They are
+screen-space treatments, not physical material simulations or geometric
+displacement. Circuit emission is an SDR color treatment, not an HDR
+light source.
 No HDR, cross-platform, or real-time throughput claim is made.
 
 The controlled OpenGL test checks opposite depth slopes, opposite flow
@@ -144,6 +167,10 @@ restoring producers, nonzero measured flow, linked history and a retained
 coordinate offset after motion settles in the composed chain. The
 controlled shader test additionally verifies coordinate-lock pattern
 response, invalid-confidence fallback, and no double application of flow.
+The transport unit test covers changed-depth rejection, independent
+neighbor preservation, recovery, missing depth and repeated observations;
+the controlled shader test also checks the four appended material IDs,
+coordinate response, animation and unchanged pixels outside regions.
 
 ## Named texture inputs
 

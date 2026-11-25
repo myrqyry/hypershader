@@ -500,6 +500,7 @@ struct hypershader_data {
     gs_eparam_t *ep_sight_surface_uv,*ep_sight_surface_present;
     gs_texture_t *sight_surface_texture;
     struct hs_sight_surface sight_surface;
+    struct hs_surface_depth sight_surface_depth;
     bool sight_surface_present;
     uint64_t sight_surface_uploaded;
 	uint64_t sight_flow_sequence;

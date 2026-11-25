@@ -3074,9 +3074,17 @@ static void sight_update_tracking(struct hypershader_data *s,
 static void sight_depth_tick(struct hypershader_data *s,bool enabled)
 {
     s->sight_depth_present=false;
-    if(!enabled||(!s->ep_sight_depth&&!s->ep_sight_depth_present))return;
+    bool surface=s->ep_sight_surface_uv||s->ep_sight_surface_present;
+    if(!enabled||(!s->ep_sight_depth&&!s->ep_sight_depth_present&&!surface)){
+        s->sight_surface_depth.sequence=0;return;
+    }
     sight_depth_v1 snap;
-    if(!hs_sight_depth_read(s->context,s->sight_depth_sequence,&snap))return;
+    if(!hs_sight_depth_read(s->context,surface?(s->sight_surface_depth.sequence==s->sight_depth_sequence?s->sight_depth_sequence:0):s->sight_depth_sequence,&snap)){
+        s->sight_surface_depth.sequence=0;return;
+    }
+    if(surface&&snap.sequence!=s->sight_surface_depth.sequence)
+        hs_surface_depth_set(&s->sight_surface_depth,snap.pixels,snap.width,snap.height,
+                             snap.source_width,snap.source_height,snap.sequence);
     if(snap.sequence!=s->sight_depth_sequence){
         obs_enter_graphics();
         if(!s->sight_depth_tex||gs_texture_get_width(s->sight_depth_tex)!=snap.width||
@@ -3144,7 +3152,7 @@ static void sight_flow_tick(struct hypershader_data *s,bool enabled)
     uint64_t predecessor=0;bool linked=false;
     if(!hs_sight_flow_read_linked(s->context,&snap,&predecessor,surface?&linked:NULL))return;
     if(surface&&linked){
-        hs_surface_update(&s->sight_surface,&snap,predecessor);
+        hs_surface_update_depth(&s->sight_surface,&snap,predecessor,s->sight_depth_present?&s->sight_surface_depth:NULL);
         if(s->sight_surface_uploaded!=snap.sequence){
             obs_enter_graphics();
             if(!s->sight_surface_texture)
@@ -3301,8 +3309,8 @@ static void sight_tick(struct hypershader_data *s)
 	sight_matte_tick(s,enabled);
     sight_text_tick(s,enabled);
     sight_semantic_tick(s,enabled);
-    sight_flow_tick(s,enabled);
     sight_depth_tick(s,enabled);
+    sight_flow_tick(s,enabled);
 	if (!enabled) {
 		if (s->sight_receiver) {
 			obs_source_release(s->sight_receiver);
