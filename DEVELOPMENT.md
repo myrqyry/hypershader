@@ -105,6 +105,17 @@ The pixel probe checks compiler success and measurable pixel output, **not**
 visual equivalence to WebGL, temporal behavior or real OBS GUI/NVIDIA behavior.
 Do not classify 22 compiled shaders as 22 correct visual effects.
 
+## Shipped shader regression
+
+Run the full current native catalog through the actual module and compare its
+declared input requirements and fallback contracts:
+
+```sh
+scripts/verify-shipped-shaders.sh /path/to/hyperShaderFX.so /path/to/data
+```
+
+See [the per-shader audit](docs/SHIPPED-SHADER-AUDIT.md) for coverage and limitations.
+
 ## Shader-driven input controls
 
 The first controls after Category, Shader and Custom File are the external

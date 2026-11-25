@@ -35,6 +35,10 @@ for signal in ("audio_level", "audio_peak"):
         bad.append(f"native shader load does not cache {signal}")
 if '"audio_kick"' not in runtime:
     bad.append("runtime does not bind native audio_kick")
+for shader in (root / "data/shaders/root").glob("*.effect"):
+    for line in shader.read_text().splitlines():
+        if "@audio" in line and any(re.search(r"\buniform\s+\w+\s+" + name + r"\b", line) for name in (*names, "audio_reaction_state")):
+            bad.append(f"{shader.name}: built-in audio uniform must not have a metadata audio binding")
 if missing:
     bad.append("native standard missing uniforms: "+", ".join(missing))
 if bad:

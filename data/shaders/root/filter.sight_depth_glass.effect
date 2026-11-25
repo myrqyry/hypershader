@@ -1,7 +1,7 @@
 // @label "Sight: Depth Glass"
 // @description "Depth-selective animated glass distortion with depth and optional subject boundary protection."
 uniform float4x4 ViewProj;
-uniform float audio_kick; // @audio "kick"
+uniform float audio_kick;
 uniform float audio_snare;
 uniform float audio_beat;
 uniform float audio_band0;

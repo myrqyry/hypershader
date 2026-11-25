@@ -52,6 +52,8 @@ float fbm5(float2 p) {
     return total;
 }
 float2 distortUV(float2 uv) {
+    if (dist_strength <= 0.0)
+        return uv;
     if (dist_mode == 1) {
         float2 p = uv - float2(0.5, 0.5);
         float r = length(p);
@@ -69,9 +71,7 @@ float2 distortUV(float2 uv) {
     }
     return uv;
 }
-float4 PSMain(VertData v) : TARGET {
-    float2 uv = v.uv;
-    float2 warped = distortUV(uv);
+float4 backgroundAt(float2 warped) {
     float4 src = image.Sample(inputSampler, warped);
     float3 col = src.rgb;
     if (bg_mode == 1) {
@@ -93,10 +93,17 @@ float4 PSMain(VertData v) : TARGET {
         col = bg_color.rgb;
     }
 
+    return float4(col, bg_mode == 0 ? src.a : 1.0);
+}
+float4 PSMain(VertData v) : TARGET {
+    float2 uv = v.uv;
+    float2 warped = distortUV(uv);
+    float4 src = backgroundAt(warped);
+    float3 col = src.rgb;
     if (filter_mode == 1) {
         float shift = filter_strength * 0.015;
-        float red = image.Sample(inputSampler, warped + float2(shift, 0.0)).r;
-        float blue = image.Sample(inputSampler, warped - float2(shift, 0.0)).b;
+        float red = backgroundAt(warped + float2(shift, 0.0)).r;
+        float blue = backgroundAt(warped - float2(shift, 0.0)).b;
         col = float3(red, col.g, blue);
     } else if (filter_mode == 2) {
         float grain = hash21(uv * hs_resolution.xy + floor(hs_time * 24.0));

@@ -12,7 +12,8 @@ void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord) {
     
     // Visualize Bass as a red pulse circle
     float dist = distance(uv, vec2(0.5));
-    float circle = smoothstep(bass_level * 0.5, bass_level * 0.5 - 0.05, dist);
+    float radius = saturate(bass_level) * 0.5;
+    float circle = 1.0 - smoothstep(max(0.0, radius - 0.05), max(0.0001, radius), dist);
     
     // Visualize Treble as blue noise
     float noise = frac(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);

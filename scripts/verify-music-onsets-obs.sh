@@ -69,7 +69,7 @@ assert "two_pi * 440.0 / 48000.0" in source
 (work/"bass.cpp").write_text(source.replace("two_pi * 440.0 / 48000.0","two_pi * 94.0 / 48000.0"))
 shader=(work/"data/shaders/root/music_probe.effect").read_text()
 assert "audio_snare" in shader
-(work/"data/shaders/root/bass_probe.effect").write_text(shader.replace("audio_snare","audio_kick"))
+(work/"data/shaders/root/bass_probe.effect").write_text(shader.replace("audio_snare","audio_kick").replace("uniform float audio_kick;", 'uniform float audio_kick; // @audio "kick"'))
 PYINNER
 g++ -std=c++17 -O2 -I"$inc" "$work/bass.cpp" -o "$work/bass"   $(pkg-config --libs libobs) -Wl,-rpath,"$libdir"
 if ! (cd "$work" && xvfb-run -a -s '-screen 0 1280x720x24' timeout 90  "$work/bass" "$module" "$work/data" "$work/data/shaders/root/bass_probe.effect")  >"$work/bass.log" 2>&1;then tail -45 "$work/bass.log";exit 1;fi

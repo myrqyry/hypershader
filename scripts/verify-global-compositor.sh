@@ -11,7 +11,7 @@ g++ -std=c++17 -O2 -w -I"$inc" "$repo/scripts/verify-global-compositor.cpp" \
 mkdir -p "$work/home"
 export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
 export MESA_SHADER_CACHE_DISABLE=true
-for shader in filter.lostjared_prism_fold filter.ink_currents orphic_spectral_bloom; do
+for shader in playground filter.ink_currents filter.afterimage_press; do
   mkdir -p "$work/$shader"
   (cd "$work/$shader" && HOME="$work/$shader" XDG_CONFIG_HOME="$work/$shader" \
    xvfb-run -a timeout 42 "$work/probe" "$module" "$data" \
@@ -24,7 +24,7 @@ done
 
 g++ -std=c++17 -O2 -w -I"$inc" "$repo/scripts/verify-global-source-compositor.cpp" \
   -o "$work/source-probe" $(pkg-config --libs libobs)
-for source in plasma blurred_gradient; do
+for source in source.paper_tide source.spectral_garden; do
   mkdir -p "$work/source-$source"
   (cd "$work/source-$source" && HOME="$work/source-$source" XDG_CONFIG_HOME="$work/source-$source" \
     xvfb-run -a timeout 33 "$work/source-probe" "$module" "$data" \
@@ -48,7 +48,7 @@ g++ -std=c++17 -O2 -w -I"$inc" "$repo/scripts/verify-global-transition-composito
 mkdir -p "$work/transition"
 (cd "$work/transition" && HOME="$work/transition" XDG_CONFIG_HOME="$work/transition" \
  xvfb-run -a timeout 30 "$work/transition-probe" "$module" "$data" \
- "$data/shaders/root/filter.lostjared_prism_fold.effect") >"$work/transition.log" 2>&1 || {
+ "$data/shaders/root/playground.effect") >"$work/transition.log" 2>&1 || {
  grep -E 'GLOBAL_TRANSITION_COMPOSITOR|Double destroy|error:' "$work/transition.log" | tail -30
  exit 1
 }

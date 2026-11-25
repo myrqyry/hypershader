@@ -1,7 +1,7 @@
 // @label "Sight: Flow Sparks"
 // @description "Motion-seeded glowing tracers transported by Sight's local motion field."
 uniform float4x4 ViewProj;
-uniform float audio_kick; // @audio "kick"
+uniform float audio_kick;
 uniform float audio_snare;
 uniform float audio_beat;
 uniform float audio_band0;

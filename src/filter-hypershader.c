@@ -4491,7 +4491,13 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 		for (size_t i = 0; i < s->metadata_rc->meta.num && i < s->meta_audio_count; i++) {
 			struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
 
-			if (m->audio_tag && m->cached_param && !hs_named_input_owns(&s->metadata_rc->meta, m->name)) {
+			/* The host-owned audio uniforms have already received their real
+			 * worker snapshot. Metadata may modulate only shader-owned floats. */
+			if (m->audio_tag && m->cached_param && !hs_runtime_uniform(s, m->name)) {
+				struct gs_effect_param_info audio_info;
+				gs_effect_get_param_info(m->cached_param, &audio_info);
+				if (audio_info.type != GS_SHADER_PARAM_FLOAT)
+					continue;
 				float target = 0.0f;
 				const char *tag = m->audio_tag;
 				if (hs_strcasecmp(tag, "bass") == 0)
@@ -5636,6 +5642,21 @@ static void source_video_render(void *data, gs_effect_t *effect)
 		gs_texrender_t *prev = s->history[!hist_idx];
 		if (!curr || !prev)
 			return;
+
+		/* Source feedback has no upstream frame to seed it. Explicitly
+		 * initialize the read surface to transparent, including on resize,
+		 * instead of sampling a null texture (opaque black on GL). */
+		gs_texture_t *previous = gs_texrender_get_texture(prev);
+		if (!previous || gs_texture_get_width(previous) != width ||
+		    gs_texture_get_height(previous) != height) {
+			gs_texrender_reset(prev);
+			if (!gs_texrender_begin(prev, width, height))
+				return;
+			struct vec4 seed;
+			vec4_zero(&seed);
+			gs_clear(GS_CLEAR_COLOR, &seed, 0.0f, 0);
+			gs_texrender_end(prev);
+		}
 
 		/* A texrender must be reset each time it becomes the write target. */
 		gs_texrender_reset(curr);
