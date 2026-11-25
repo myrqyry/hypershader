@@ -10,7 +10,7 @@ const apply = source.split('void ShaderBuilderDock::onApplyClicked()')[1]?.split
 const open = source.split('void ShaderBuilderDock::openSelectedShaderFile')[1]?.split('void ShaderBuilderDock::onActiveShaderDoubleClicked')[0] || '';
 const save = source.split('void ShaderBuilderDock::onSaveAsClicked()')[1]?.split('void ShaderBuilderDock::onApplyClicked')[0] || '';
 
-const validate = source.split('void ShaderBuilderDock::onValidateClicked()')[1]?.split('void ShaderBuilderDock::onApplyClicked()')[0] || '';
+const validate = source.split('void ShaderBuilderDock::onValidateClicked()')[1]?.split('void ShaderBuilderDock::applyLibraryShader()')[0] || '';
 const poll = source.split('void ShaderBuilderDock::pollCompileFeedback()')[1]?.split('void ShaderBuilderDock::onPrepareRepairClicked()')[0] || '';
 const repair = source.split('void ShaderBuilderDock::onPrepareRepairClicked()')[1]?.split('QString ShaderBuilderDock::finalizeGeneratedShader')[0] || '';
 const deferredRemove = source.split('static void remove_deferred_dock_callback(void)')[1]?.split('static void deferred_dock_callback')[0] || '';

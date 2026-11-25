@@ -8,6 +8,7 @@
 #include "shader_catalog.hpp"
 #include "shader_catalog_watch.hpp"
 #include "shader_catalog_refresh.hpp"
+#include "shader_performance_panel.hpp"
 
 extern "C" bool scan_shaders_dir(void);
 #include "shader_code_classification.hpp"
@@ -118,7 +119,7 @@ ShaderBuilderDock::ShaderBuilderDock(QWidget *parent)
 	  m_llm(nullptr)
 {
 	setObjectName("ShaderBuilderDock");
-	setWindowTitle(obs_module_text("ShaderBuilder"));
+	setWindowTitle("HyperShader");
 	setMinimumSize(280, 300);
 
 	char *path = obs_module_file("builder/index.html");
@@ -463,7 +464,7 @@ void ShaderBuilderDock::setupUI()
 	builderActions->addStretch();
 	builderLayout->addLayout(builderActions);
 
-	m_applyTargetLabel = new QLabel("Apply target: select an active HyperShader in Shader Manager", builderWidget);
+	m_applyTargetLabel = new QLabel("Apply target: choose an instance above", builderWidget);
 	m_applyTargetLabel->setWordWrap(true);
 	builderLayout->addWidget(m_applyTargetLabel);
 	auto *validateButton = new QPushButton("Validate Native Shader (no live changes)", builderWidget);
@@ -476,7 +477,7 @@ void ShaderBuilderDock::setupUI()
 		[this](QListWidgetItem *current, QListWidgetItem *) {
 			m_applyTargetLabel->setText(
 				current ? "Apply target: " + current->text()
-					: "Apply target: select an active HyperShader in Shader Manager");
+					: "Apply target: choose an instance above");
 		});
 
 	m_compileStatusLabel = new QLabel("No Builder revision submitted yet.", builderWidget);
@@ -558,7 +559,28 @@ void ShaderBuilderDock::setupUI()
 		}
 	});
 
-	m_tabs->addTab(m_managerWidget, "Manager");
+	// One instance selector across performance, library and authoring.
+	m_activeShadersList->setMaximumHeight(82);
+	auto *targetRow = new QHBoxLayout();
+	targetRow->setContentsMargins(6, 3, 6, 0);
+	targetRow->addWidget(new QLabel("Target instance", mainWidget));
+	targetRow->addStretch();
+	auto *targetRefresh = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QString(), mainWidget);
+	targetRefresh->setToolTip("Refresh available HyperShader instances and library");
+	connect(targetRefresh, &QPushButton::clicked, this, &ShaderBuilderDock::refreshManagerLists);
+	targetRow->addWidget(targetRefresh);
+	mainLayout->addLayout(targetRow);
+	mainLayout->addWidget(m_activeShadersList);
+	auto *performance = new ShaderPerformancePanel([this] {
+		auto *item = m_activeShadersList->currentItem();
+		return item ? item->data(Qt::UserRole).toString() : QString();
+	}, m_tabs);
+	connect(m_activeShadersList, &QListWidget::currentItemChanged, performance,
+		[performance](QListWidgetItem *, QListWidgetItem *) { performance->refresh(true); });
+	connect(m_tabs, &QTabWidget::currentChanged, performance,
+		[performance](int) { if (performance->isVisible()) performance->refresh(true); });
+	m_tabs->addTab(performance, "Play");
+	m_tabs->addTab(m_managerWidget, "Library");
 	m_tabs->addTab(builderWidget, "Builder");
 	mainLayout->addWidget(m_tabs);
 	setWidget(mainWidget);
@@ -596,8 +618,6 @@ void ShaderBuilderDock::setupManagerUI()
     managerActions->addStretch();
     layout->addLayout(managerActions);
 
-    auto *activeLabel = new QLabel(obs_module_text("ActiveHyperShaders"), m_managerWidget);
-    layout->addWidget(activeLabel);
     m_activeShadersList = new QListWidget(m_managerWidget);
     m_activeShadersList->setObjectName("activeShaderInstances");
     m_activeShadersList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -637,7 +657,7 @@ void ShaderBuilderDock::setupManagerUI()
             [this](int) { updateShaderViewMode(); });
 
     auto *filterRow = new QHBoxLayout();
-    filterRow->addWidget(m_shaderSearch, 3);
+    layout->addWidget(m_shaderSearch);
     filterRow->addWidget(m_shaderCategory, 2);
     filterRow->addWidget(m_shaderViewMode, 1);
     layout->addLayout(filterRow);
@@ -669,7 +689,7 @@ void ShaderBuilderDock::setupManagerUI()
     m_shaderPreviewImage = new QLabel(m_managerWidget);
     m_shaderPreviewImage->setObjectName("shaderLibrarySelectedPreview");
     m_shaderPreviewImage->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
-    m_shaderPreviewImage->setFixedHeight(150);
+    m_shaderPreviewImage->setFixedHeight(100);
     m_shaderPreviewImage->setWordWrap(true);
     layout->addWidget(m_shaderPreviewImage);
 
@@ -681,7 +701,22 @@ void ShaderBuilderDock::setupManagerUI()
         if (auto *item = m_shaderFilesList->currentItem())
             onShaderFileDoubleClicked(item);
     });
-    layout->addWidget(m_openShaderButton);
+    auto *libraryActions = new QHBoxLayout();
+    m_libraryApplyButton = new QPushButton("Load on target", m_managerWidget);
+    m_libraryApplyButton->setObjectName("shaderLibraryApplyNative");
+    m_libraryApplyButton->setEnabled(false);
+    m_libraryApplyButton->setToolTip("Load the original native effect without copying or changing its relative includes");
+    connect(m_libraryApplyButton, &QPushButton::clicked, this, &ShaderBuilderDock::applyLibraryShader);
+    libraryActions->addWidget(m_libraryApplyButton);
+    m_openShaderButton->setText("Edit");
+    libraryActions->addWidget(m_openShaderButton);
+    layout->addLayout(libraryActions);
+    m_libraryApplyStatus = new QLabel(m_managerWidget);
+    m_libraryApplyStatus->setWordWrap(true);
+    m_libraryApplyStatus->setTextFormat(Qt::PlainText);
+    layout->addWidget(m_libraryApplyStatus);
+    connect(m_activeShadersList, &QListWidget::currentItemChanged, this,
+        [this](QListWidgetItem *, QListWidgetItem *) { updateShaderSelection(); });
     updateShaderViewMode();
     updateShaderSelection();
 }
@@ -744,6 +779,19 @@ void ShaderBuilderDock::updateShaderSelection()
     const bool usable = item && !item->isHidden();
     if (m_openShaderButton)
         m_openShaderButton->setEnabled(usable);
+    if (m_libraryApplyButton) {
+        auto *target = m_activeShadersList ? m_activeShadersList->currentItem() : nullptr;
+        const QString path = usable ? item->data(Qt::UserRole).toString() : QString();
+        const QString role = usable ? item->data(Qt::UserRole + 3).toString().section(" / ", 0, 0) : QString();
+        const QString id = target ? target->data(Qt::UserRole + 1).toString() : QString();
+        const bool matching = (role == "Filter" && id == "hypershader_filter") ||
+            (role == "Source" && id == "hypershader_source") ||
+            (role == "Transition" && id == "hypershader_transition");
+        const QString root = QFileInfo(getShaderFolderPath()).canonicalFilePath();
+        m_libraryApplyButton->setEnabled(usable && matching && !root.isEmpty() &&
+            path.startsWith(root + "/") && QFileInfo(path).suffix().compare("effect", Qt::CaseInsensitive) == 0 &&
+            m_pendingRevisionPath.isEmpty());
+    }
     if (!m_shaderSelectionInfo)
         return;
     if (!usable) {
@@ -752,8 +800,7 @@ void ShaderBuilderDock::updateShaderSelection()
             m_shaderPreviewImage->setText("Select a shader to inspect its rendered preview");
         }
         m_shaderSelectionInfo->setText(
-            "Choose a file to inspect it. Double-click to open in the editor; "
-            "nothing is applied until you select an instance and use Apply.");
+            "Choose a shader, then load it on the selected matching instance or open the editor.");
         return;
     }
     const QString path = item->data(Qt::UserRole).toString();
@@ -764,7 +811,7 @@ void ShaderBuilderDock::updateShaderSelection()
         const QPixmap preview(previewPath);
         if (!preview.isNull()) {
             m_shaderPreviewImage->setPixmap(
-                preview.scaled(QSize(196, 147), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                preview.scaled(QSize(160, 96), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         } else {
             m_shaderPreviewImage->setPixmap(QPixmap());
             m_shaderPreviewImage->setText("No rendered preview for this shader yet");
@@ -844,6 +891,7 @@ void ShaderBuilderDock::addShaderFileItem(const QString &path, const QString &ca
 void ShaderBuilderDock::refreshManagerLists()
 {
     QString previousUuid, previousFile, previousCategory;
+    const QSignalBlocker activeBlocker(m_activeShadersList);
     if (m_activeShadersList) {
         if (auto *item = m_activeShadersList->currentItem())
             previousUuid = item->data(Qt::UserRole).toString();
@@ -906,6 +954,10 @@ void ShaderBuilderDock::refreshManagerLists()
         }
     }
     updateShaderSelection();
+    if (m_applyTargetLabel) {
+        auto *current = m_activeShadersList->currentItem();
+        m_applyTargetLabel->setText(current ? "Apply target: " + current->text() : "Apply target: choose an instance above");
+    }
 }
 
 void ShaderBuilderDock::openActiveShaderProperties(const QString &uuid)
@@ -945,7 +997,7 @@ void ShaderBuilderDock::openSelectedShaderFile(const QString &path)
 		}
 		m_codeEditor->setPlainText(code);
 		m_loadedEditorText = code;
-		m_tabs->setCurrentIndex(1);
+		m_tabs->setCurrentIndex(m_tabs->count() - 1);
 	}
 
 	m_lastShader = path;
@@ -1031,6 +1083,10 @@ void ShaderBuilderDock::clearValidationSource()
 
 void ShaderBuilderDock::onValidateClicked()
 {
+	if (m_librarySubmission) {
+		m_compileStatusLabel->setText("Wait for the Library load to finish.");
+		return;
+	}
 	if (!m_codeEditor)
 		return;
 	const QString code = m_codeEditor->toPlainText();
@@ -1100,6 +1156,76 @@ void ShaderBuilderDock::onValidateClicked()
 	m_compilePollTimer->start();
 }
 
+void ShaderBuilderDock::applyLibraryShader()
+{
+    if (!m_libraryApplyButton || !m_libraryApplyButton->isEnabled() || !m_pendingRevisionPath.isEmpty())
+        return;
+    auto *item = m_shaderFilesList->currentItem();
+    auto *selected = m_activeShadersList->currentItem();
+    if (!item || !selected || item->isHidden())
+        return;
+    const QString uuid = selected->data(Qt::UserRole).toString();
+    const QString absolute = QFileInfo(item->data(Qt::UserRole).toString()).canonicalFilePath();
+    const QString root = QFileInfo(getShaderFolderPath()).canonicalFilePath();
+    if (absolute.isEmpty() || root.isEmpty() || !absolute.startsWith(root + "/") ||
+        QFileInfo(absolute).suffix().compare("effect", Qt::CaseInsensitive) != 0)
+        return;
+    obs_source_t *target = obs_get_source_by_uuid(uuid.toUtf8().constData());
+    if (!target)
+        return;
+    const QString id = QString::fromUtf8(obs_source_get_unversioned_id(target));
+    const QString role = shaderCatalogDisplayLabel(absolute, item->data(Qt::UserRole+1).toString()).section(" / ", 0, 0);
+    if (!((role == "Filter" && id == "hypershader_filter") ||
+          (role == "Source" && id == "hypershader_source") ||
+          (role == "Transition" && id == "hypershader_transition"))) {
+        obs_source_release(target);
+        return;
+    }
+    const QString logical = "shaders/" + QDir(root).relativeFilePath(absolute);
+    obs_properties_t *props = obs_source_properties(target);
+    auto *picker = props ? obs_properties_get(props, "preset") : nullptr;
+    const size_t count = picker ? obs_property_list_item_count(picker) : 0;
+    const bool custom = count && QString::fromUtf8(obs_property_list_item_name(picker,count-1)) == QString::fromUtf8(obs_module_text("CustomFile"));
+    const long long customValue = custom ? obs_property_list_item_int(picker,count-1) : -1;
+    if (props) obs_properties_destroy(props);
+    auto *settings = obs_source_get_settings(target);
+    auto *priv = obs_source_get_private_settings(target);
+    if (!custom || !settings || !priv) {
+        if (settings) obs_data_release(settings);
+        if (priv) obs_data_release(priv);
+        obs_source_release(target);
+        m_libraryApplyStatus->setText("Native picker unavailable; no changes made.");
+        return;
+    }
+    if (QString::fromUtf8(obs_data_get_string(settings,"shader_file")) == logical &&
+        QString::fromUtf8(obs_data_get_string(priv,"hypershader_live_state")) == "ready") {
+        m_libraryApplyStatus->setText("Already loaded on this instance.");
+        obs_data_release(settings);obs_data_release(priv);obs_source_release(target);
+        m_tabs->setCurrentIndex(0);
+        return;
+    }
+    m_previousShaderFile = QString::fromUtf8(obs_data_get_string(settings,"shader_file"));
+    m_previousPreset = obs_data_get_int(settings,"preset");
+    m_previousPresetSchema = obs_data_get_int(settings,"preset_schema");
+    m_pendingRevisionPath = logical;
+    m_pendingSourceUuid = uuid;
+    m_librarySubmission = true;
+    m_compilePollAttempts = 0;
+    m_submittedEditorCode.clear();
+    obs_data_set_string(priv,"hypershader_builder_compile_path",logical.toUtf8().constData());
+    obs_data_set_string(priv,"hypershader_builder_compile_state","pending");
+    obs_data_set_string(priv,"hypershader_builder_compile_error","");
+    obs_data_release(priv);
+    obs_data_set_int(settings,"preset",customValue);
+    obs_data_set_int(settings,"preset_schema",2);
+    obs_data_set_string(settings,"shader_file",logical.toUtf8().constData());
+    obs_source_update(target,settings);
+    obs_data_release(settings);obs_source_release(target);
+    m_libraryApplyStatus->setText("Compiling selected native effect…");
+    m_compilePollTimer->start();
+    updateShaderSelection();
+}
+
 void ShaderBuilderDock::onApplyClicked()
 {
 	if (!m_codeEditor)
@@ -1121,7 +1247,7 @@ void ShaderBuilderDock::onApplyClicked()
 	QListWidgetItem *selected = m_activeShadersList ? m_activeShadersList->currentItem() : nullptr;
 	if (!selected) {
 		QMessageBox::warning(this, "Select an Apply Target",
-				     "Select an active HyperShader instance in Shader Manager first.");
+				     "Select a HyperShader instance above first.");
 		return;
 	}
 	const QString uuid = selected->data(Qt::UserRole).toString();
@@ -1237,6 +1363,14 @@ void ShaderBuilderDock::pollCompileFeedback()
 		return;
 	}
 	const bool preflight = m_validationSource != nullptr;
+	const bool library = m_librarySubmission;
+	auto finishLibrary = [this, library](const QString &message) {
+		if (!library) return;
+		m_librarySubmission = false;
+		m_pendingSourceUuid.clear();
+		m_libraryApplyStatus->setText(message);
+		updateShaderSelection();
+	};
 	obs_source_t *target = preflight ? m_validationSource
 		: obs_get_source_by_uuid(m_pendingSourceUuid.toUtf8().constData());
 	if (!target) {
@@ -1244,6 +1378,7 @@ void ShaderBuilderDock::pollCompileFeedback()
 		m_compileStatusLabel->setText("Compilation status unavailable: the target source was removed.");
 		m_pendingRevisionPath.clear();
 		clearValidationSource();
+		finishLibrary("Target removed; no further changes made.");
 		return;
 	}
 	obs_data_t *settings = obs_source_get_settings(target);
@@ -1264,6 +1399,7 @@ void ShaderBuilderDock::pollCompileFeedback()
 		m_compileStatusLabel->setText("Compilation superseded: the source now uses a different shader.");
 		m_pendingRevisionPath.clear();
 		clearValidationSource();
+		finishLibrary("Selection changed elsewhere; no further changes made.");
 		return;
 	}
 	if (completedPath == m_pendingRevisionPath && (state == "failed" || state == "succeeded")) {
@@ -1272,6 +1408,13 @@ void ShaderBuilderDock::pollCompileFeedback()
 		m_pendingRevisionPath.clear();
 		clearValidationSource();
 		if (state == "succeeded") {
+			if (library) {
+				const auto *selected = m_activeShadersList->currentItem();
+				const bool stillSelected = selected && selected->data(Qt::UserRole).toString() == m_pendingSourceUuid;
+				finishLibrary("Native shader loaded successfully.");
+				if (stillSelected) m_tabs->setCurrentIndex(0);
+				return;
+			}
 			const bool unchanged = m_codeEditor && m_codeEditor->toPlainText() == m_submittedEditorCode;
 			if (preflight && unchanged)
 				m_verifiedEditorCode = m_submittedEditorCode;
@@ -1305,6 +1448,11 @@ void ShaderBuilderDock::pollCompileFeedback()
 					obs_source_release(restoreTarget);
 				}
 			}
+			if (library) {
+				finishLibrary((restored ? QString("Compile failed; previous shader selection restored.\n") :
+					QString("Compile failed; previous selection could not be restored.\n")) + error);
+				return;
+			}
 			m_lastCompileError = error.isEmpty() ? QStringLiteral("Unknown shader load error") : error;
 			if (preflight) {
 				ShaderDraft snapshot = createDraft(QString(), QStringLiteral("Failed native validation"),
@@ -1334,6 +1482,7 @@ void ShaderBuilderDock::pollCompileFeedback()
 		m_compileStatusLabel->setText("Native compilation not confirmed yet. Check the OBS log; no repair was requested.");
 		m_pendingRevisionPath.clear();
 		clearValidationSource();
+		finishLibrary("Compilation not confirmed; inspect the OBS log.");
 	}
 }
 
@@ -1516,7 +1665,7 @@ void ShaderBuilderDock::finishAiGeneration(const QString &generatedCode, const Q
 	}
 
 	if (m_tabs)
-		m_tabs->setCurrentIndex(1);
+		m_tabs->setCurrentIndex(m_tabs->count() - 1);
 	if (m_aiStatusLabel)
 		m_aiStatusLabel->setText("Generated draft - review it, then Save As");
 
@@ -1617,6 +1766,8 @@ void ShaderBuilderDock::onFrontendEvent(obs_frontend_event event)
 		update();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
+	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 		refreshManagerLists();
 		break;
@@ -1633,7 +1784,7 @@ void ShaderBuilderDock::onFrontendEvent(obs_frontend_event event)
 void ShaderBuilderDock::onHotkeyTriggered(bool pressed)
 {
 	if (pressed && m_tabs) {
-		m_tabs->setCurrentIndex(1);
+		m_tabs->setCurrentIndex(m_tabs->count() - 1);
 		show();
 		raise();
 		activateWindow();

@@ -1744,6 +1744,7 @@ static void filter_destroy(void *data)
 		bfree(s->shader_path);
 		s->shader_path = NULL;
 	}
+	bfree(s->performance_compiled_path);
 
 	if (s->shader_error) {
 		bfree(s->shader_error);
@@ -2624,6 +2625,12 @@ static void filter_update(void *data, obs_data_t *settings)
 		}
 	}
 	if (!s->shader_path || strcmp(s->shader_path, new_path) != 0) {
+		/* Disable stale dock schema immediately during async replacement. */
+		obs_data_t *live_status = obs_source_get_private_settings(s->context);
+		if (live_status) {
+			obs_data_set_string(live_status, "hypershader_live_state", "pending");
+			obs_data_release(live_status);
+		}
 		/* Queue asynchronous shader loading task */
 		struct shader_load_task_data *task_data = bzalloc(sizeof(*task_data));
 		task_data->s = s;
@@ -2729,6 +2736,22 @@ static void filter_update(void *data, obs_data_t *settings)
 extern void *mp_worker_thread(void *data);
 
 /* Replaces filter_create to fix initialization bug */
+/* Read-only live status. No source settings writes, GPU calls or inference
+ * on the dock thread; render publishes a compact atomic snapshot. */
+static void hs_live_status(void *data, calldata_t *out)
+{
+	struct hypershader_data *s = data;
+	const uint64_t now = os_gettime_ns();
+	const uint64_t render = atomic_load_explicit(&s->live_render_ns, memory_order_acquire);
+	const uint64_t pcm = atomic_load_explicit(&s->last_audio_capture_ns, memory_order_acquire);
+	const bool fresh = render && now >= render && now - render < 1000000000ULL;
+	const bool audio = pcm && now >= pcm && now - pcm < 1000000000ULL;
+	calldata_set_bool(out, "rendering", fresh);
+	calldata_set_bool(out, "audio", audio);
+	calldata_set_int(out, "level", audio && fresh ? atomic_load(&s->live_audio_permille) : 0);
+	calldata_set_int(out, "signals", fresh ? atomic_load(&s->live_signal_flags) : 0);
+}
+
 static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enum hypershader_instance_kind kind)
 {
 	struct hypershader_data *s = bzalloc(sizeof(struct hypershader_data));
@@ -2737,6 +2760,9 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 		return NULL;
 	}
 	atomic_init(&s->last_audio_capture_ns, 0);
+	atomic_init(&s->live_render_ns, 0);
+	atomic_init(&s->live_signal_flags, 0);
+	atomic_init(&s->live_audio_permille, 0);
 	s->context = context;
 	s->effect_hotkeys = OBS_INVALID_HOTKEY_PAIR_ID;
 	s->kind = kind;
@@ -2897,6 +2923,10 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	for (int i = 0; i < 8; i++) {
 		s->ep_audio_band[i] = NULL;
 	}
+
+	proc_handler_add(obs_source_get_proc_handler(context),
+		"void hypershader_live_status(out bool rendering, out bool audio, out int level, out int signals)",
+		hs_live_status, s);
 
 	/* Ensure sound settings follow any updated 'audio_mix' setting as default */
 	if (settings) {
@@ -3166,7 +3196,17 @@ static void sight_tick(struct hypershader_data *s)
 	pthread_mutex_unlock(&s->mutex);
     s->sight_motion_present=false;
     s->sight_motion_energy=0.f;
-    if (enabled && (s->ep_sight_motion_present || s->ep_sight_motion_energy)) {
+    bool mod_motion = false;
+    if (enabled) {
+        obs_data_t *cfg = obs_source_get_settings(s->context);
+        if (cfg) {
+            const char *shader = obs_data_get_string(cfg, "perf_mod_shader");
+            mod_motion = obs_data_get_int(cfg, "perf_mod_source") == 6 && *shader &&
+                strcmp(shader, obs_data_get_string(cfg, "shader_file")) == 0;
+            obs_data_release(cfg);
+        }
+    }
+    if (enabled && (s->ep_sight_motion_present || s->ep_sight_motion_energy || mod_motion)) {
         sight_motion_v1 motion;
         if (hs_sight_motion_read(s->context,&motion)) {
             s->sight_motion_present=true;
@@ -3369,6 +3409,16 @@ static void publish_builder_compile_result(struct shader_load_task_data *task, b
 		obs_data_set_string(private_data, "hypershader_builder_compile_error",
 				    passed ? "" : (error ? error : "Unknown shader load error"));
 	}
+	/* Every selection, not just Builder revisions, publishes its actual
+	 * compile identity. Dock controls must never edit a stale schema. */
+	const char *queued = obs_data_get_string(task->settings, "shader_file");
+	if (current && queued && strcmp(current, queued) == 0) {
+		obs_data_set_string(private_data, "hypershader_live_path", current);
+		obs_data_set_string(private_data, "hypershader_live_state", passed ? "ready" : "failed");
+		obs_data_set_int(private_data, "hypershader_live_revision",
+			obs_data_get_int(private_data, "hypershader_live_revision") + 1);
+	}
+
 	obs_data_release(live_settings);
 	obs_data_release(private_data);
 }
@@ -3678,6 +3728,8 @@ static void shader_load_complete_task(void *param)
 		if (s->shader_path)
 			bfree(s->shader_path);
 		s->shader_path = bstrdup(task->path);
+		bfree(s->performance_compiled_path);
+		s->performance_compiled_path = bstrdup(obs_data_get_string(task->settings, "shader_file"));
 
 #ifdef _DEBUG
 		if (s->watcher)
@@ -4485,6 +4537,19 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 				(s->channel_named[i] || s->channel_types[i] == 2 ? s->dummy_texture : NULL));
 	}
 
+	/* Snapshot only actual data usable in this render. */
+	unsigned flags = (sight_present ? 1u : 0u) | (depth ? 2u : 0u) |
+		(flow ? 4u : 0u) | (text ? 8u : 0u) | (motion ? 16u : 0u) |
+		(sight_selected && s->sight_matte_present ? 32u : 0u) | (subject ? 64u : 0u) |
+		(sight_face || (!sight_selected && s->mp_enabled && s->mp_landmarks_tex) ? 128u : 0u);
+	for (unsigned i = 0; i < 4; ++i)
+		if (s->channel_textures[i])
+			flags |= 1u << (8 + i);
+	atomic_store_explicit(&s->live_signal_flags, flags, memory_order_relaxed);
+	atomic_store_explicit(&s->live_audio_permille,
+		(unsigned)(fmaxf(0.f, fminf(level_snap, 1.f)) * 1000.f), memory_order_relaxed);
+	atomic_store_explicit(&s->live_render_ns, os_gettime_ns(), memory_order_release);
+
 	/* Apply Audio Metadata Bindings with Dynamics */
 	pthread_mutex_lock(&s->mutex);
 	if (s->effect && s->metadata_rc && s->metadata_rc->meta.num > 0 && s->meta_audio_values) {
@@ -4571,6 +4636,59 @@ static void update_performance_stats(struct hypershader_data *s, double render_t
  * the scene's numeric controls immediately before each graph pass, including
  * after any pass that used the same mutable gs_effect_t.
  * Audio-bound uniforms use the current smoothed value instead of saved sliders. */
+/* A live modulation is a bounded render-time override, not a settings
+ * mutation. One mapping per instance; stored path binds it to its shader.
+ * The same evaluated signal feeds regular Draw and every graph pass. */
+static float performance_modulated_value(struct hypershader_data *s, obs_data_t *settings,
+		const struct shader_param_meta *m, const char *prop, float base)
+{
+	int driver = (int)obs_data_get_int(settings, "perf_mod_source");
+	if (driver < 1 || driver > 7 || !m->has_min || !m->has_max ||
+	    !isfinite(m->min) || !isfinite(m->max) || m->min >= m->max ||
+	    strcmp(obs_data_get_string(settings, "perf_mod_param"), prop) != 0 ||
+	    !s->performance_compiled_path ||
+	    strcmp(s->performance_compiled_path, obs_data_get_string(settings, "shader_file")) != 0 ||
+	    strcmp(obs_data_get_string(settings, "perf_mod_shader"),
+		   obs_data_get_string(settings, "shader_file")) != 0)
+		return base;
+	/* An old effect may remain active during a pending replacement.
+	 * The published render identity gates the mapping in the UI; here
+	 * the current effect metadata must also match the stored target. */
+	float signal = 0.f;
+	const float depth = (float)obs_data_get_double(settings, "perf_mod_depth");
+	if (!isfinite(depth) || depth <= 0.f)
+		return base;
+	if (driver == 1) {
+		const float hz = (float)obs_data_get_double(settings, "perf_mod_hz");
+		signal = cosf(6.28318530718f * s->time_accumulator *
+			(isfinite(hz) ? fmaxf(.01f, fminf(hz, 10.f)) : 1.f));
+	} else if (driver <= 5) {
+		uint64_t pcm = atomic_load_explicit(&s->last_audio_capture_ns, memory_order_acquire);
+		uint64_t now = os_gettime_ns();
+		if (!pcm || now < pcm || now - pcm > 250000000ULL)
+			return base;
+		switch (driver) {
+		case 2: signal = s->render_audio_level; break;
+		case 3: signal = s->render_audio_bands[0]; break;
+		case 4: signal = s->render_audio_music[HS_MUSIC_KICK]; break;
+		case 5: signal = s->render_audio_beat; break;
+		}
+		signal = fmaxf(0.f, fminf(signal, 1.f));
+	} else {
+		unsigned flags = atomic_load_explicit(&s->live_signal_flags, memory_order_relaxed);
+		if (driver == 6 && (flags & 16u))
+			signal = fmaxf(0.f, fminf(s->sight_motion_energy, 1.f));
+		else if (driver == 7 && (flags & 1u) && s->sight_kind == SIGHT_SNAPSHOT_HAND)
+			signal = fmaxf(0.f, fminf(s->sight_pinch[0], 1.f));
+		else
+			return base;
+	}
+	if (!isfinite(signal))
+		return base;
+	return fmaxf(m->min, fminf(m->max,
+		base + signal * fminf(depth, 1.f) * (m->max - m->min)));
+}
+
 static void graph_bind_controls(struct hypershader_data *s)
 {
 	if (!s->metadata_rc)
@@ -4592,11 +4710,13 @@ static void graph_bind_controls(struct hypershader_data *s)
 			continue;
 		}
 		switch (info.type) {
-		case GS_SHADER_PARAM_FLOAT:
+		case GS_SHADER_PARAM_FLOAT: {
+			float base = (float)(obs_data_has_user_value(settings, prop) ||
+				!m->has_default ? obs_data_get_double(settings, prop) : m->default_val);
 			gs_effect_set_float(m->cached_param,
-				(float)(obs_data_has_user_value(settings, prop) ||
-					!m->has_default ? obs_data_get_double(settings, prop) : m->default_val));
+				performance_modulated_value(s, settings, m, prop, base));
 			break;
+		}
 		case GS_SHADER_PARAM_INT:
 			gs_effect_set_int(m->cached_param,
 				(int)(obs_data_has_user_value(settings, prop) ||

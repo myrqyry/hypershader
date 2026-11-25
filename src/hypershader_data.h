@@ -235,6 +235,7 @@ struct hypershader_data {
 	void *watcher;           /* struct shader_watcher* (dev mode) */
 
 	char *shader_path;
+	char *performance_compiled_path;
 	char *shader_error; /* Last compilation error message */
 	struct vec2 mouse_pos;
 	struct vec2 mouse_click;
@@ -375,6 +376,10 @@ struct hypershader_data {
 	/* Timestamp alignment with libobs tick rate */
 	uint64_t last_audio_ts; /* Last processed audio timestamp (ns) */
 	atomic_uint_fast64_t last_audio_capture_ns; /* Fresh incoming PCM, not repeated FFT windows */
+	atomic_uint_fast64_t live_render_ns;
+	atomic_uint live_signal_flags;
+	atomic_uint live_audio_permille;
+
 
 	/* Lock-free audio ring buffer (replaces mutex-protected version) */
 	struct {

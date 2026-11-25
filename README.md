@@ -141,6 +141,31 @@ using `scripts/verify-effect-hotkeys.sh`. Reference: Spectrum's
 [source hooks](https://github.com/Voidscape-Development/Spectrum/blob/8af962d220c23e7ee3bf1bd78808887203a85950/src/common/source-hooks.c);
 this implementation uses our existing instance lifecycle directly.
 
+## Play dock
+
+The HyperShader dock has a shared target-instance selector and three tabs:
+**Play**, **Library**, and **Builder**. Play builds its controls from the
+selected instance's compiled native OBS property schema. It provides
+requested audio/Sight/texture bindings, the shader's own typed controls,
+global compositing/time controls, bypass, freeze, and live input activity.
+
+Use **Vary** to perturb bounded artist float controls by a percentage of
+their declared range. Individual locks protect controls from variations.
+Capture **A** and **B** to interpolate shared float controls without changing
+routing, shader identity, or discrete modes. Undo restores the preceding
+variation/morph values. These working looks and locks are session-local.
+
+One optional live modulation per instance can drive a bounded float using
+an oscillator, audio level/bass/kick/beat, Sight motion or hand pinch.
+The runtime evaluates the modulation at draw time, never overwriting the
+stored base value. Missing/stale signals return to the base value; mappings
+are tied to the exact shader selection. Audio/Sight capture remains opt-in.
+
+Library can load a compatible installed native effect directly on the
+selected instance, retaining its original include paths and checking
+native compiler feedback. Builder remains the separate authoring workflow.
+See [Play dock verification](docs/performance-dock.md).
+
 ## Visual shader builder
 
 `tools/shader-builder/` contains a standalone visual graph builder for constructing HyperShaderFX shaders from reusable nodes.

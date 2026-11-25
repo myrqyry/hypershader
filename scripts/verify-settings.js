@@ -150,6 +150,20 @@ for (const [key, expected] of Object.entries(spriteSettings)) {
   }
   if (entries.length === spriteEffects.length) uiMap.set(key, entries);
 }
+// The Performance dock writes these persistent settings; they must
+// have exact typed native getter and Qt setter contracts.
+const performance = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'shader_performance_panel.hpp'), 'utf8');
+for (const [key, kind] of Object.entries({
+  perf_mod_shader: 'string', perf_mod_param: 'string',
+  perf_mod_source: 'int', perf_mod_depth: 'double', perf_mod_hz: 'double',
+})) {
+  const defs = sourceTruth.get(key) || [];
+  const setter = new RegExp('obs_data_set_' + kind + '\\s*\\(\\s*cfg\\s*,\\s*"' + key + '"');
+  if (!defs.length || defs.some(d => !d.origin.endsWith(':' + kind)) || !setter.test(performance)) {
+    errors.push('Performance setting missing typed native/dock contract: ' + key);
+  }
+  uiMap.set(key, [{key, type: typeAliases[kind], origin: 'dock:' + kind}]);
+}
 for (const [key, defs] of sourceTruth.entries()) {
   if (!uiMap.has(key) && !INTERNAL_KEYS_WITHOUT_UI.has(key) && !DOCK_ONLY_KEYS.has(key)) {
     errors.push(`Missing UI binding for key '${key}' (${defs.map((d) => d.origin).join(', ')})`);

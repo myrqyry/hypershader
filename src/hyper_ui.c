@@ -1589,6 +1589,18 @@ static void sync_input_visibility(struct hypershader_data *s, obs_properties_t *
         set_property_visible_if_present(inputs, src_key, channel_needed && ch_type == 2);
 	}
 
+	/* User modulation can request native signals even if the effect did not
+	 * declare them itself. Never silently enable capture or select a source. */
+	const char *mod_shader = obs_data_get_string(settings, "perf_mod_shader");
+	const char *selected_shader = obs_data_get_string(settings, "shader_file");
+	if (mod_shader && *mod_shader && selected_shader && strcmp(mod_shader, selected_shader) == 0 &&
+	    *obs_data_get_string(settings, "perf_mod_param")) {
+		int driver = (int)obs_data_get_int(settings, "perf_mod_source");
+		if (driver >= 2 && driver <= 5)
+			audio_required = true;
+		if (driver == 6 || driver == 7)
+			sight_required = true;
+	}
 	set_property_visible_if_present(props, "enable_sound", audio_required);
 	set_property_visible_if_present(props, "audio_source", audio_required);
 	set_property_visible_if_present(props, "sight_use_tracking", sight_required);

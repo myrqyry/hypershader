@@ -81,6 +81,7 @@ private:
 	ShaderDraft draftFromJson(const QJsonObject &object) const;
 	QJsonObject draftToJson(const ShaderDraft &draft) const;
 	void refreshManagerLists();
+	void applyLibraryShader();
 	void filterShaderFiles();
 	void updateShaderSelection();
 	void updateShaderViewMode();
@@ -122,6 +123,9 @@ private:
 	QPushButton *m_aiRepairButton;
 	obs_source_t *m_validationSource = nullptr;
 	QPushButton *m_openShaderButton;
+	QPushButton *m_libraryApplyButton = nullptr;
+	QLabel *m_libraryApplyStatus = nullptr;
+	bool m_librarySubmission = false;
 	QPlainTextEdit *m_codeEditor;
 	QPlainTextEdit *m_aiPrompt;
 	QPushButton *m_aiGenerateButton;

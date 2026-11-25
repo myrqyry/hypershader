@@ -168,6 +168,8 @@ if(ENABLE_QT)
     PRIVATE
       src/ui/shader_builder_dock.cpp
       src/ui/shader_builder_dock.hpp
+      src/ui/shader_performance_model.hpp
+      src/ui/shader_performance_panel.hpp
   )
 
   target_link_libraries(
