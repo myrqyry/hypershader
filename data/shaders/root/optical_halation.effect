@@ -1,6 +1,6 @@
 // Optical Halation — Soft Highlight Bloom
 // Native single-pass OBS filter. Diffuses actual bright scene pixels into
-// soft, warm halos; no procedural glare sprites, noise or fake lens ghosts.
+// soft, warm halos; no procedural glare sprites, noise or artificial lens ghosts.
 // A true bloom pyramid would require multiple host-controlled render passes.
 uniform float4x4 ViewProj;
 uniform texture2d image;

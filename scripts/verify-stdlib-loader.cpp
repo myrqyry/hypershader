@@ -1,5 +1,5 @@
 // Real libobs/HyperShaderFX loader check for existing stdlib modules,
- // wrapper expansion and missing-include safety. No fake shader compiler.
+ // wrapper expansion and missing-include safety. Uses the real shader compiler.
 #include <obs.h>
 #include <obs-module.h>
 #include <graphics/graphics.h>

@@ -1,5 +1,5 @@
 // Isolated real-libobs/OpenGL test of a camera image and 468 RGBA32F face landmarks.
-// No webcam, model inference, installed OBS plugin or mock shader execution.
+// No webcam, model inference, installed OBS plugin or simulated shader execution.
 #include <obs.h>
 #include <graphics/graphics.h>
 #include <util/bmem.h>

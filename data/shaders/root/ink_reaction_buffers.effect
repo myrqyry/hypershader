@@ -1,6 +1,6 @@
 // @label "Ink Reaction / Two-Buffer"
  // @description "Native two-field Gray-Scott chemistry with a second persistent phosphor field. Requires BufferA -> BufferB -> Draw."
-// The shader has no fake depth/motion sources and works with silence or static input.
+// The shader has no synthetic depth/motion sources and works with silence or static input.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform texture2d hs_buffer_a;

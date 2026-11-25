@@ -157,7 +157,7 @@ void hs_shade_pixel(out float4 fragColor,in float2 fragCoord) {
 
     float3 result=lerp(predicted.rgb,incoming.rgb,correction);
     // Chroma residual loss can smear old color over otherwise recovered
-    // luma. Off by default-ish and deliberately not a fake RGB split.
+    // luma. Off by default-ish and deliberately not an RGB split.
     float old_y=luma(predicted.rgb);
     float new_y=luma(result);
     result=lerp(result,
