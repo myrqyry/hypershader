@@ -54,6 +54,9 @@ rectangular coverage, not pixel segmentation; analysis-only is not censorship.
 The typed ABI is versioned, caller-owned, and rejects oversized snapshots rather
 than silently truncating. The source remains live, so a region can lag motion.
 
+The shipped **Sight: Semantic Prism** effect demonstrates category selection and
+three region treatments. It uses the union mask fast path for all categories.
+
 ## Named texture inputs
 
 Declare a texture with a same-line `@input N` annotation (N = 0 through

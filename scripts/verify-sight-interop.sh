@@ -80,6 +80,10 @@ if [[ -n "${HYPERSHADER_MODULE:-}" && -n "${SIGHT_SEMANTIC_MODEL:-}" && -n "${SI
         "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
         "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
         "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/tests/sight_semantic_probe.effect"
+    xvfb-run -a -s '-screen 0 1280x720x24' timeout 45 "$work/semantic_obs" \
+        "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
+        "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
+        "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/root/filter.sight_semantic_prism.effect"
 else
     echo "SIGHT_SEMANTIC_REAL_CHECK_SKIPPED: supply modules and semantic fixture variables"
 fi
