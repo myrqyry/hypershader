@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include "interop/sight_client.h"
 using namespace std::chrono_literals;
 using Frame=std::vector<uint8_t>;
 static std::mutex ui_mutex;
@@ -206,9 +207,101 @@ int main(int argc,char**argv){
  bool disabled=wait(false);
  obs_source_set_enabled(producer,true);
  bool resumed=wait(true);
+ // Optional model-backed fusion on the same source and in analysis-only order.
+ bool fusion_ok=true;
+ const char* depth_model=std::getenv("SIGHT_MATERIAL_DEPTH_MODEL");
+ const char* matte_model=std::getenv("SIGHT_MATERIAL_MATTE_MODEL");
+ if(materials&&bool(depth_model)!=bool(matte_model)){puts("Supply both fusion model paths");return 14;}
+ if(materials&&depth_model&&matte_model){
+   obs_source_filter_remove(source,filter);
+   d=obs_data_create();obs_data_set_string(d,"model_path",depth_model);
+   obs_data_set_int(d,"view_mode",2);obs_data_set_int(d,"inference_edge",252);
+   obs_data_set_int(d,"inference_cadence",4);
+   auto* depth=obs_source_create("sight_depth_filter","Material depth",d,nullptr);obs_data_release(d);
+   d=obs_data_create();obs_data_set_string(d,"model_path",matte_model);
+   obs_data_set_int(d,"matte_view",4);
+   auto* matte=obs_source_create("sight_u2net_filter","Material matte",d,nullptr);obs_data_release(d);
+   if(!depth||!matte)return 13;
+   obs_source_filter_add(source,depth);obs_source_filter_add(source,matte);obs_source_filter_add(source,filter);
+   auto set=[&](const char* key,double value){
+     auto* cfg=obs_source_get_settings(filter);obs_data_set_double(cfg,key,value);
+     obs_source_update(filter,cfg);obs_data_release(cfg);
+   };
+   auto check=[&](auto predicate,int count=180){
+     for(int i=0;i<count;++i){std::this_thread::sleep_for(50ms);if(!draw(source,current,w,h))return false;
+       if(predicate())return true;}
+     return false;
+   };
+   // Observe a stable solid-material reference with the real semantic producer.
+   bool solid=wait(true);Frame unmasked=current;
+   set("param_matte_mix",1);
+   bool clipped=check([&](){return difference(current,unmasked)>10000&&difference(current,baseline)>10000;},400);
+   obs_source_set_enabled(matte,false);
+   bool matte_lost=check([&](){return difference(current,unmasked)<100;});
+   obs_source_set_enabled(matte,true);
+   bool matte_restored=check([&](){return difference(current,unmasked)>10000&&difference(current,baseline)>10000;},400);
+   set("param_matte_mix",0);set("param_material_a",3);set("param_material_b",3);
+   set("param_speed",0);set("param_flow_mix",0);set("param_depth_mix",0);
+   // Use no time animation; track IDs may change with inference cadence,
+   // so compare the full image and repeat until the depth response is clear.
+   bool metal=check([&](){return difference(current,unmasked)>10000&&difference(current,baseline)>10000;});
+   Frame flat=current;
+   set("param_depth_mix",1);
+   bool shaped=check([&](){return difference(current,flat)>10000&&difference(current,baseline)>10000;},400);
+   // Validate that a fresh actual depth snapshot was consumed in the shader,
+   // plus fallback when disabled (the controlled test covers exact pixels).
+   obs_source_set_enabled(depth,false);
+   bool depth_lost=check([&](){return difference(current,flat)<1000;});
+   obs_source_set_enabled(depth,true);
+   bool depth_restored=check([&](){return difference(current,flat)>10000&&difference(current,baseline)>10000;},400);
+   fusion_ok=solid&&clipped&&matte_lost&&matte_restored&&metal&&shaped&&depth_lost&&depth_restored;
+   const char* shifted=std::getenv("SIGHT_MATERIAL_FLOW_SHIFT_IMAGE");
+   if(shifted){
+     obs_source_filter_remove(source,filter);
+     d=obs_data_create();obs_data_set_int(d,"flow_view",0);obs_data_set_int(d,"flow_interval",150);
+     auto* flow=obs_source_create("sight_spatial_motion_filter","Material motion",d,nullptr);obs_data_release(d);
+     if(!flow)return 15;
+     obs_source_filter_add(source,flow);obs_source_filter_add(source,filter);
+     set("param_flow_mix",1);set("param_matte_mix",1);set("param_material_a",2);
+     sight_flow_v1 snap{};
+     auto stationary=[&](){
+       if(!hs_sight_flow_read(filter,&snap))return false;
+       unsigned moving=0;
+       for(auto& c:snap.cells)moving+=c.confidence>.5f&&(std::abs(c.dx)>.002f||std::abs(c.dy)>.002f);
+       return moving<5;
+     };
+     bool ready=check(stationary,200);
+     auto image=[&](const char* path){
+       auto* cfg=obs_data_create();obs_data_set_string(cfg,"file",path);
+       obs_source_update(source,cfg);obs_data_release(cfg);
+     };
+     image(shifted);
+     unsigned moving=0;
+     bool moved=check([&](){
+       if(!hs_sight_flow_read(filter,&snap))return false;
+       moving=0;
+       for(auto& c:snap.cells)moving+=c.confidence>.5f&&(std::abs(c.dx)>.003f||std::abs(c.dy)>.003f);
+       return moving>30;
+     },120);
+     obs_source_set_enabled(flow,false);
+     bool lost=check([&](){return !hs_sight_flow_read(filter,&snap);});
+     image(argv[8]);obs_source_set_enabled(flow,true);
+     bool restored=check(stationary,200);
+     printf("SEMANTIC_FLOW_REAL ready=%d moved=%d cells=%u lost=%d restored=%d PASS=%d\n",
+         ready,moved,moving,lost,restored,ready&&moved&&lost&&restored);
+     fusion_ok=fusion_ok&&ready&&moved&&lost&&restored;
+     obs_source_filter_remove(source,flow);obs_source_release(flow);
+     set("param_matte_mix",0);
+     // Restore original image before the final no-producer fallback check.
+   }
+
+   printf("SEMANTIC_FUSION_REAL matte=%d matte_lost=%d matte_restored=%d depth=%d depth_lost=%d depth_restored=%d PASS=%d\n",clipped,matte_lost,matte_restored,shaped,depth_lost,depth_restored,fusion_ok);
+   obs_source_filter_remove(source,matte);obs_source_release(matte);
+   obs_source_filter_remove(source,depth);obs_source_release(depth);
+ }
  obs_source_filter_remove(source,producer);obs_source_release(producer);
  bool removed=wait(false);
- bool pass=absent&&active&&analysis_only&&reattached&&disabled&&resumed&&removed&&category_ok&&styles_ok;
+ bool pass=absent&&active&&analysis_only&&reattached&&disabled&&resumed&&removed&&category_ok&&styles_ok&&fusion_ok;
  printf("HYPERSHADER_SEMANTIC_REAL absent=%d active=%d analysis_only=%d reattached=%d disabled=%d resumed=%d removed=%d category=%d styles=%d pass=%d\n",absent,active,analysis_only,reattached,disabled,resumed,removed,category_ok,styles_ok,pass);
  obs_set_output_source(0,nullptr);obs_source_dec_showing(source);obs_source_filter_remove(source,filter);
  obs_source_release(filter);obs_source_release(source);drain_ui();obs_wait_for_destroy_queue();drain_ui();obs_shutdown();return pass?0:1;

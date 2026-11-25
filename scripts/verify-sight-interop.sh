@@ -87,7 +87,7 @@ if [[ -n "${HYPERSHADER_MODULE:-}" && -n "${SIGHT_SEMANTIC_MODEL:-}" && -n "${SI
         "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
         "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
         "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/root/filter.sight_semantic_prism.effect"
-    xvfb-run -a -s '-screen 0 1280x720x24' timeout 45 "$work/semantic_obs" \
+    xvfb-run -a -s '-screen 0 1280x720x24' timeout 120 "$work/semantic_obs" \
         "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
         "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
         "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/root/filter.sight_semantic_materials.effect"

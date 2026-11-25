@@ -1,5 +1,5 @@
 // @label "Sight: Semantic Materials"
-// @description "Assign distinct animated procedural materials to three semantic categories at once. A overrides B, then C on overlaps. Requires Sight analysis-only."
+// @description "Assign procedural materials to three semantic categories, with optional depth-normal reflections, motion-driven patterns and foreground matte clipping. Requires Sight analysis-only."
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform float3 hs_resolution;
@@ -9,6 +9,14 @@ uniform texture2d hs_sight_semantic_bounds;
 uniform texture2d hs_sight_semantic_meta;
 uniform float hs_sight_semantic_present;
 uniform int hs_sight_semantic_count;
+uniform texture2d hs_sight_depth;
+uniform float hs_sight_depth_present;
+uniform texture2d hs_segmentation;
+uniform float hs_sight_matte_present;
+uniform texture2d hs_sight_flow;
+uniform float hs_sight_flow_present;
+uniform float hs_sight_flow_interval;
+uniform float hs_sight_flow_coverage;
 uniform int category_a; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default 1 @group "Material A (priority 1)"
 uniform int material_a; // @label "Material" @list "Solid,Illustrated ink,Hologram,Brushed metal,Mosaic" @default 2 @group "Material A (priority 1)"
 uniform float4 color_a; // @label "Tint" @default "0.24,0.88,0.77,1.0" @group "Material A (priority 1)"
@@ -23,16 +31,66 @@ uniform float4 color_c; // @label "Tint" @default "0.68,0.51,0.9,1.0" @group "Ma
 uniform float mix_c; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.85 @group "Material C (priority 3)"
 uniform float scale; // @label "Pattern Scale" @min 2 @max 48 @step 1 @default 8 @group "Pattern"
 uniform float speed; // @label "Animation Speed" @min 0 @max 4 @step 0.05 @default 1 @group "Pattern"
+uniform float depth_mix; // @label "Depth Response" @min 0 @max 1 @step 0.01 @default 0.65 @group "Surface"
+uniform float surface_relief; // @label "Surface Relief" @min 0 @max 2 @step 0.01 @default 0.5 @group "Surface" @show_if "depth_mix > 0"
+uniform float normal_radius; // @label "Normal Sample Radius (px)" @min 1 @max 32 @step 1 @default 8 @group "Surface" @show_if "depth_mix > 0"
+uniform float edge_tolerance; // @label "Depth Edge Tolerance" @min 0.01 @max 0.4 @step 0.005 @default 0.12 @group "Surface" @show_if "depth_mix > 0"
+uniform float flow_mix; // @label "Motion Response" @min 0 @max 1 @step 0.01 @default 0.7 @group "Surface"
+uniform float matte_mix; // @label "Foreground Clipping" @min 0 @max 1 @step 0.01 @default 0 @group "Surface"
 #include "../../stdlib/semantic_regions.glsl"
 sampler_state sourceSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
 sampler_state maskSampler { Filter=Point; AddressU=Clamp; AddressV=Clamp; };
 struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
 VertData VSDefault(VertData v){v.pos=mul(float4(v.pos.xyz,1),ViewProj);return v;}
+// Relative inverse depth is a height field, not metric 3D geometry.
+float depth_at(float2 uv) {
+    return saturate(hs_sight_depth.Sample(sourceSampler,uv).r);
+}
+float inside_region(float2 uv,float4 b) {
+    return step(b.x,uv.x)*step(b.y,uv.y)*step(uv.x,b.z)*step(uv.y,b.w);
+}
+float semantic_slope(float d,float lo,float hi,float span,float wl,float wh) {
+    float tolerance=max(edge_tolerance,0.01);
+    wl*=1.0-smoothstep(tolerance*0.5,tolerance,abs(d-lo));
+    wh*=1.0-smoothstep(tolerance*0.5,tolerance,abs(hi-d));
+    return ((d-lo)*wl+(hi-d)*wh)/max(span*max(wl+wh,1.0),0.00001);
+}
+float3 semantic_normal(float2 uv,float4 b,float2 res) {
+    float radius=max(normal_radius,1.0);
+    float2 stepUV=radius/res;
+    float2 dx=float2(stepUV.x,0),dy=float2(0,stepUV.y);
+    float d=depth_at(uv);
+    float sx=semantic_slope(d,depth_at(uv-dx),depth_at(uv+dx),radius/res.y,
+        inside_region(uv-dx,b),inside_region(uv+dx,b));
+    float sy=semantic_slope(d,depth_at(uv-dy),depth_at(uv+dy),radius/res.y,
+        inside_region(uv-dy,b),inside_region(uv+dy,b));
+    return normalize(float3(-sx*surface_relief,sy*surface_relief,1.0));
+}
+// Backward displacement is current UV -> previous UV. Normalize to a
+// reference interval and clamp local offset; this is instantaneous
+// deformation, not persistent history advection.
+float2 semantic_motion(float2 uv,float4 b) {
+    if(flow_mix<=0.0||hs_sight_flow_present<0.5||hs_sight_flow_interval<=0.0||hs_sight_flow_coverage<0.2)
+        return float2(0,0);
+    float4 f=hs_sight_flow.Sample(sourceSampler,uv);
+    float2 delta=f.xy*(0.0333333/max(hs_sight_flow_interval,0.001));
+    delta/=max(b.zw-b.xy,float2(0.00001,0.00001));
+    return clamp(delta,float2(-0.25,-0.25),float2(0.25,0.25))*saturate(f.b)*saturate(flow_mix);
+}
 float3 shade_material(int mode,float3 original,float3 tint,float2 uv,float4 b,float4 m) {
     float2 local=hs_semantic_local(uv,b);
     float2 resolution=max(hs_resolution.xy,float2(1,1));
     float l=dot(original,float3(0.2126,0.7152,0.0722));
     float phase=hs_time*speed+frac(m.z*0.61803399);
+    // Only procedural pattern modes need auxiliary geometry.
+    float3 N=float3(0,0,1);
+    bool has_depth=depth_mix>0.0&&hs_sight_depth_present>0.5&&(mode==1||mode==2||mode==3);
+    if(has_depth) {
+        N=semantic_normal(uv,b,resolution);
+        local=saturate(local+float2(N.x,-N.y)*0.12*saturate(depth_mix));
+    }
+    if(mode==1||mode==2||mode==3)
+        local=saturate(local+semantic_motion(uv,b));
     if(mode==1) {
         float q=floor(saturate(l)*4.0+0.5)/4.0;
         float hatch=step(0.85,frac((local.x+local.y)*scale*2.0))*(1.0-q);
@@ -46,6 +104,13 @@ float3 shade_material(int mode,float3 original,float3 tint,float2 uv,float4 b,fl
     if(mode==3) {
         float brushed=0.5+0.5*sin((local.y*scale*7.0+local.x*0.35)*6.2831853);
         float reflection=pow(saturate(0.5+0.5*cos((local.x+0.25*local.y-phase*0.25)*6.2831853)),5.0);
+        if(has_depth) {
+            float3 L=normalize(float3(cos(phase*0.8),0.35,sin(phase*0.8)*0.25+0.65));
+            float3 H=normalize(L+float3(0,0,1));
+            float spec=pow(saturate(dot(N,H)),12.0);
+            float fresnel=pow(1.0-saturate(N.z),3.0);
+            reflection=lerp(reflection,saturate(spec+0.4*fresnel),saturate(depth_mix));
+        }
         return saturate(tint*(0.16+0.7*l+0.12*brushed)+reflection*0.55);
     }
     if(mode==4) {
@@ -66,6 +131,11 @@ float4 PSMain(VertData v):TARGET {
     int mode=slot==0?material_a:(slot==1?material_b:material_c);
     float4 color=slot==0?color_a:(slot==1?color_b:color_c);
     float blend_amount=slot==0?mix_a:(slot==1?mix_b:mix_c);
+    // Matte is a scene foreground estimate, not a category instance mask.
+    // No matte or zero clipping preserves the original region behavior.
+    if(matte_mix>0.0&&hs_sight_matte_present>0.5)
+        blend_amount*=lerp(1.0,saturate(hs_segmentation.Sample(sourceSampler,v.uv).r),saturate(matte_mix));
+    if(blend_amount<=0.0)return original;
     return float4(lerp(original.rgb,shade_material(mode,original.rgb,color.rgb,v.uv,b,m),saturate(blend_amount*color.a)),original.a);
 }
 technique Draw {pass{vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

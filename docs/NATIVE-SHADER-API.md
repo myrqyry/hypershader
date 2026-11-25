@@ -70,6 +70,46 @@ procedural patterns use region-local coordinates, not true surface geometry;
 the union mask skips uncovered pixels. Rendering cost grows with region count.
 These are creative effects, not a privacy guarantee.
 
+### Surface-aware material fusion
+
+Semantic Materials additionally accepts the existing source-local depth,
+flow and foreground matte signals. Place semantic detection, Depth Camera
+(Original source/share depth), Subject Cutout (Original source) and
+Spatial Motion (Original source/share motion) before HyperShader in the
+same source's render chain. Each optional producer must be unique and
+analysis-only; no coordinate-changing filter may intervene. Enable Sight
+shared snapshots in HyperShader. There is no additional model inside the
+shader.
+
+- **Depth Response** uses four adjacent inverse-depth taps plus the center
+  to reconstruct an edge-aware height-field normal. It warps procedural
+  ink/hologram/metal coordinates and blends brushed metal toward
+  surface-oriented specular/Fresnel lighting. Relief, radius and edge
+  tolerance are adjustable.
+- **Motion Response** uses confidence-weighted backward displacement,
+  normalized to a 33 ms reference interval and capped to a quarter of
+  the region per axis. It deforms procedural patterns, without accumulating
+  history or moving the region boundary.
+- **Foreground Clipping** (off by default) multiplies material mix by
+  the shared soft subject matte. The matte is not a per-category mask;
+  use it for foreground subjects, not arbitrary background objects.
+- Each optional input independently falls back to the existing region
+  material if absent or disabled. Missing semantics still pass through.
+
+These independent asynchronous snapshots are spatially aligned, not
+frame-synchronized; the normals and texture mapping are approximate.
+The shader does not reconstruct geometry or persistent surface UVs.
+No HDR, cross-platform, or real-time throughput claim is made.
+
+The controlled OpenGL test checks opposite depth slopes, opposite flow
+directions, zero confidence, foreground clipping, and exact bypass.
+For model-backed testing run `scripts/verify-sight-interop.sh` with the
+existing semantic fixture variables plus `SIGHT_MATERIAL_DEPTH_MODEL`,
+`SIGHT_MATERIAL_MATTE_MODEL`, and optionally
+`SIGHT_MATERIAL_FLOW_SHIFT_IMAGE` (same-sized translated image).
+This checks the real depth and matte rendering response, disabling and
+restoring producers, and nonzero measured flow in the composed chain.
+
 ## Named texture inputs
 
 Declare a texture with a same-line `@input N` annotation (N = 0 through
