@@ -18,6 +18,7 @@ See [shader authoring](SHADERS.md) and [OBS syntax](OBS_SHADER_SYNTAX.md).
 - `filter.sight_hand_ripples.effect`
 - `filter.sight_motion_pulse.effect`
 - `filter.sight_relight.effect`
+- `filter.sight_semantic_materials.effect` — three simultaneous category-specific procedural materials
 - `filter.sight_semantic_prism.effect` — category-selective duotone, mosaic and solid treatments
 - `filter.sight_subject_frame.effect`
 - `filter.sight_text_scramble.effect`

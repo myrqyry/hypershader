@@ -2819,9 +2819,11 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->shader_load_pending_task = NULL;
 
 	extern void *shader_load_worker_thread(void *data); /* Forward decl */
-	if (pthread_create(&s->shader_load_thread, NULL, shader_load_worker_thread, s) == 0) {
-		s->shader_load_thread_run = true;
-	} else {
+	/* Publish running state before pthread_create: the worker may execute
+	 * immediately, even before pthread_create returns to this thread. */
+	s->shader_load_thread_run = true;
+	if (pthread_create(&s->shader_load_thread, NULL, shader_load_worker_thread, s) != 0) {
+		s->shader_load_thread_run = false;
 		blog(LOG_ERROR, "[HyperShader] Failed to create shader load worker thread");
 	}
 	s->audio_debug = false;
@@ -3842,7 +3844,8 @@ void *shader_load_worker_thread(void *data)
 {
 	struct hypershader_data *s = data;
 
-	while (s->shader_load_thread_run) {
+	/* The stop flag is checked under shader_load_mutex below. */
+	for (;;) {
 		struct shader_load_task_data *task_data = NULL;
 
 		pthread_mutex_lock(&s->shader_load_mutex);

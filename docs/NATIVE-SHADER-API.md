@@ -57,6 +57,19 @@ than silently truncating. The source remains live, so a region can lag motion.
 The shipped **Sight: Semantic Prism** effect demonstrates category selection and
 three region treatments. It uses the union mask fast path for all categories.
 
+**Sight: Semantic Materials** assigns three category IDs to independent
+materials (solid, illustrated ink, hologram, brushed metal, mosaic), tint
+and mix. Slots A, B, C have descending priority at overlaps. Set category
+to -1 or mix to zero to disable a slot. Unmapped regions pass through.
+The helper `data/stdlib/semantic_regions.glsl` exposes
+`hs_semantic_route(uv,a,b,c,out bounds,out metadata)` and
+`hs_semantic_local(uv,bounds)` for other shaders. Declare the existing
+semantic uniforms before including it. The router chooses priority first,
+then fresh observations, confidence and smaller packed track ID. The
+procedural patterns use region-local coordinates, not true surface geometry;
+the union mask skips uncovered pixels. Rendering cost grows with region count.
+These are creative effects, not a privacy guarantee.
+
 ## Named texture inputs
 
 Declare a texture with a same-line `@input N` annotation (N = 0 through

@@ -26,6 +26,7 @@ build_probe() {
 "${CC:-cc}" -std=c17 -O2 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-semantic.c" -lm -o "$work/semantic"
 "$work/semantic"
 build_probe "$repo/scripts/verify-sight-semantic-obs.cpp" "$work/semantic_obs"
+build_probe "$repo/scripts/verify-sight-materials-obs.cpp" "$work/materials_gpu"
 build_probe "$repo/scripts/verify-sight-touch-gpu-obs.cpp" "$work/touch_gpu"
 build_probe "$repo/scripts/verify-sight-touch-obs.cpp" "$work/touch_obs"
 build_probe "$repo/scripts/verify-sight-gpu-obs.cpp" "$work/gpu"
@@ -39,6 +40,8 @@ build_probe "$repo/scripts/verify-sight-simple-effects.cpp" "$work/simple"
 
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/touch_gpu" "$repo/data/shaders/root/filter.sight_hand_ripples.effect"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/gpu"
+xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/materials_gpu" \
+    "$repo/data/shaders/root/filter.sight_semantic_materials.effect" "$repo/data/stdlib/semantic_regions.glsl"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/simple" "$repo/data/shaders/root"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/echo_gpu" "$repo/data/shaders/root/filter.sight_flow_echo.effect"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/sparks_gpu" "$repo/data/shaders/root/filter.sight_flow_sparks.effect"
@@ -84,6 +87,10 @@ if [[ -n "${HYPERSHADER_MODULE:-}" && -n "${SIGHT_SEMANTIC_MODEL:-}" && -n "${SI
         "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
         "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
         "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/root/filter.sight_semantic_prism.effect"
+    xvfb-run -a -s '-screen 0 1280x720x24' timeout 45 "$work/semantic_obs" \
+        "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
+        "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
+        "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/root/filter.sight_semantic_materials.effect"
 else
     echo "SIGHT_SEMANTIC_REAL_CHECK_SKIPPED: supply modules and semantic fixture variables"
 fi
