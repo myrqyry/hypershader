@@ -1499,6 +1499,8 @@ static void filter_destroy(void *data)
 	if (!s)
 		return;
 
+	hs_data_driver_destroy(s->data_driver);
+	s->data_driver = NULL;
 	effect_hotkeys_unregister(s->effect_hotkeys);
 	log_debug_direct("filter_destroy: START");
 
@@ -2324,6 +2326,12 @@ static void filter_update(void *data, obs_data_t *settings)
 		return;
 
 	hyper_ui_migrate_legacy_preset(settings);
+    const char *data_uuid = "";
+    if (obs_data_get_int(settings,"perf_mod_source")==8 &&
+        !strcmp(obs_data_get_string(settings,"perf_mod_shader"),obs_data_get_string(settings,"shader_file")))
+        data_uuid=obs_data_get_string(settings,"perf_mod_data_uuid");
+    long long data_age=obs_data_get_int(settings,"perf_mod_data_age_ms");
+    hs_data_driver_configure(s->data_driver,data_uuid,data_age>0?(int)fmin(60000.,(double)data_age):5000);
 	hs_source_audio_defaults(s, settings);
 	const bool sight_requested = obs_data_get_bool(settings, "sight_use_tracking");
 	const char *channel = obs_data_get_string(settings, "sight_tracking_channel");
@@ -2764,6 +2772,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	atomic_init(&s->live_signal_flags, 0);
 	atomic_init(&s->live_audio_permille, 0);
 	s->context = context;
+	s->data_driver = hs_data_driver_create();
 	s->effect_hotkeys = OBS_INVALID_HOTKEY_PAIR_ID;
 	s->kind = kind;
 	s->scene = NULL;
@@ -4643,7 +4652,7 @@ static float performance_modulated_value(struct hypershader_data *s, obs_data_t 
 		const struct shader_param_meta *m, const char *prop, float base)
 {
 	int driver = (int)obs_data_get_int(settings, "perf_mod_source");
-	if (driver < 1 || driver > 7 || !m->has_min || !m->has_max ||
+	if (driver < 1 || driver > 8 || !m->has_min || !m->has_max ||
 	    !isfinite(m->min) || !isfinite(m->max) || m->min >= m->max ||
 	    strcmp(obs_data_get_string(settings, "perf_mod_param"), prop) != 0 ||
 	    !s->performance_compiled_path ||
@@ -4654,6 +4663,16 @@ static float performance_modulated_value(struct hypershader_data *s, obs_data_t 
 	/* An old effect may remain active during a pending replacement.
 	 * The published render identity gates the mapping in the UI; here
 	 * the current effect metadata must also match the stored target. */
+    if(driver==8){
+        if(m->audio_tag)return base;
+        for(int i=0;i<AUDIO_MAP_SLOTS;i++)
+            if(s->audio_map_name[i]&&!strcmp(s->audio_map_name[i],m->name))return base;
+        float value=0;
+        const long long age=obs_data_get_int(settings,"perf_mod_data_age_ms");
+        if(!hs_data_driver_read(s->data_driver,obs_data_get_string(settings,"perf_mod_data_uuid"),
+            age>0?(int)fmin(60000.,(double)age):5000,&value))return base;
+        return fmaxf(m->min,fminf(m->max,value));
+    }
 	float signal = 0.f;
 	const float depth = (float)obs_data_get_double(settings, "perf_mod_depth");
 	if (!isfinite(depth) || depth <= 0.f)

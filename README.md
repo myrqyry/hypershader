@@ -156,10 +156,18 @@ routing, shader identity, or discrete modes. Undo restores the preceding
 variation/morph values. These working looks and locks are session-local.
 
 One optional live modulation per instance can drive a bounded float using
-an oscillator, audio level/bass/kick/beat, Sight motion or hand pinch.
+an oscillator, audio level/bass/kick/beat, Sight motion, hand pinch, or an
+optional Data Source value.
 The runtime evaluates the modulation at draw time, never overwriting the
 stored base value. Missing/stale signals return to the base value; mappings
 are tied to the exact shader selection. Audio/Sight capture remains opt-in.
+
+For Data Source, enable **Share parsed data with OBS plugins** on a compatible
+URL Source provider, select a numeric/boolean JSON Pointer result, then use
+**Play → Modulation → Data Source · value**. Choose the source by name
+(the saved binding uses its UUID), the parameter and maximum age. The value
+directly drives the bounded float, without changing its saved slider.
+No extra network request is made by HyperShader.
 
 Library can load a compatible installed native effect directly on the
 selected instance, retaining its original include paths and checking

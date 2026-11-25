@@ -185,14 +185,33 @@ private:
   auto*param=new QComboBox(g);param->setObjectName("hsModParameter");param->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);param->setMinimumContentsLength(7);
   for(const auto&field:fields){QString label=field.key.mid(6);label.replace('_',' ');param->addItem(label,field.key);}
   auto*driver=new QComboBox(g);driver->setObjectName("hsModDriver");
-  driver->addItems({"Off","Oscillator","Audio · level","Audio · bass","Audio · kick","Audio · beat","Sight · motion","Sight · pinch"});
+  driver->addItems({"Off","Oscillator","Audio · level","Audio · bass","Audio · kick","Audio · beat","Sight · motion","Sight · pinch","Data Source · value"});
   auto*depth=new QDoubleSpinBox(g);depth->setObjectName("hsModDepth");depth->setRange(0,100);depth->setSuffix("%");depth->setValue(25);
   auto*hz=new QDoubleSpinBox(g);hz->setRange(.01,10);hz->setDecimals(2);hz->setSingleStep(.1);hz->setSuffix(" Hz");hz->setValue(.5);
+  auto*provider=new QComboBox(g);provider->setObjectName("hsModDataSource");
+  provider->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  provider->setMinimumContentsLength(7);
+  provider->addItem("Select Data Source…","");
+  obs_enum_sources([](void*data,obs_source_t*source){
+   auto*list=static_cast<QComboBox*>(data);
+   if(!obs_source_removed(source)&&!strcmp(obs_source_get_id(source),"url_source"))
+    list->addItem(QString::fromUtf8(obs_source_get_name(source)),QString::fromUtf8(obs_source_get_uuid(source)));
+   return true;
+  },provider);
+  const auto savedProvider=string(s,"perf_mod_data_uuid");
+  int providerIndex=provider->findData(savedProvider);
+  if(providerIndex<0&&!savedProvider.isEmpty()){
+   provider->addItem("Saved source (unavailable)",savedProvider);providerIndex=provider->count()-1;
+  }
+  provider->setCurrentIndex(std::max(0,providerIndex));
+  auto*age=new QSpinBox(g);age->setObjectName("hsModDataAge");age->setRange(100,60000);
+  age->setSuffix(" ms");age->setSingleStep(100);auto savedAge=obs_data_get_int(s,"perf_mod_data_age_ms");
+  age->setValue(savedAge>0?int(std::min(60000LL,savedAge)):5000);
   const auto path=string(s,"shader_file"),token=identity;
   bool bound=path==string(s,"perf_mod_shader")&&obs_data_get_int(s,"perf_mod_source")>0;
   if(bound){
    param->setCurrentIndex(param->findData(string(s,"perf_mod_param")));
-   driver->setCurrentIndex(std::clamp(int(obs_data_get_int(s,"perf_mod_source")),0,7));
+   driver->setCurrentIndex(std::clamp(int(obs_data_get_int(s,"perf_mod_source")),0,8));
    depth->setValue(obs_data_get_double(s,"perf_mod_depth")*100);
    hz->setValue(obs_data_get_double(s,"perf_mod_hz"));
   }
@@ -200,17 +219,26 @@ private:
   auto*clear=new QPushButton("Clear",g);clear->setObjectName("hsModClear");clear->setEnabled(bound);
   auto*row=new QWidget(g);auto*buttons=new QHBoxLayout(row);buttons->setContentsMargins(0,0,0,0);buttons->addWidget(apply);buttons->addWidget(clear);
   auto*description=new QLabel(bound?"Mapping active for this shader. Base slider stays unchanged.":"One live mapping per instance. Bind an oscillator or a real input signal.",g);description->setWordWrap(true);
-  f->addRow("Parameter",param);f->addRow("Driver",driver);f->addRow("Depth",depth);f->addRow("Frequency",hz);f->addRow(row);f->addRow(description);
-  hz->setVisible(driver->currentIndex()==1);if(auto*label=f->labelForField(hz))label->setVisible(hz->isVisibleTo(g));
-  connect(driver,qOverload<int>(&QComboBox::currentIndexChanged),g,[=](int i){hz->setVisible(i==1);if(auto*label=f->labelForField(hz))label->setVisible(i==1);});
+  f->addRow("Parameter",param);f->addRow("Driver",driver);f->addRow("Depth",depth);f->addRow("Frequency",hz);f->addRow("Data Source",provider);f->addRow("Max age",age);f->addRow(row);f->addRow(description);
+  auto visibility=[=](int i){
+   auto show=[&](QWidget*w,bool visible){w->setVisible(visible);if(auto*label=f->labelForField(w))label->setVisible(visible);};
+   show(hz,i==1);show(depth,i!=8);show(provider,i==8);show(age,i==8);
+   apply->setEnabled(i!=8||!provider->currentData().toString().isEmpty());
+   description->setText(i==8?"Select a shared numeric or boolean result in URL Source. Stale or missing data uses the saved slider.":bound?"Mapping active for this shader. Base slider stays unchanged.":"One live mapping per instance.");
+  };
+  visibility(driver->currentIndex());
+  connect(driver,qOverload<int>(&QComboBox::currentIndexChanged),g,visibility);
+  connect(provider,qOverload<int>(&QComboBox::currentIndexChanged),g,[=](int){visibility(driver->currentIndex());});
   connect(apply,&QPushButton::clicked,this,[=]{
-   if(token!=identity||param->currentIndex()<0)return;
+   if(token!=identity||param->currentIndex()<0||(driver->currentIndex()==8&&provider->currentData().toString().isEmpty()))return;
    withTarget([&](obs_source_t*src,obs_data_t*cfg){
     obs_data_set_string(cfg,"perf_mod_shader",path.toUtf8().constData());
     obs_data_set_string(cfg,"perf_mod_param",param->currentData().toString().toUtf8().constData());
     obs_data_set_int(cfg,"perf_mod_source",driver->currentIndex());
     obs_data_set_double(cfg,"perf_mod_depth",depth->value()/100.);
     obs_data_set_double(cfg,"perf_mod_hz",hz->value());
+    obs_data_set_string(cfg,"perf_mod_data_uuid",provider->currentData().toString().toUtf8().constData());
+    obs_data_set_int(cfg,"perf_mod_data_age_ms",age->value());
     obs_source_update(src,cfg);
    });QTimer::singleShot(0,this,[this]{refresh(true);});
   });
@@ -218,6 +246,7 @@ private:
    if(token!=identity)return;
    withTarget([&](obs_source_t*src,obs_data_t*cfg){
     obs_data_set_int(cfg,"perf_mod_source",0);
+    obs_data_set_string(cfg,"perf_mod_data_uuid","");
     obs_data_set_string(cfg,"perf_mod_shader","");obs_data_set_string(cfg,"perf_mod_param","");
     obs_source_update(src,cfg);
    });QTimer::singleShot(0,this,[this]{refresh(true);});

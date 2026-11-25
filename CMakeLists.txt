@@ -55,6 +55,7 @@ target_include_directories(
 set(
   PLUGIN_SOURCES
   src/filter-hypershader.c
+  src/interop/data_driver.cpp
   src/channel_image_compat.c
   src/shader/shader_metadata.c
   src/shader/shader_visibility.c

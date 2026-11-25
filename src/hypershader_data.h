@@ -32,6 +32,7 @@
 #include "mediapipe/mp_wrapper.h"
 #include "mediapipe/face_surface.h"
 #include "interop/sight_touch.h"
+#include "interop/data_driver.h"
 
 /* Input mode choices */
 #define INPUT_MODE_SOURCE 0
@@ -236,6 +237,7 @@ struct hypershader_data {
 
 	char *shader_path;
 	char *performance_compiled_path;
+	hs_data_driver *data_driver;
 	char *shader_error; /* Last compilation error message */
 	struct vec2 mouse_pos;
 	struct vec2 mouse_click;

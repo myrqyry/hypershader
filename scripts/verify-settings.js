@@ -156,6 +156,7 @@ const performance = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'sha
 for (const [key, kind] of Object.entries({
   perf_mod_shader: 'string', perf_mod_param: 'string',
   perf_mod_source: 'int', perf_mod_depth: 'double', perf_mod_hz: 'double',
+  perf_mod_data_uuid: 'string', perf_mod_data_age_ms: 'int',
 })) {
   const defs = sourceTruth.get(key) || [];
   const setter = new RegExp('obs_data_set_' + kind + '\\s*\\(\\s*cfg\\s*,\\s*"' + key + '"');
