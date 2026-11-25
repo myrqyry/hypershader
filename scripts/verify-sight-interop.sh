@@ -23,6 +23,9 @@ build_probe() {
 "$work/flow_step"
 "${CC:-cc}" -std=c17 -O2 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-touch.c" -lm -o "$work/touch"
 "$work/touch"
+"${CC:-cc}" -std=c17 -O2 -Wall -Wextra -Werror -I"$repo/src" "$repo/scripts/verify-sight-semantic.c" -lm -o "$work/semantic"
+"$work/semantic"
+build_probe "$repo/scripts/verify-sight-semantic-obs.cpp" "$work/semantic_obs"
 build_probe "$repo/scripts/verify-sight-touch-gpu-obs.cpp" "$work/touch_gpu"
 build_probe "$repo/scripts/verify-sight-touch-obs.cpp" "$work/touch_obs"
 build_probe "$repo/scripts/verify-sight-gpu-obs.cpp" "$work/gpu"
@@ -71,5 +74,13 @@ if [[ -n "${HYPERSHADER_MODULE:-}" && -n "${SIGHT_GESTURE_MODEL:-}" && -n "${SIG
         "$SIGHT_MEDIAPIPE_LIB" "$SIGHT_GESTURE_TEST_IMAGE" "$repo/data/shaders/root/filter.sight_hand_ripples.effect"
 else
     echo "SIGHT_RIPPLE_REAL_CHECK_SKIPPED: supply module and gesture fixture variables"
+fi
+if [[ -n "${HYPERSHADER_MODULE:-}" && -n "${SIGHT_SEMANTIC_MODEL:-}" && -n "${SIGHT_SEMANTIC_TEST_IMAGE:-}" && -n "${SIGHT_IMAGE_SOURCE_MODULE:-}" && -n "${SIGHT_IMAGE_SOURCE_DATA:-}" ]]; then
+    xvfb-run -a -s '-screen 0 1280x720x24' timeout 45 "$work/semantic_obs" \
+        "$sight_module" "$sight_data" "$HYPERSHADER_MODULE" "$repo/data" \
+        "$SIGHT_IMAGE_SOURCE_MODULE" "$SIGHT_IMAGE_SOURCE_DATA" "$SIGHT_SEMANTIC_MODEL" \
+        "$SIGHT_SEMANTIC_TEST_IMAGE" "$repo/data/shaders/tests/sight_semantic_probe.effect"
+else
+    echo "SIGHT_SEMANTIC_REAL_CHECK_SKIPPED: supply modules and semantic fixture variables"
 fi
 echo "HYPERSHADER_SIGHT_INTEROP_STATIC_AND_GPU_PASS=1"

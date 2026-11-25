@@ -112,6 +112,7 @@ static inline bool hs_sight_reader_read(obs_source_t *reader, const char *channe
 #include "sight_depth_v1.h"
 #include "sight_motion_v1.h"
 #include "sight_text_mask.h"
+#include "sight_semantic_validate.h"
 #include "sight_flow_validate.h"
 #include <math.h>
 
@@ -127,6 +128,13 @@ static inline bool hs_sight_analysis_only(obs_source_t *source)
     else if(!strcmp(id,"sight_spatial_motion_filter")){key="flow_view";expected=0;}
     else if(!strcmp(id,"sight_text_obfuscation_filter")){key="ocr_view";expected=3;}
     else if(!strcmp(id,"sight_depth_filter")){key="view_mode";expected=2;}
+    else if(!strcmp(id,"sight_privacy_v2_filter")){
+        obs_data_t *cfg=obs_source_get_settings(source);
+        if(!cfg)return false;
+        bool analysis=obs_data_get_bool(cfg,"semantic_enabled")&&
+            obs_data_get_bool(cfg,"semantic_analysis_only")&&!obs_data_get_bool(cfg,"semantic_buffered");
+        obs_data_release(cfg);return analysis;
+    }
     else return false;
     obs_data_t *settings=obs_source_get_settings(source);
     if(!settings)return false;
@@ -230,6 +238,25 @@ static inline bool hs_sight_text_read(obs_source_t *consumer,sight_text_v1 *out)
     const uint32_t width=obs_source_get_base_width(producer),height=obs_source_get_base_height(producer);
     obs_source_release(producer);
     return available&&hs_text_valid(out,width,height);
+}
+
+static inline bool hs_sight_semantic_read(obs_source_t *consumer,sight_semantic_v1 *out)
+{
+    memset(out,0,sizeof(*out));
+    out->abi_version=SIGHT_SEMANTIC_ABI_V1;out->struct_size=sizeof(*out);
+    obs_source_t *producer=hs_sight_local_producer(consumer,"sight_privacy_v2_filter");
+    if(!producer)return false;
+    calldata_t params;calldata_init(&params);
+    calldata_set_int(&params,"max_age_ms",650);
+    calldata_set_ptr(&params,"snapshot",out);
+    bool available=false;
+    proc_handler_t *handler=obs_source_get_proc_handler(producer);
+    if(handler&&proc_handler_call(handler,"sight_semantic_geometry_v1",&params))
+        calldata_get_bool(&params,"available",&available);
+    calldata_free(&params);
+    const uint32_t w=obs_source_get_base_width(producer),h=obs_source_get_base_height(producer);
+    obs_source_release(producer);
+    return available&&hs_semantic_valid(out,w,h);
 }
 
 static inline bool hs_sight_matte_read(obs_source_t *consumer, uint64_t known,

@@ -1613,6 +1613,9 @@ static void filter_destroy(void *data)
     if (s->sight_text_mask) gs_texture_destroy(s->sight_text_mask);
     if (s->sight_flow_texture) gs_texture_destroy(s->sight_flow_texture);
     hs_sight_upload_rgba32f(&s->sight_text_bounds,0,0,NULL);
+    hs_sight_upload_rgba32f(&s->sight_semantic_bounds,0,0,NULL);
+    hs_sight_upload_rgba32f(&s->sight_semantic_meta,0,0,NULL);
+    if(s->sight_semantic_mask)gs_texture_destroy(s->sight_semantic_mask);
 	hs_sight_upload_rgba32f(&s->sight_points_tex, 0, 0, NULL);
 	hs_sight_upload_rgba32f(&s->sight_hands_tex, 0, 0, NULL);
 	hs_sight_upload_rgba32f(&s->sight_blendshape_tex, 0, 0, NULL);
@@ -3194,6 +3197,48 @@ static void sight_text_tick(struct hypershader_data *s,bool enabled)
     }
 }
 
+static void sight_semantic_tick(struct hypershader_data *s,bool enabled)
+{
+    s->sight_semantic_present=false;s->sight_semantic_count=0;
+    if(!enabled||(!s->ep_sight_semantic_present&&!s->ep_sight_semantic_count&&
+        !s->ep_sight_semantic_bounds&&!s->ep_sight_semantic_meta&&!s->ep_sight_semantic_mask))return;
+    sight_semantic_v1 snap;
+    if(!hs_sight_semantic_read(s->context,&snap))return;
+    if(snap.sequence!=s->sight_semantic_sequence){
+        float bounds[SIGHT_SEMANTIC_MAX_REGIONS*4],meta[SIGHT_SEMANTIC_MAX_REGIONS*4];
+        hs_semantic_pack(&snap,bounds,meta);
+        sight_text_v1 raster={0};raster.count=snap.count;
+        for(uint32_t i=0;i<snap.count;++i){
+            const sight_semantic_region_v1 *r=&snap.regions[i];
+            raster.lines[i]=(sight_text_line_v1){r->x0,r->y0,r->x1,r->y1,r->confidence};
+        }
+        uint8_t *pixels=bmalloc(HS_TEXT_EDGE*HS_TEXT_EDGE);
+        int16_t *scratch=bmalloc(sizeof(*scratch)*HS_TEXT_EDGE*(HS_TEXT_EDGE+1));
+        hs_text_raster(&raster,pixels,scratch);bfree(scratch);
+        obs_enter_graphics();
+        if(!s->sight_semantic_mask)
+            s->sight_semantic_mask=gs_texture_create(HS_TEXT_EDGE,HS_TEXT_EDGE,GS_R8,1,NULL,GS_DYNAMIC);
+        bool ok=s->sight_semantic_mask!=NULL;
+        if(ok)gs_texture_set_image(s->sight_semantic_mask,pixels,HS_TEXT_EDGE,false);
+        ok=hs_sight_upload_rgba32f(&s->sight_semantic_bounds,SIGHT_SEMANTIC_MAX_REGIONS,1,bounds)&&ok;
+        ok=hs_sight_upload_rgba32f(&s->sight_semantic_meta,SIGHT_SEMANTIC_MAX_REGIONS,1,meta)&&ok;
+        if(ok)s->sight_semantic_sequence=snap.sequence;
+        obs_leave_graphics();bfree(pixels);
+    }
+    s->sight_semantic_present=s->sight_semantic_sequence==snap.sequence&&s->sight_semantic_mask&&
+        s->sight_semantic_bounds&&s->sight_semantic_meta;
+    if(s->sight_semantic_present)s->sight_semantic_count=snap.count;
+}
+static void sight_semantic_bind(struct hypershader_data *s,bool selected)
+{
+    const bool present=selected&&s->sight_semantic_present;
+    if(s->ep_sight_semantic_present)gs_effect_set_float(s->ep_sight_semantic_present,present?1.f:0.f);
+    if(s->ep_sight_semantic_count)gs_effect_set_int(s->ep_sight_semantic_count,present?(int)s->sight_semantic_count:0);
+    if(s->ep_sight_semantic_bounds)gs_effect_set_texture(s->ep_sight_semantic_bounds,present?s->sight_semantic_bounds:s->dummy_texture);
+    if(s->ep_sight_semantic_meta)gs_effect_set_texture(s->ep_sight_semantic_meta,present?s->sight_semantic_meta:s->dummy_texture);
+    if(s->ep_sight_semantic_mask)gs_effect_set_texture(s->ep_sight_semantic_mask,present?s->sight_semantic_mask:s->dummy_texture);
+}
+
 /* Only copies Sight's current immutable channel snapshot, never starts a model. */
 static void sight_tick(struct hypershader_data *s)
 {
@@ -3228,6 +3273,7 @@ static void sight_tick(struct hypershader_data *s)
     }
 	sight_matte_tick(s,enabled);
     sight_text_tick(s,enabled);
+    sight_semantic_tick(s,enabled);
     sight_flow_tick(s,enabled);
     sight_depth_tick(s,enabled);
 	if (!enabled) {
@@ -3588,6 +3634,11 @@ static void shader_load_complete_task(void *param)
         s->ep_sight_flow_coverage=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_coverage");
         s->ep_sight_flow_step=gs_effect_get_param_by_name(s->effect,"hs_sight_flow_step");
         s->ep_sight_text_present = gs_effect_get_param_by_name(s->effect, "hs_sight_text_present");
+        s->ep_sight_semantic_present = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_present");
+        s->ep_sight_semantic_count = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_count");
+        s->ep_sight_semantic_bounds = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_bounds");
+        s->ep_sight_semantic_meta = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_meta");
+        s->ep_sight_semantic_mask = gs_effect_get_param_by_name(s->effect, "hs_sight_semantic_mask");
         s->ep_sight_text_count = gs_effect_get_param_by_name(s->effect, "hs_sight_text_count");
         s->ep_sight_text_mask = gs_effect_get_param_by_name(s->effect, "hs_sight_text_mask");
         s->ep_sight_text_bounds = gs_effect_get_param_by_name(s->effect, "hs_sight_text_bounds");
@@ -4449,6 +4500,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
     if(s->ep_sight_flow_interval)gs_effect_set_float(s->ep_sight_flow_interval,flow?s->sight_flow_interval:0.f);
     if(s->ep_sight_flow_coverage)gs_effect_set_float(s->ep_sight_flow_coverage,flow?s->sight_flow_coverage:0.f);
     if(s->ep_sight_flow_step)gs_effect_set_float(s->ep_sight_flow_step,0.f);
+    sight_semantic_bind(s,sight_selected);
     const bool text = sight_selected && s->sight_text_present;
     if(s->ep_sight_text_present)gs_effect_set_float(s->ep_sight_text_present,text?1.f:0.f);
     if(s->ep_sight_text_count)gs_effect_set_int(s->ep_sight_text_count,text?(int)s->sight_text_count:0);
@@ -4824,6 +4876,7 @@ static void graph_bind_builtins(struct hypershader_data *s, uint32_t width, uint
     const bool depth=sight_selected&&s->sight_depth_present&&s->sight_depth_tex;
     if(s->ep_sight_depth)gs_effect_set_texture(s->ep_sight_depth,depth?s->sight_depth_tex:s->dummy_texture);
     if(s->ep_sight_depth_present)gs_effect_set_float(s->ep_sight_depth_present,depth?1.f:0.f);
+    sight_semantic_bind(s,sight_selected);
     const bool matte=sight_selected&&s->sight_matte_present&&s->sight_matte_tex;
     if(s->ep_sight_matte_present)gs_effect_set_float(s->ep_sight_matte_present,matte?1.f:0.f);
     if(sight_selected&&s->ep_segmentation)

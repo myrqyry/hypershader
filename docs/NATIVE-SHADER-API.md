@@ -31,6 +31,29 @@ The full graph allocation contract, including [named ordered passes](TWO-BUFFER-
 See [shader authoring](../data/shaders/SHADERS.md) for declarations and
 sampling primitives.
 
+## Sight semantic region signals
+
+Add Sight Privacy V2 before HyperShader on the same source. Enable its
+custom semantic detector and **Analysis only (shader signals; no concealment)**;
+leave approved-frame buffering off. Enable Sight tracking in HyperShader.
+A missing, disabled, stale, ambiguous or incompatible producer is unavailable.
+Unknown intervening filters are coordinate barriers. No second model is loaded.
+
+| Uniform | Type / meaning |
+| --- | --- |
+| `hs_sight_semantic_present` | float, 1 for a valid snapshot (including empty) |
+| `hs_sight_semantic_count` | int, number of regions, 0–256 |
+| `hs_sight_semantic_mask` | texture2d, 512×512 R8 union of all selected rectangles |
+| `hs_sight_semantic_bounds` | texture2d, 256×1 RGBA32F; normalized x0,y0,x1,y1 |
+| `hs_sight_semantic_meta` | texture2d, 256×1 RGBA32F; category, confidence, low 24 bits of track ID, held flag |
+
+Check present and count before sampling; unavailable returns zero logical
+count and fallback textures. Use `Load(int3(i,0,0))` for each region index
+below count. Category IDs depend on the selected model. The mask represents
+rectangular coverage, not pixel segmentation; analysis-only is not censorship.
+The typed ABI is versioned, caller-owned, and rejects oversized snapshots rather
+than silently truncating. The source remains live, so a region can lag motion.
+
 ## Named texture inputs
 
 Declare a texture with a same-line `@input N` annotation (N = 0 through

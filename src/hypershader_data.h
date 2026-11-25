@@ -505,6 +505,12 @@ struct hypershader_data {
 	uint64_t sight_text_sequence;
 	uint32_t sight_text_count;
 	bool sight_text_present, sight_text_announced;
+    gs_eparam_t *ep_sight_semantic_present,*ep_sight_semantic_count;
+    gs_eparam_t *ep_sight_semantic_bounds,*ep_sight_semantic_meta,*ep_sight_semantic_mask;
+    gs_texture_t *sight_semantic_bounds,*sight_semantic_meta,*sight_semantic_mask;
+    uint64_t sight_semantic_sequence;
+    uint32_t sight_semantic_count;
+    bool sight_semantic_present;
 	gs_eparam_t *ep_sight_motion_present;
 	gs_eparam_t *ep_sight_motion_energy;
 	float sight_motion_energy;

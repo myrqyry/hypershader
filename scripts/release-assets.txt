@@ -122,3 +122,4 @@ include fb373f3528d3ff2cf7f66936a6054547e0ae5777 data/stdlib/transitions.glsl
 include 62c65ed87ebbf4ba7a6f6e7e5bc17136373f24f8 data/stdlib/vertex.glsl
 include 11515587887e9d257b0c86c652f1addda8c5bf23 data/stdlib/volumetric.glsl
 include 6aa5a9cda2abdf68e3e7411d4327ab315be9826b data/stdlib/voxel_3d.glsl
+include aac6108751d185dd4ada6c0d23e53719b2065783 data/shaders/tests/sight_semantic_probe.effect

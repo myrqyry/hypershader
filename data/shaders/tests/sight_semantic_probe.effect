@@ -1,0 +1,20 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d hs_sight_semantic_mask;
+uniform texture2d hs_sight_semantic_bounds;
+uniform texture2d hs_sight_semantic_meta;
+uniform float hs_sight_semantic_present;
+uniform int hs_sight_semantic_count;
+sampler_state s { Filter=Point; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION;float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v){v.pos=mul(float4(v.pos.xyz,1),ViewProj);return v;}
+float4 PSMain(VertData v):TARGET {
+ float4 c=image.Sample(s,v.uv);
+ if(hs_sight_semantic_present<.5||hs_sight_semantic_count<1)return c;
+ float4 b=hs_sight_semantic_bounds.Load(int3(0,0,0));
+ float4 m=hs_sight_semantic_meta.Load(int3(0,0,0));
+ if(m.x!=1.0||m.y<.2||m.z<1.0||b.z<=b.x||b.w<=b.y)return c;
+ if(hs_sight_semantic_mask.Sample(s,v.uv).r>.5)return float4(1,0,1,1);
+ return c;
+}
+technique Draw {pass{vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}
