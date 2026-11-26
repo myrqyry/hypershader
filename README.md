@@ -529,3 +529,7 @@ When changing shader behavior, prefer a real renderer regression when practical.
 ## License
 
 The repository includes the GNU General Public License version 2 text in [`LICENSE`](LICENSE). Runtime third-party notices are collected in [data/licenses](data/licenses/README.md). Individual shaders may carry additional attribution/license notes; see their headers and [`docs/SHADER-NOTES-CREDITS.md`](docs/SHADER-NOTES-CREDITS.md).
+
+**Sight: Baked PBR** adds local HypBR surface maps to semantic regions
+using a repeat-safe packed atlas and the native depth/matte/persistent-UV
+bridge. See [setup and atlas packing](docs/sight-baked-pbr.md).

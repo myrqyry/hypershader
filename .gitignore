@@ -58,3 +58,5 @@ __pycache__/
 !/data/shaders/root/previews/source.brass_register-49728ce30eb6b656.png
 !/data/shaders/root/previews/source.paper_tide-f7e6f0aad1ba92a4.png
 !/data/shaders/root/previews/source.spectral_garden-dad94309c6ccee3e.png
+
+!/data/shaders/root/filter.sight_baked_pbr.effect

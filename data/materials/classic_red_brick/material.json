@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "engine": "hypbr",
+  "engine_commit": "83a0cb859ad03324185632019402ba01ba31f242",
+  "license": "MIT",
+  "recipe": {
+    "id": "classic_red_brick",
+    "seed": 42,
+    "size": 512,
+    "wear": 0.0
+  },
+  "version": "1.1.0",
+  "numpy": "2.5.5",
+  "pillow": "13.0.0",
+  "real_world_size_m": [
+    0.9,
+    0.75
+  ],
+  "projection": {
+    "recommended": "uv",
+    "triplanar_fallback": true,
+    "world_scale_uv": true,
+    "anisotropic_axis": "none",
+    "requires_tangents": false,
+    "tiling_note": "Keep courses horizontal: map U along the wall length and V up the wall; use box mapping for chimneys.",
+    "uv_repeat_formula": "repeat_u = surface_width_m / 0.9; repeat_v = surface_height_m / 0.75",
+    "triplanar_scale_formula": "triplanar_scale = 1 / 0.9 (texture tiles per meter along U), 1 / 0.75 along V"
+  },
+  "shader_setup": {
+    "normal_space": "OpenGL (+Y)",
+    "orm_packing": "R=AO, G=Roughness, B=Metallic",
+    "aux_packing": "R=Height, G=Curvature, B=Cavity",
+    "albedo_colorspace": "sRGB",
+    "data_colorspace": "Linear",
+    "displacement_scale_m": 0.012,
+    "ior": 1.5,
+    "is_metallic": false,
+    "roughness_range": [
+      0.71,
+      0.976
+    ],
+    "metallic_range": [
+      0.0,
+      0.0
+    ],
+    "transmission": 0.0,
+    "ranges_measured": true
+  },
+  "verification": {
+    "material": "material",
+    "passed": true,
+    "errors": [],
+    "warnings": [],
+    "checks": {
+      "resolution": [
+        512,
+        512
+      ],
+      "seamless": {
+        "height": {
+          "border_l1": 0.00477,
+          "interior_l1": 0.02215,
+          "seam_ratio": 0.215,
+          "outlier_score": 0.049,
+          "axes": {
+            "v": {
+              "border": 0.0054,
+              "ratio": 0.182,
+              "outlier": 0.018
+            },
+            "h": {
+              "border": 0.00414,
+              "ratio": 0.282,
+              "outlier": 0.049
+            }
+          }
+        },
+        "normal": {
+          "border_l1": 0.00779,
+          "interior_l1": 0.01864,
+          "seam_ratio": 0.418,
+          "outlier_score": 0.102,
+          "axes": {
+            "v": {
+              "border": 0.00857,
+              "ratio": 0.37,
+              "outlier": 0.042
+            },
+            "h": {
+              "border": 0.00701,
+              "ratio": 0.496,
+              "outlier": 0.102
+            }
+          }
+        },
+        "albedo": {
+          "border_l1": 0.00831,
+          "interior_l1": 0.0175,
+          "seam_ratio": 0.475,
+          "outlier_score": 0.173,
+          "axes": {
+            "v": {
+              "border": 0.00868,
+              "ratio": 0.428,
+              "outlier": 0.063
+            },
+            "h": {
+              "border": 0.00795,
+              "ratio": 0.54,
+              "outlier": 0.173
+            }
+          }
+        }
+      },
+      "normal": {
+        "unit_length_error": 0.00186,
+        "positive_z_fraction": 1.0,
+        "curl_residual_ratio": 0.1877
+      },
+      "orm_max_channel_diff": 0,
+      "pbr_ranges": {
+        "albedo_lum_p01": 73.5,
+        "albedo_lum_p99": 199.1,
+        "roughness_mean": 0.84,
+        "roughness_std": 0.0761,
+        "ao_mean": 0.916,
+        "metallic_mean": 0.0
+      }
+    }
+  },
+  "maps": {
+    "albedo_delit.png": "408b6904a9b49cdf7aad3d1827775f6c814860ecca7afecc39af4f741fbc691e",
+    "normal.png": "74189c1d0e192faf5744c242ed24009029404f264626bae3fdffba33a3362dc5",
+    "orm.png": "bec5479ed3fbf8608a80df96096af491e91c1633179ba4c31e9148dafb3b6981",
+    "height16.png": "b494b6882b120a7837868a7d8f6639f8b584390c5ce7194ad77d399db0031796",
+    "preview.png": "c56db216b6ebc2c244a1c7c092c2d98aef762a161424ded7ecf39b8d9abdc332"
+  }
+}

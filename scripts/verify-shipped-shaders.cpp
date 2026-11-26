@@ -72,6 +72,7 @@ static const Contract contracts[] = {
  {"filter.sight_hand_ripples.effect",0,0,1,"0000",1,0},
  {"filter.sight_motion_pulse.effect",0,1,1,"0000",1,0},
  {"filter.sight_relight.effect",0,0,1,"0000",1,0},
+ {"filter.sight_baked_pbr.effect",0,0,1,"1000",1,0},
  {"filter.sight_semantic_materials.effect",0,0,1,"0000",1,0},
  {"filter.sight_semantic_prism.effect",0,0,1,"0000",1,0},
  {"filter.sight_subject_frame.effect",0,0,1,"0000",1,0},

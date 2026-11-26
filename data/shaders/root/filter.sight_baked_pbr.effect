@@ -1,0 +1,136 @@
+// @label "Sight: Baked PBR"
+// @description "Apply a packed HypBR atlas to semantic regions with depth-normal lighting, persistent surface coordinates and optional matte clipping. Input 0: packed PBR atlas."
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float3 hs_resolution;
+uniform texture2d hs_sight_semantic_mask;
+uniform texture2d hs_sight_semantic_bounds;
+uniform texture2d hs_sight_semantic_meta;
+uniform float hs_sight_semantic_present;
+uniform int hs_sight_semantic_count;
+uniform texture2d hs_sight_depth;
+uniform float hs_sight_depth_present;
+uniform texture2d hs_segmentation;
+uniform float hs_sight_matte_present;
+uniform texture2d hs_sight_surface_uv;
+uniform float hs_sight_surface_present;
+// Existing image-channel bindings: one reusable baked bundle per filter.
+uniform texture2d hs_input0;
+uniform float4 hs_input_resolution0;
+uniform float pbr_tiles; // @label "Tile Repeat" @min 0.25 @max 16 @step 0.25 @default 2 @group "Material"
+uniform float pbr_normal_strength; // @label "Normal Detail" @min 0 @max 2 @step 0.05 @default 0.7 @group "Material"
+uniform float pbr_light; // @label "Relight Strength" @min 0 @max 1 @step 0.01 @default 0.8 @group "Material"
+uniform int category_a; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default 1 @group "Material A (priority 1)"
+uniform float4 color_a; // @label "Tint" @default "1.0,1.0,1.0,1.0" @group "Material A (priority 1)"
+uniform float mix_a; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.9 @group "Material A (priority 1)"
+uniform int category_b; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default 0 @group "Material B (priority 2)"
+uniform float4 color_b; // @label "Tint" @default "1.0,1.0,1.0,1.0" @group "Material B (priority 2)"
+uniform float mix_b; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.85 @group "Material B (priority 2)"
+uniform int category_c; // @label "Category ID (-1 off)" @min -1 @max 1023 @step 1 @default -1 @group "Material C (priority 3)"
+uniform float4 color_c; // @label "Tint" @default "1.0,1.0,1.0,1.0" @group "Material C (priority 3)"
+uniform float mix_c; // @label "Mix" @min 0 @max 1 @step 0.01 @default 0.85 @group "Material C (priority 3)"
+uniform float depth_mix; // @label "Depth Response" @min 0 @max 1 @step 0.01 @default 0.65 @group "Surface"
+uniform float surface_relief; // @label "Surface Relief" @min 0 @max 2 @step 0.01 @default 0.5 @group "Surface" @show_if "depth_mix > 0"
+uniform float normal_radius; // @label "Normal Sample Radius (px)" @min 1 @max 32 @step 1 @default 8 @group "Surface" @show_if "depth_mix > 0"
+uniform float edge_tolerance; // @label "Depth Edge Tolerance" @min 0.01 @max 0.4 @step 0.005 @default 0.12 @group "Surface" @show_if "depth_mix > 0"
+uniform float surface_lock; // @label "Persistent Surface Coordinates" @min 0 @max 1 @step 0.01 @default 1 @group "Surface"
+uniform int surface_preview; // @label "Surface Preview" @list "Material,Coordinate offset,Confidence" @default 0 @group "Surface"
+uniform float matte_mix; // @label "Foreground Clipping" @min 0 @max 1 @step 0.01 @default 0 @group "Surface"
+#include "../../stdlib/semantic_regions.glsl"
+sampler_state sourceSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+sampler_state pbrSampler { Filter=Linear; AddressU=Clamp; AddressV=Clamp; };
+sampler_state maskSampler { Filter=Point; AddressU=Clamp; AddressV=Clamp; };
+struct VertData { float4 pos:POSITION; float2 uv:TEXCOORD0; };
+VertData VSDefault(VertData v){v.pos=mul(float4(v.pos.xyz,1),ViewProj);return v;}
+// Relative inverse depth is a height field, not metric 3D geometry.
+float depth_at(float2 uv) {
+    return saturate(hs_sight_depth.Sample(sourceSampler,uv).r);
+}
+float inside_region(float2 uv,float4 b) {
+    return step(b.x,uv.x)*step(b.y,uv.y)*step(uv.x,b.z)*step(uv.y,b.w);
+}
+float semantic_slope(float d,float lo,float hi,float span,float wl,float wh) {
+    float tolerance=max(edge_tolerance,0.01);
+    wl*=1.0-smoothstep(tolerance*0.5,tolerance,abs(d-lo));
+    wh*=1.0-smoothstep(tolerance*0.5,tolerance,abs(hi-d));
+    return ((d-lo)*wl+(hi-d)*wh)/max(span*max(wl+wh,1.0),0.00001);
+}
+float3 semantic_normal(float2 uv,float4 b,float2 res) {
+    float radius=max(normal_radius,1.0);
+    float2 stepUV=radius/res;
+    float2 dx=float2(stepUV.x,0),dy=float2(0,stepUV.y);
+    float d=depth_at(uv);
+    float sx=semantic_slope(d,depth_at(uv-dx),depth_at(uv+dx),radius/res.y,
+        inside_region(uv-dx,b),inside_region(uv+dx,b));
+    float sy=semantic_slope(d,depth_at(uv-dy),depth_at(uv+dy),radius/res.y,
+        inside_region(uv-dy,b),inside_region(uv+dy,b));
+    return normalize(float3(-sx*surface_relief,sy*surface_relief,1.0));
+}
+
+bool atlas_ready(){
+    float pitch=hs_input_resolution0.y;
+    return (pitch==514.0||pitch==1026.0||pitch==2050.0)&&hs_input_resolution0.x==pitch*3.0;
+}
+float3 atlas_map(float2 uv,float index){
+    float pitch=hs_input_resolution0.y;
+    float2 pixel=frac(uv)*(pitch-2.0)+float2(index*pitch+1.0,1.0);
+    return hs_input0.Sample(pbrSampler,pixel/hs_input_resolution0.xy).rgb;
+}
+float3 shade_pbr(float3 original,float3 tint,float2 uv,float4 b){
+    float2 resolution=max(hs_resolution.xy,float2(1,1));
+    float2 local=hs_semantic_local(uv,b);
+    if(surface_lock>0.0&&hs_sight_surface_present>0.5){
+        float4 anchor=hs_sight_surface_uv.Sample(sourceSampler,uv);
+        float locked=saturate(surface_lock)*smoothstep(0.25,0.65,anchor.b);
+        local=lerp(local,(uv+anchor.xy)*float2(resolution.x/resolution.y,1.0),locked);
+    }
+    float3 N=float3(0,0,1);
+    if(depth_mix>0.0&&hs_sight_depth_present>0.5){
+        N=semantic_normal(uv,b,resolution);
+        local+=float2(N.x,-N.y)*0.12*saturate(depth_mix);
+    }
+    float2 texUV=local*max(pbr_tiles,0.25);
+    float3 albedo=pow(saturate(atlas_map(texUV,0.0)),float3(2.2,2.2,2.2));
+    float3 detail=atlas_map(texUV,1.0)*2.0-1.0;
+    detail=normalize(float3(detail.x*pbr_normal_strength,-detail.y*pbr_normal_strength,max(detail.z,0.05)));
+    float3 orm=saturate(atlas_map(texUV,2.0));
+    N=normalize(lerp(float3(0,0,1),N,saturate(depth_mix)));
+    float3 T=normalize(cross(float3(0,1,0),N));
+    float3 B=normalize(cross(N,T));
+    N=normalize(T*detail.x+B*detail.y+N*detail.z);
+    float3 L=normalize(float3(-0.45,0.55,0.8));
+    float3 H=normalize(L+float3(0,0,1));
+    float ndl=saturate(dot(N,L));
+    float rough=max(orm.g,0.05);
+    float metal=orm.b;
+    float3 base=albedo*pow(saturate(tint),float3(2.2,2.2,2.2));
+    float3 f0=lerp(float3(0.04,0.04,0.04),base,metal);
+    float spec=pow(saturate(dot(N,H)),lerp(96.0,3.0,rough));
+    float3 lit=base*(1.0-metal)*(0.25+0.75*ndl)*orm.r+f0*spec*(1.0-0.65*rough);
+    float l=dot(original,float3(0.2126,0.7152,0.0722));
+    float3 shaded=lerp(base,lit*(0.5+0.8*l),saturate(pbr_light));
+    return pow(saturate(shaded),float3(0.45454545,0.45454545,0.45454545));
+}
+float4 PSMain(VertData v):TARGET {
+    float4 original=image.Sample(sourceSampler,v.uv);
+    if(hs_sight_semantic_present<0.5||hs_sight_semantic_count<1||
+       hs_sight_semantic_mask.Sample(maskSampler,v.uv).r<0.5)return original;
+    float4 b,m;
+    int slot=hs_semantic_route(v.uv,mix_a>0?category_a:-1,mix_b>0?category_b:-1,mix_c>0?category_c:-1,b,m);
+    if(slot<0)return original;
+    if(surface_preview>0&&hs_sight_surface_present>0.5){
+        float4 f=hs_sight_surface_uv.Sample(sourceSampler,v.uv);
+        if(surface_preview==2)return float4(f.b,f.b,f.b,original.a);
+        return float4(saturate(0.5+4.0*f.xy),f.b,original.a);
+    }
+    if(!atlas_ready())return original;
+    float4 color=slot==0?color_a:(slot==1?color_b:color_c);
+    float blend_amount=slot==0?mix_a:(slot==1?mix_b:mix_c);
+    // Matte is a scene foreground estimate, not a category instance mask.
+    // No matte or zero clipping preserves the original region behavior.
+    if(matte_mix>0.0&&hs_sight_matte_present>0.5)
+        blend_amount*=lerp(1.0,saturate(hs_segmentation.Sample(sourceSampler,v.uv).r),saturate(matte_mix));
+    if(blend_amount<=0.0)return original;
+    return float4(lerp(original.rgb,shade_pbr(original.rgb,color.rgb,v.uv,b),saturate(blend_amount*color.a)),original.a);
+}
+technique Draw {pass{vertex_shader=VSDefault(v);pixel_shader=PSMain(v);}}

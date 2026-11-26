@@ -29,6 +29,7 @@ build_probe() {
 "$work/semantic"
 build_probe "$repo/scripts/verify-sight-semantic-obs.cpp" "$work/semantic_obs"
 build_probe "$repo/scripts/verify-sight-materials-obs.cpp" "$work/materials_gpu"
+build_probe "$repo/scripts/verify-sight-baked-pbr-obs.cpp" "$work/baked_pbr_gpu"
 build_probe "$repo/scripts/verify-sight-touch-gpu-obs.cpp" "$work/touch_gpu"
 build_probe "$repo/scripts/verify-sight-touch-obs.cpp" "$work/touch_obs"
 build_probe "$repo/scripts/verify-sight-gpu-obs.cpp" "$work/gpu"
@@ -44,6 +45,8 @@ xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/touch_gpu" "$repo/data/
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/gpu"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/materials_gpu" \
     "$repo/data/shaders/root/filter.sight_semantic_materials.effect" "$repo/data/stdlib/semantic_regions.glsl"
+xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/baked_pbr_gpu" \
+    "$repo/data/shaders/root/filter.sight_baked_pbr.effect" "$repo/data/stdlib/semantic_regions.glsl" "$repo/data/materials/classic_red_brick/atlas.png"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/simple" "$repo/data/shaders/root"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/echo_gpu" "$repo/data/shaders/root/filter.sight_flow_echo.effect"
 xvfb-run -a -s '-screen 0 1280x720x24' timeout 25 "$work/sparks_gpu" "$repo/data/shaders/root/filter.sight_flow_sparks.effect"
