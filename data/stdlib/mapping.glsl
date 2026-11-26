@@ -1,4 +1,4 @@
-// HyperShader Standard Library - UV & Mapping Utilities
+// hypershader Standard Library - UV & Mapping Utilities
 // Advanced UV manipulation and texture mapping techniques
 
 #ifndef _STDLIB_MAPPING_H_

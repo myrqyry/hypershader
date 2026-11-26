@@ -109,4 +109,4 @@ for candidate in (workflow, obs33_workflow):
 assert "check_readme_links.py" in workflow
 assert "test-readme-links.py" in workflow
 
-print("PASS: HyperShader CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")
+print("PASS: hypershader CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")

@@ -1,14 +1,14 @@
-# HyperShader
+# hypershader
 
 **A native shader and visual-effects framework for OBS Studio.**
 
-HyperShader is a native OBS shader runtime for creating reusable filters,
+hypershader is a native OBS shader runtime for creating reusable filters,
 procedural sources, audio visualizers and transitions. Effects can use typed
 controls, GPU feedback, live audio, source textures and shared computer-vision
 signals without needing to start their own inference pipeline.
 
 Unlike a general-purpose single-shader host such as
-[OBS Shaderfilter](https://github.com/exeldro/obs-shaderfilter), HyperShader
+[OBS Shaderfilter](https://github.com/exeldro/obs-shaderfilter), hypershader
 focuses on reusable runtime facilities and multi-stage effects. Shadertoy,
 ISF, ReShade and shaderfilter-style formats are optional authoring or
 porting paths, not the underlying runtime architecture.
@@ -43,17 +43,17 @@ porting paths, not the underlying runtime architecture.
 
 ### Native OBS effect types
 
-HyperShader registers three OBS-facing effect types:
+hypershader registers three OBS-facing effect types:
 
-- **HyperShader Filter** — apply shaders to an existing source.
-- **HyperShader Source** — render procedural graphics, audio visualizers, and reactive sprites directly.
-- **HyperShader Transition** — render shader-driven A/B scene transitions with native transition progress and audio mixing.
+- **hypershader Filter** — apply shaders to an existing source.
+- **hypershader Source** — render procedural graphics, audio visualizers, and reactive sprites directly.
+- **hypershader Transition** — render shader-driven A/B scene transitions with native transition progress and audio mixing.
 
 The same authoring model and most host controls are shared across those lanes.
 
 ### Native MediaPipe face surface
 
-When the ONNX **Face Mesh** graph is enabled for a filter, HyperShader
+When the ONNX **Face Mesh** graph is enabled for a filter, hypershader
 can expose 468 face landmarks through hs_landmarks. Effects can now also
 request hs_face_surface (256×256 RGBA32F GPU triangle coverage) and
 hs_face_triangles (898×1 RGBA32F triangle-to-landmark IDs). The surface
@@ -65,7 +65,7 @@ for effects to skip face overlays.
 The opt-in **Face Mesh Wireframe** filter demonstrates this without adding a
 second inference engine. The existing face detector/model path is unchanged.
 Shadertastic's face topology is credited in the source header; the
-rasterization code is independent and native to HyperShader. This is
+rasterization code is independent and native to hypershader. This is
 **face geometry**, not true selfie/person segmentation, and does not make
 hand, pose, or depth graphs operational.
 
@@ -102,7 +102,7 @@ spectral history strata. See [audio visualizer](docs/audio-visualizer.md).
 
 ### Original Instruments — first-party shader collection
 
-Six native effects use the real HyperShader signal pipeline rather
+Six native effects use the real hypershader signal pipeline rather
 than additional third-party ports: **Brass Register**, **Paper Tide** and **Spectral Garden**
 (audio-driven sources), **Topographic Etching** (Sight depth), **Contact
 Filaments** (Sight hands), and **Afterimage Press** (previous GPU output).
@@ -128,7 +128,7 @@ unreviewed local assets.
 
 ## Effect hotkeys
 
-Every HyperShader filter instance has **Enable effect** and **Disable
+Every hypershader filter instance has **Enable effect** and **Disable
 effect** actions in OBS Settings > Hotkeys, under its own filter name.
 Bind both actions to the same key for a toggle (or assign separate keys).
 No binding is assigned by default. OBS saves the bindings with the filter,
@@ -143,7 +143,7 @@ this implementation uses our existing instance lifecycle directly.
 
 ## Play dock
 
-The HyperShader dock has a shared target-instance selector and three tabs:
+The hypershader dock has a shared target-instance selector and three tabs:
 **Play**, **Library**, and **Builder**. Play builds its controls from the
 selected instance's compiled native OBS property schema. It provides
 requested audio/Sight/texture bindings, the shader's own typed controls,
@@ -167,7 +167,7 @@ URL Source provider, select a numeric/boolean JSON Pointer result, then use
 **Play → Modulation → Data Source · value**. Choose the source by name
 (the saved binding uses its UUID), the parameter and maximum age. The value
 directly drives the bounded float, without changing its saved slider.
-No extra network request is made by HyperShader.
+No extra network request is made by hypershader.
 
 Library can load a compatible installed native effect directly on the
 selected instance, retaining its original include paths and checking
@@ -176,7 +176,7 @@ See [Play dock verification](docs/performance-dock.md).
 
 ## Visual shader builder
 
-`tools/shader-builder/` contains a standalone visual graph builder for constructing HyperShader shaders from reusable nodes.
+`tools/shader-builder/` contains a standalone visual graph builder for constructing hypershader shaders from reusable nodes.
 
 Current builder work includes:
 
@@ -187,13 +187,13 @@ Current builder work includes:
 - compile feedback from real libobs,
 - native/browser contract checks,
 - repair-prompt plumbing for invalid generated shaders.
-- a **Reload Saved** action for the selected active HyperShader instance.
+- a **Reload Saved** action for the selected active hypershader instance.
   It checks that the file open in the editor is the saved, unmodified .effect,
   then uses the existing immutable-revision Apply flow, native compile feedback
   and previous-selection rollback on failure. It does not auto-watch files,
   broadcast changes to multiple filters, or discard unsaved edits.
 
-This is intended as a practical creative authoring surface, not a separate shader dialect. Generated output targets the same native HyperShader runtime.
+This is intended as a practical creative authoring surface, not a separate shader dialect. Generated output targets the same native hypershader runtime.
 
 See [`docs/shader-builder-webgl-preview.md`](docs/shader-builder-webgl-preview.md) and [`tools/shader-builder/COLORMAPS.md`](tools/shader-builder/COLORMAPS.md).
 
@@ -211,17 +211,17 @@ commands and limitations.
 
 ## Reusing Live Latent Lab Sight signals
 
-HyperShader can consume **existing real MediaPipe Tasks tracking** from
+hypershader can consume **existing real MediaPipe Tasks tracking** from
 Live Latent Lab: Sight without
 launching another inference graph. This is opt-in; old OBS scenes keep the
-native HyperShader MediaPipe backend unless explicitly changed.
+native hypershader MediaPipe backend unless explicitly changed.
 
 In OBS, add **LLL.sight Tracking** to your camera/source. Choose Face,
 Body, Hands & gestures or Holistic, configure the matching model, and
 publish to a named tracking channel (typically `face`, `body` or `hand`).
 The overlay can be disabled while tracking continues.
 
-Then add a **HyperShader Filter** on the **same camera/framing**, turn on
+Then add a **hypershader Filter** on the **same camera/framing**, turn on
 **Use Sight shared snapshots (tracking, matte, text, flow, depth)**, and
 select the matching **Sight Tracking Channel**. The picker discovers
 configured channels, including idle channels, when properties open.
@@ -233,7 +233,7 @@ Touch Field filter. Both shaders consume shared landmarks and pinch
 strength without a second inference model. The ripple shader includes
 strength, radius, rings, speed and pinch boost controls.
 
-HyperShader reads versioned, read-only snapshots through OBS's private
+hypershader reads versioned, read-only snapshots through OBS's private
 Sight receiver and uploads only changed points to its shader textures.
 
 Shader-facing uniforms are described in
@@ -245,14 +245,14 @@ signal expiry or missing/empty tracking clears the previous result; it does
 
 Sight owns all face, pose, hand, gesture and expression inference. Only one
 tracking source/producer is needed per channel in a given OBS process.
-HyperShader's native models, depth and shader feedback remain independent.
+hypershader's native models, depth and shader feedback remain independent.
 The Sight connection does not magically align landmarks between differently
 cropped/resized sources. Depth Camera can share relative inverse depth in Original source mode.
 
 For a real foreground mask, put one enabled Sight **Subject Cutout (U2Net)**
-upstream of HyperShader on the same source. Select Sight's
+upstream of hypershader on the same source. Select Sight's
 **Diagnostic view → Original source** to avoid changing the input video,
-then enable the same Sight tracking/matte switch in HyperShader.
+then enable the same Sight tracking/matte switch in hypershader.
 The shader receives the stabilized inference-resolution mask through
 `hs_segmentation`; check `hs_sight_matte_present > 0.5` before sampling it.
 The same mask also supplies `hs_sight_subject_bounds`, `hs_sight_subject_center`,
@@ -265,14 +265,14 @@ An optional Sight Text Obfuscation producer upstream can
 supply local OCR line geometry (`hs_sight_text_present`, `hs_sight_text_count`,
 `hs_sight_text_mask`, `hs_sight_text_bounds`). Set its Treatment to Original source
 and use **Sight: Text Scramble** for animated synthetic noise, opaque
-black, or a mask preview. No recognized strings reach HyperShader.
+black, or a mask preview. No recognized strings reach hypershader.
 The optional **LLL.sight Spatial Motion (DIS)** filter can publish
-a local 32×18 optical-flow grid. Put it upstream of HyperShader
+a local 32×18 optical-flow grid. Put it upstream of hypershader
 in Original source mode and use **Sight: Flow Warp**, **Sight: Flow Echo**, or
 **Sight: Flow Sparks**, or consume the
-grid in native shaders. No extra optical flow is computed by HyperShader.
+grid in native shaders. No extra optical flow is computed by hypershader.
 Consecutive Original-source Sight analysis filters may be stacked in either
-order before HyperShader. Transformed/unknown filters block deeper data;
+order before hypershader. Transformed/unknown filters block deeper data;
 use one enabled producer per type. Flow Sparks can target the subject or
 background with the shared matte. Add **LLL.sight Depth Camera (Depth Anything)** in Original source (share depth) mode for
 relative inverse depth. **Sight: Depth Glass** offers depth-band ripple
@@ -398,11 +398,11 @@ included assets, a secret audit, or permission to publish. Historical
 assets in the original repository still require separate review before
 changing its visibility.
 
-## Using HyperShader
+## Using hypershader
 
 After installing and restarting OBS:
 
-1. Add **HyperShader Filter** to an existing source, or add a **HyperShader Source** directly.
+1. Add **hypershader Filter** to an existing source, or add a **hypershader Source** directly.
 2. Choose a **Category**, then select a **Shader Preset**.
 3. Tune the shader-generated controls. Read the shader-provided Notes and Credits for provenance and usage.
 4. Use **Global Overrides** for host animation speed, opacity, and effect blending.
@@ -411,7 +411,7 @@ After installing and restarting OBS:
 
 Shader categories and friendly names are presentation-only. Stored shader paths and preset IDs remain stable so browsing the library does not rewrite existing scenes.
 
-## Writing a native HyperShader shader
+## Writing a native hypershader shader
 
 The simplest native shader can use the convenience `hs_shade_pixel` wrapper:
 
@@ -433,7 +433,7 @@ void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord)
 HYPERSHADER_PIXEL_WRAPPER
 ```
 
-HyperShader can also use complete OBS techniques/passes directly; `hs_shade_pixel` is a convenience form, not a required architecture.
+hypershader can also use complete OBS techniques/passes directly; `hs_shade_pixel` is a convenience form, not a required architecture.
 
 ### Metadata controls
 
@@ -480,7 +480,7 @@ commit. No hosted runs of this curated repository have been established
 yet; passing local contract tests is not a platform qualification.
 
 
-HyperShader has accumulated a fairly large set of deterministic and real-renderer checks because shader code that merely compiles is not enough.
+hypershader has accumulated a fairly large set of deterministic and real-renderer checks because shader code that merely compiles is not enough.
 
 Examples:
 
@@ -524,7 +524,7 @@ See [development notes](DEVELOPMENT.md) for build details.
 
 ## Contributing
 
-Pull requests are welcome. Keep changes narrow and preserve the native HyperShader model: compatibility adapters should adapt external formats into the runtime rather than turn the runtime into a clone of another shader host.
+Pull requests are welcome. Keep changes narrow and preserve the native hypershader model: compatibility adapters should adapt external formats into the runtime rather than turn the runtime into a clone of another shader host.
 
 When changing shader behavior, prefer a real renderer regression when practical. When changing platform/runtime compatibility, verify against the relevant OBS ABI rather than assuming a successful compile proves runtime compatibility.
 

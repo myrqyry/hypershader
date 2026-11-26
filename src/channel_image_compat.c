@@ -51,10 +51,10 @@ static bool image_api_ex;
 
 #if LIBOBS_API_MAJOR_VER >= 33
 _Static_assert(sizeof(gs_image_file_ex_t) <= HS_CHANNEL_IMAGE_STORAGE_SIZE,
-	       "OBS 33 image state exceeds HyperShader channel storage");
+	       "OBS 33 image state exceeds hypershader channel storage");
 #else
 _Static_assert(sizeof(gs_image_file_t) <= HS_CHANNEL_IMAGE_STORAGE_SIZE,
-	       "legacy OBS image state exceeds HyperShader channel storage");
+	       "legacy OBS image state exceeds hypershader channel storage");
 #endif
 
 static struct hs_image_file_view *image_view(hs_channel_image_t *image)
@@ -87,7 +87,7 @@ bool hs_channel_image_runtime_init(void)
 	void *module = dlopen(NULL, RTLD_LAZY);
 #endif
 	if (!module) {
-		blog(LOG_WARNING, "[HyperShader] Unable to inspect OBS image-file ABI; image channels disabled");
+		blog(LOG_WARNING, "[hypershader] Unable to inspect OBS image-file ABI; image channels disabled");
 		return false;
 	}
 
@@ -109,7 +109,7 @@ bool hs_channel_image_runtime_init(void)
 	image_api_ready = image_free && image_init_texture &&
 			  (image_api_ex ? image_init_ex != NULL : image_init_legacy != NULL);
 	if (!image_api_ready)
-		blog(LOG_WARNING, "[HyperShader] OBS image-file ABI symbols unavailable; image channels disabled");
+		blog(LOG_WARNING, "[hypershader] OBS image-file ABI symbols unavailable; image channels disabled");
 
 #ifdef _WIN32
 	os_dlclose(module);

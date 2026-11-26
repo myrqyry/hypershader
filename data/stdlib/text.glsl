@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Text & SDF Rendering
+// hypershader Standard Library - Text & SDF Rendering
 // Utilities for SDF font rendering and text effects
 
 #ifndef _STDLIB_TEXT_H_

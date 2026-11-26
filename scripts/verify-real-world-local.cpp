@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <cstdlib>
-// Real HyperShader async filter test: native shader loading, property
+// Real hypershader async filter test: native shader loading, property
 // controls, bright moving frames, halo generation and shader bypass.
 // The filter and frame readbacks run in real libobs/OpenGL.
 #include <obs.h>

@@ -1,4 +1,4 @@
-# Named colormaps for the HyperShader visual builder
+# Named colormaps for the hypershader visual builder
 
 Four selectively adapted scalar → RGBA colormaps from [kbinani/colormap-shaders](https://github.com/kbinani/colormap-shaders), upstream commit `3ba464481acfdd30bb33ac00503190d99398979f` (MIT, © 2015 kbinani). Full upstream notice is preserved at [`data/stdlib/COLORMAPS-LICENSE.txt`](../../data/stdlib/COLORMAPS-LICENSE.txt).
 

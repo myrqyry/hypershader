@@ -1,4 +1,4 @@
-// Real libobs probe: pulsed PCM -> HyperShader audio worker -> beat uniforms -> pixels.
+// Real libobs probe: pulsed PCM -> hypershader audio worker -> beat uniforms -> pixels.
 // R=audio_level, G=audio_envelope, B=audio_beat. Asserts nonzero onsets and a clean
 // fallback to zero during silence. No plugin mocks; reads back real GPU frames.
 // The shader must live under the supplied data directory: the loader rejects paths

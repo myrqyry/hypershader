@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real libobs / HyperShader async-loader and GPU feedback test.
+# Real libobs / hypershader async-loader and GPU feedback test.
 # No user OBS process or settings are touched. Run with xvfb-run.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,7 +18,7 @@ mkdir -p "$work/hypershader"
 plugin_libs="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit"
 export LD_LIBRARY_PATH="$plugin_libs:${LD_LIBRARY_PATH:-}"
 for variant in high_loss zero_loss; do
-    echo "TEST: HyperShader P-frame filter — $variant"
+    echo "TEST: hypershader P-frame filter — $variant"
     if [[ "$variant" == "zero_loss" ]]; then
         (cd "$work" && HYPER_TEST_ZERO_LOSS=1 xvfb-run -a -s '-screen 0 1280x720x24' \
             timeout 30 "$work/test-pframe-filter" "$module" "$data" \

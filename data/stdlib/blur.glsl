@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Blur Functions
+// hypershader Standard Library - Blur Functions
 // Mathematical implementations of standard blur algorithms
 
 #ifndef _STDLIB_BLUR_H_

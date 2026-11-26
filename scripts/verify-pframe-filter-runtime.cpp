@@ -1,4 +1,4 @@
-// End-to-end HyperShader/libobs graphics regression: real module,
+// End-to-end hypershader/libobs graphics regression: real module,
 // async shader loader, moving pixel fixture, feedback and clean I-frame.
 // No mock plugin or fake P-frame results.
 #include <obs.h>
@@ -186,6 +186,6 @@ int main(int argc,char** argv) {
  bool pass=clean==0 && zero_delta==0 &&
              (zero_loss ? (maxdiff==0 && large==0) :
                            (maxdiff>2000 && large>20 && maxdiff<W*H*3*8/10));
- if(pass)std::cout<<"PASS: real HyperShader filter loaded, rendered, reset, and bypassed\n";
+ if(pass)std::cout<<"PASS: real hypershader filter loaded, rendered, reset, and bypassed\n";
  return pass?0:1;
 }

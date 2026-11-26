@@ -1,6 +1,6 @@
 // @label "Contact Filaments"
 // @description "Sight hand joints form delicate copper threads and pearl endpoints. Gestures and pinch vary the filaments. No tracked hand means exact pass-through."
-// Original first-party HyperShader artwork. Requires LLL.sight Tracking in hands mode, same source/framing.
+// Original first-party hypershader artwork. Requires LLL.sight Tracking in hands mode, same source/framing.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform texture2d hs_sight_hands;

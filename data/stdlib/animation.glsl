@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Animation & Easing
+// hypershader Standard Library - Animation & Easing
 // Time-based animation utilities
 
 #ifndef _STDLIB_ANIMATION_H_

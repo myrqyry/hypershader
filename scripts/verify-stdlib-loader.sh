@@ -51,7 +51,7 @@ for mode in "${modes[@]}"; do
       grep -q "apply_submitted=1" "$work/$mode.log" ||
         { echo "FAIL: source update did not persist"; exit 1; }
     else
-      if [[ "$mode" == "math" ]] && grep -q '\[HyperShader\] ├─ Name : ../../stdlib/does_not_exist.glsl' "$work/${mode}.log"; then
+      if [[ "$mode" == "math" ]] && grep -q '\[hypershader\] ├─ Name : ../../stdlib/does_not_exist.glsl' "$work/${mode}.log"; then
         echo "FAIL: metadata parser treated a comment as a real include"; exit 1
       fi
       grep -q "Loaded shader: shaders/tests/stdlib_${mode}_probe.effect" "$work/${mode}.log" ||

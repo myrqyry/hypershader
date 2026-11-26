@@ -1,5 +1,5 @@
 /**
- * HyperShader Visual Builder - Graph Engine
+ * hypershader Visual Builder - Graph Engine
  * Core data model for node graph with serialization
  */
 

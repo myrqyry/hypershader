@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install an existing Linux build or structured HyperShader package.
+# Install an existing Linux build or structured hypershader package.
 set -euo pipefail
 
 PLUGIN_NAME=hypershader
@@ -44,7 +44,7 @@ fi
 legacy="$payload/bin/64bit/$PLUGIN_NAME.so"
 modern="$payload/$PLUGIN_NAME.so"
 if [[ ! -s "$legacy" || ! -d "$payload/data/shaders/root" || ! -d "$payload/data/stdlib" || ! -d "$payload/data/locale" ]]; then
-    echo "Incomplete HyperShader package: module, shader library, stdlib and locale are required." >&2
+    echo "Incomplete hypershader package: module, shader library, stdlib and locale are required." >&2
     exit 1
 fi
 if [[ -e "$modern" ]] && ! cmp -s "$modern" "$legacy"; then
@@ -62,4 +62,4 @@ cp -a "$payload/bin" "$payload/data" "$destination/"
 # OBS 33 loads the root copy; older OBS versions use bin/64bit.
 cp -L "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
 cmp "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
-echo "Installed HyperShader into $destination"
+echo "Installed hypershader into $destination"

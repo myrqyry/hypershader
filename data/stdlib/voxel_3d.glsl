@@ -1,4 +1,4 @@
-// HyperShader Standard Library - 3D Voxel Utilities
+// hypershader Standard Library - 3D Voxel Utilities
 // Advanced 3D voxel operations and physics
 
 #ifndef _STDLIB_VOXEL_3D_H_

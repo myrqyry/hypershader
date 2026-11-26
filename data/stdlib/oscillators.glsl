@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Oscillators
+// hypershader Standard Library - Oscillators
 // Robust waveform generators for modulation (range [-1, 1])
 
 #ifndef _STDLIB_OSC_H_

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Load actual HyperShader native OBS filter in isolated libobs video graph.
+# Load actual hypershader native OBS filter in isolated libobs video graph.
 # The module defaults to the locally verified installed binary; no OBS GUI needed.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"

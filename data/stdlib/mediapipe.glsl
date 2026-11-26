@@ -1,4 +1,4 @@
-// --- HyperShader MediaPipe & Features Library ---
+// --- hypershader MediaPipe & Features Library ---
 // High-level access to MediaPipe tracking, Audio analysis, and Physics entities.
 
 #ifndef HYPERSHADER_MEDIAPIPE_H

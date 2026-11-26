@@ -1,6 +1,6 @@
 # Initial distribution scope
 
-This standalone repository starts from the project-authored HyperShader
+This standalone repository starts from the project-authored hypershader
 native framework, with a reduced preset library and retained upstream notices.
 It has no imported collection history or connection to a previous Git remote.
 

@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Materials & Surface Effects
+// hypershader Standard Library - Materials & Surface Effects
 // Advanced material rendering techniques
 
 #ifndef _STDLIB_MATERIALS_H_

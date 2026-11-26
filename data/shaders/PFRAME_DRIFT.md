@@ -9,13 +9,13 @@ pixels from correcting the picture. Error compounds from one output frame to
 the next. A simulated clean **I-frame** resets the feedback immediately.
 
 This is *not* a real H.264/H.265 parser, an encoded P-frame bitstream editor,
-or access to actual codec motion vectors. It uses HyperShader's existing
+or access to actual codec motion vectors. It uses hypershader's existing
 `hs_history` output-frame feedback. That is crucial: without a working
 previous-output texture the effect is not temporal moshing.
 
 ## Try it in OBS
 
-Add **HyperShader** to a camera or moving video source. Select
+Add **hypershader** to a camera or moving video source. Select
 `P-Frame Drift — Lost Reference Stream` in the shader list, or choose
 `pframe_drift.effect` from the plugin's installed shader folder.
 
@@ -44,7 +44,7 @@ It tests: carrying prior damaged frames; changes as motion continues;
 clean forced keyframe; bypass at zero loss; and alpha preservation.
 
 **Full runtime verification:** `scripts/verify-pframe-filter-runtime.sh`
-loads the actual HyperShader module into a headless libobs video graph,
+loads the actual hypershader module into a headless libobs video graph,
 creates a real filter and synthetic moving video source, waits for its
 asynchronous shader load, inspects the runtime parameter controls, and
 renders 75 frames with both high-loss and zero-loss settings. It asserts

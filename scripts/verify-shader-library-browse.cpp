@@ -37,7 +37,7 @@ int main(int argc, char **argv)
         !makeFile(base+"/root/ignored.txt"))
         return 5;
 
-    const auto entries=discoverHyperShaderFiles(base);
+    const auto entries=discover_hypershader_files(base);
     int rikiya=0,other=0,quarantined=0;
     bool filenameSearch=false, dateSearch=false, categorySearch=false;
     for (const auto &entry : entries) {
@@ -58,9 +58,9 @@ int main(int argc, char **argv)
         shaderCatalogDisplayLabel(base+"/root/portrait.effect","Library")=="Filter / Portrait";
     bool passes=displayedRoles && entries.size()==7 && rikiya==2 && other==1 &&
                 quarantined==1 && dateSearch && filenameSearch && categorySearch &&
-                ignored && discoverHyperShaderFiles({}).isEmpty();
+                ignored && discover_hypershader_files({}).isEmpty();
     // Only if PR #25 files are present in working tree, require all 56 there.
-    const auto source=discoverHyperShaderFiles(QString::fromLocal8Bit(argv[1]));
+    const auto source=discover_hypershader_files(QString::fromLocal8Bit(argv[1]));
     int sourceRikiya=0;
     for (const auto &entry : source)
         if (entry.category=="Rikiya Daily Practice")++sourceRikiya;

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real HyperShader plugin-loader verification of the Glyphfield-inspired foil effect.
+# Real hypershader plugin-loader verification of the Glyphfield-inspired foil effect.
 # Uses disposable OBS runtime settings; never modifies the installed plugin.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"

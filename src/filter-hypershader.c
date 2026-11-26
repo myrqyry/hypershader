@@ -254,7 +254,7 @@ static bool graph_configure(gs_effect_t *effect, struct hs_graph_plan *plan,
 		continue;
 bad_descriptor:
 		if (!plan->named)
-			blog(LOG_ERROR, "[HyperShader] Invalid graph buffer %c descriptor", 'A' + i);
+			blog(LOG_ERROR, "[hypershader] Invalid graph buffer %c descriptor", 'A' + i);
 		return false;
 	}
 	plan->output_resolution = gs_effect_get_param_by_name(effect, "hs_graph_output_resolution");
@@ -324,7 +324,7 @@ static void deferred_properties_refresh(void *param)
 {
 	obs_source_t *source = param;
 	if (source) {
-		blog(LOG_INFO, "[HyperShader] Deferred property refresh executing");
+		blog(LOG_INFO, "[hypershader] Deferred property refresh executing");
 		obs_source_update_properties(source);
 		obs_source_release(source);
 	}
@@ -405,7 +405,7 @@ static struct shader_meta_rc *metadata_rc_create(void)
 		return NULL;
 	atomic_store(&rc->refcount, 1);
 	memset(&rc->meta, 0, sizeof(rc->meta));
-	blog(LOG_DEBUG, "[HyperShader] Created metadata_rc %p (refcount=1)", rc);
+	blog(LOG_DEBUG, "[hypershader] Created metadata_rc %p (refcount=1)", rc);
 	return rc;
 }
 
@@ -413,7 +413,7 @@ void metadata_rc_retain(struct shader_meta_rc *rc)
 {
 	if (rc) {
 		int old = atomic_fetch_add(&rc->refcount, 1);
-		blog(LOG_DEBUG, "[HyperShader] Retained metadata_rc %p (refcount %d -> %d)", (void *)rc, old, old + 1);
+		blog(LOG_DEBUG, "[hypershader] Retained metadata_rc %p (refcount %d -> %d)", (void *)rc, old, old + 1);
 	}
 }
 
@@ -425,12 +425,12 @@ void metadata_rc_release(struct shader_meta_rc **rc_ptr)
 	struct shader_meta_rc *rc = *rc_ptr;
 	int old_count = atomic_fetch_sub(&rc->refcount, 1);
 
-	blog(LOG_DEBUG, "[HyperShader] Released metadata_rc %p (refcount %d -> %d)", (void *)rc, old_count,
+	blog(LOG_DEBUG, "[hypershader] Released metadata_rc %p (refcount %d -> %d)", (void *)rc, old_count,
 	     old_count - 1);
 
 	if (old_count == 1) {
 		/* Last reference - safe to free */
-		blog(LOG_DEBUG, "[HyperShader] Freeing metadata_rc %p (refcount=0)", (void *)rc);
+		blog(LOG_DEBUG, "[hypershader] Freeing metadata_rc %p (refcount=0)", (void *)rc);
 		free_shader_metadata(&rc->meta);
 		bfree(rc);
 	}
@@ -690,7 +690,7 @@ static char *expand_pixel_wrapper_statements(const char *source)
         }
         if (invocation) {
             if (++replacements > 1) {
-                blog(LOG_ERROR, "[HyperShader] More than one hs_shade_pixel wrapper invocation");
+                blog(LOG_ERROR, "[hypershader] More than one hs_shade_pixel wrapper invocation");
                 dstr_free(&out);
                 return NULL;
             }
@@ -887,19 +887,19 @@ char *hs_resolve_data_file(const char *path)
 static bool validate_shader_path_with_log(const char *path, const char *caller)
 {
 	if (!path || !path[0]) {
-		blog(LOG_ERROR, "[HyperShader] %s: Empty or NULL path provided", caller);
+		blog(LOG_ERROR, "[hypershader] %s: Empty or NULL path provided", caller);
 		return false;
 	}
 
 	/* Check path length */
 	if (strlen(path) > PATH_MAX - 1) {
-		blog(LOG_ERROR, "[HyperShader] %s: Path too long: %s", caller, path);
+		blog(LOG_ERROR, "[hypershader] %s: Path too long: %s", caller, path);
 		return false;
 	}
 
 	/* Check for null bytes (security) */
 	if (strchr(path, '\0') != NULL && strlen(path) != (size_t)(strchr(path, '\0') - path)) {
-		blog(LOG_ERROR, "[HyperShader] %s: Null byte detected in path: %s", caller, path);
+		blog(LOG_ERROR, "[hypershader] %s: Null byte detected in path: %s", caller, path);
 		return false;
 	}
 
@@ -919,7 +919,7 @@ static bool validate_shader_path_with_log(const char *path, const char *caller)
 			}
 		} else if (path[0] == '/') {
 			/* Absolute path that doesn't exist — reject, don't fall through to permissive checks */
-			blog(LOG_ERROR, "[HyperShader] %s: Absolute path does not exist: %s", caller, path);
+			blog(LOG_ERROR, "[hypershader] %s: Absolute path does not exist: %s", caller, path);
 			bfree(data_path);
 			return false;
 		} else {
@@ -933,7 +933,7 @@ static bool validate_shader_path_with_log(const char *path, const char *caller)
 		bfree(data_path);
 		goto file_checks;
 	} else {
-		blog(LOG_ERROR, "[HyperShader] SECURITY: %s: Path outside data directory rejected: %s", caller,
+		blog(LOG_ERROR, "[hypershader] SECURITY: %s: Path outside data directory rejected: %s", caller,
 		     canonical);
 		bfree(data_path);
 		return false;
@@ -942,7 +942,7 @@ static bool validate_shader_path_with_log(const char *path, const char *caller)
 basic_checks:
 	/* Fallback: Check for directory traversal attempts in string */
 	if (strstr(path, "..") != NULL) {
-		blog(LOG_ERROR, "[HyperShader] %s: Directory traversal detected in path: %s", caller, path);
+		blog(LOG_ERROR, "[hypershader] %s: Directory traversal detected in path: %s", caller, path);
 		return false;
 	}
 
@@ -951,11 +951,11 @@ file_checks:
 	/* Check file extension (basic validation) */
 	const char *ext = strrchr(path, '.');
 	if (!ext || (strcmp(ext, ".effect") != 0 && strcmp(ext, ".glsl") != 0 && strcmp(ext, ".frag") != 0)) {
-		blog(LOG_WARNING, "[HyperShader] %s: Unusual file extension in path: %s", caller, path);
+		blog(LOG_WARNING, "[hypershader] %s: Unusual file extension in path: %s", caller, path);
 		/* Allow but warn - some shaders might not have standard extensions */
 	}
 
-	blog(LOG_DEBUG, "[HyperShader] %s: Path validation passed: %s", caller, path);
+	blog(LOG_DEBUG, "[hypershader] %s: Path validation passed: %s", caller, path);
 	return true;
 }
 
@@ -984,8 +984,8 @@ static char *read_file_contents(const char *path)
 			/* Relative path */
 			resolved_path = hs_resolve_data_file(path);
 			if (!resolved_path) {
-				blog(LOG_ERROR, "[HyperShader] ┌─ Path resolve failed");
-				blog(LOG_ERROR, "[HyperShader] └─ Path : %s", path);
+				blog(LOG_ERROR, "[hypershader] ┌─ Path resolve failed");
+				blog(LOG_ERROR, "[hypershader] └─ Path : %s", path);
 				return NULL;
 			}
 		} else {
@@ -994,15 +994,15 @@ static char *read_file_contents(const char *path)
 		}
 	} else {
 		/* Absolute path outside data directory - reject for security */
-		blog(LOG_ERROR, "[HyperShader] SECURITY: Absolute path outside data directory rejected: %s", path);
+		blog(LOG_ERROR, "[hypershader] SECURITY: Absolute path outside data directory rejected: %s", path);
 		return NULL;
 	}
 
 	FILE *f = fopen(resolved_path, "rb");
 	if (!f) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ File open failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ File : %s", resolved_path);
-		blog(LOG_ERROR, "[HyperShader] └─ Detail: %s", strerror(errno));
+		blog(LOG_ERROR, "[hypershader] ┌─ File open failed");
+		blog(LOG_ERROR, "[hypershader] ├─ File : %s", resolved_path);
+		blog(LOG_ERROR, "[hypershader] └─ Detail: %s", strerror(errno));
 		bfree(resolved_path);
 		return NULL;
 	}
@@ -1011,8 +1011,8 @@ static char *read_file_contents(const char *path)
 	int fd = fileno(f);
 	struct stat st;
 	if (fstat(fd, &st) != 0) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ File stat failed");
-		blog(LOG_ERROR, "[HyperShader] └─ Detail: %s", strerror(errno));
+		blog(LOG_ERROR, "[hypershader] ┌─ File stat failed");
+		blog(LOG_ERROR, "[hypershader] └─ Detail: %s", strerror(errno));
 		fclose(f);
 		bfree(resolved_path);
 		return NULL;
@@ -1020,13 +1020,13 @@ static char *read_file_contents(const char *path)
 
 	off_t size = st.st_size;
 	if (size <= 0) {
-		blog(LOG_WARNING, "[HyperShader] File size out of range: %ld bytes", (long)size);
+		blog(LOG_WARNING, "[hypershader] File size out of range: %ld bytes", (long)size);
 		fclose(f);
 		bfree(resolved_path);
 		return NULL;
 	}
 	if (size > HS_MAX_SHADER_FILE_SIZE) {
-		blog(LOG_WARNING, "[HyperShader] File too large: %ld bytes (max %d)", (long)size,
+		blog(LOG_WARNING, "[hypershader] File too large: %ld bytes (max %d)", (long)size,
 		     HS_MAX_SHADER_FILE_SIZE);
 		fclose(f);
 		bfree(resolved_path);
@@ -1035,7 +1035,7 @@ static char *read_file_contents(const char *path)
 
 	char *buf = bmalloc(size + 1);
 	if (!buf) {
-		blog(LOG_ERROR, "[HyperShader] Memory allocation failed for file buffer");
+		blog(LOG_ERROR, "[hypershader] Memory allocation failed for file buffer");
 		fclose(f);
 		bfree(resolved_path);
 		return NULL;
@@ -1045,7 +1045,7 @@ static char *read_file_contents(const char *path)
 	fclose(f);
 
 	if (read != (size_t)size) {
-		blog(LOG_WARNING, "[HyperShader] Partial read: expected %zu, got %zu", (size_t)size, read);
+		blog(LOG_WARNING, "[hypershader] Partial read: expected %zu, got %zu", (size_t)size, read);
 	}
 
 	buf[read] = '\0';
@@ -1122,7 +1122,7 @@ char *resolve_include_path(const char *include_name, const char *current_file_pa
 	char *full_stdlib_path_prio = hs_resolve_data_file(stdlib_path_prio);
 	if (full_stdlib_path_prio) {
 		if (hs_access_exists(full_stdlib_path_prio) == 0) {
-			/* blog(LOG_DEBUG, "[HyperShader] Resolved include (stdlib): %s -> %s", include_name, full_stdlib_path); */
+			/* blog(LOG_DEBUG, "[hypershader] Resolved include (stdlib): %s -> %s", include_name, full_stdlib_path); */
 			return full_stdlib_path_prio;
 		}
 		bfree(full_stdlib_path_prio);
@@ -1148,7 +1148,7 @@ char *resolve_include_path(const char *include_name, const char *current_file_pa
 				strncpy(resolved_path, resolved.array, sizeof(resolved_path) - 1);
 				resolved_path[sizeof(resolved_path) - 1] = '\0';
 			} else {
-				blog(LOG_WARNING, "[HyperShader] Include path too long");
+				blog(LOG_WARNING, "[hypershader] Include path too long");
 				resolved_path[0] = '\0';
 			}
 			dstr_free(&resolved);
@@ -1160,7 +1160,7 @@ char *resolve_include_path(const char *include_name, const char *current_file_pa
 					bfree(data_path);
 					return bstrdup(canonical);
 				} else {
-					blog(LOG_ERROR, "[HyperShader] SECURITY: Include outside data dir rejected: %s",
+					blog(LOG_ERROR, "[hypershader] SECURITY: Include outside data dir rejected: %s",
 					     canonical);
 				}
 			}
@@ -1192,13 +1192,13 @@ char *resolve_include_path(const char *include_name, const char *current_file_pa
 
 	/* 4. Reject absolute paths - they should go through stdlib */
 	if (include_name[0] == '/') {
-		blog(LOG_ERROR, "[HyperShader] SECURITY: Absolute path includes not allowed: %s", include_name);
+		blog(LOG_ERROR, "[hypershader] SECURITY: Absolute path includes not allowed: %s", include_name);
 	}
 
 	/* Log helpful message for debugging include failures */
-	blog(LOG_WARNING, "[HyperShader] ┌─ Include missing");
-	blog(LOG_WARNING, "[HyperShader] ├─ Name : %s", include_name);
-	blog(LOG_WARNING, "[HyperShader] └─ Search: current dir, stdlib/, data root");
+	blog(LOG_WARNING, "[hypershader] ┌─ Include missing");
+	blog(LOG_WARNING, "[hypershader] ├─ Name : %s", include_name);
+	blog(LOG_WARNING, "[hypershader] └─ Search: current dir, stdlib/, data root");
 
 	bfree(data_path);
 	return NULL; /* Not found */
@@ -1208,7 +1208,7 @@ char *resolve_include_path(const char *include_name, const char *current_file_pa
 static char *preprocess_shader_with_guard(const char *path, int depth, struct include_guard *guard)
 {
 	if (depth > 10) {
-		blog(LOG_ERROR, "[HyperShader] Include depth exceeded (max=10)");
+		blog(LOG_ERROR, "[hypershader] Include depth exceeded (max=10)");
 		return NULL;
 	}
 
@@ -1225,9 +1225,9 @@ static char *preprocess_shader_with_guard(const char *path, int depth, struct in
 
 	char *content = read_file_contents(canonical_path);
 	if (!content) {
-		blog(LOG_WARNING, "[HyperShader] ┌─ Shader read failed");
-		blog(LOG_WARNING, "[HyperShader] ├─ Path : %s", canonical_path);
-		blog(LOG_WARNING, "[HyperShader] └─ Action: check file access and include paths");
+		blog(LOG_WARNING, "[hypershader] ┌─ Shader read failed");
+		blog(LOG_WARNING, "[hypershader] ├─ Path : %s", canonical_path);
+		blog(LOG_WARNING, "[hypershader] └─ Action: check file access and include paths");
 		return NULL;
 	}
 
@@ -1258,7 +1258,7 @@ static char *preprocess_shader_with_guard(const char *path, int depth, struct in
 			const char *q2 = (q1 < line_limit && *q1 == '"')
 				? memchr(q1 + 1, '"', line_limit - q1 - 1) : NULL;
 			if (!q2 || q2 == q1 + 1) {
-				blog(LOG_ERROR, "[HyperShader] Invalid #include directive in %s", canonical_path);
+				blog(LOG_ERROR, "[hypershader] Invalid #include directive in %s", canonical_path);
 				bfree(content);
 				bfree(result);
 				return NULL;
@@ -1273,7 +1273,7 @@ static char *preprocess_shader_with_guard(const char *path, int depth, struct in
 			if (full_path)
 				bfree(full_path);
 			if (!included) {
-				blog(LOG_ERROR, "[HyperShader] Required #include failed: %s in %s",
+				blog(LOG_ERROR, "[hypershader] Required #include failed: %s in %s",
 				     inc_filename, canonical_path);
 				bfree(inc_filename);
 				bfree(content);
@@ -1349,7 +1349,7 @@ static char *preprocess_shader_internal(const char *path, int depth)
  * Returns preprocessed shader source (caller must bfree) */
 static char *preprocess_shader(const char *path)
 {
-	blog(LOG_DEBUG, "[HyperShader] Preprocessing shader: %s", path);
+	blog(LOG_DEBUG, "[hypershader] Preprocessing shader: %s", path);
 	if (!path || !path[0])
 		return NULL;
 
@@ -1366,7 +1366,7 @@ static char *preprocess_shader(const char *path)
 			bfree(result);
 			result = translated;
 		} else {
-			blog(LOG_ERROR, "[HyperShader] Translation failed, using original source");
+			blog(LOG_ERROR, "[hypershader] Translation failed, using original source");
 		}
 
 		char *expanded = expand_pixel_wrapper_statements(result);
@@ -1378,12 +1378,12 @@ static char *preprocess_shader(const char *path)
 		result = expanded;
 
 		size_t len = strlen(result);
-		blog(LOG_DEBUG, "[HyperShader] Preprocessed shader: %zu bytes (%zu files included)", len,
+		blog(LOG_DEBUG, "[hypershader] Preprocessed shader: %zu bytes (%zu files included)", len,
 		     guard.count > 0 ? guard.count - 1 : 0);
 		if (len > 100) {
-			blog(LOG_DEBUG, "[HyperShader] Suffix: %s", result + len - 100);
+			blog(LOG_DEBUG, "[hypershader] Suffix: %s", result + len - 100);
 		} else {
-			blog(LOG_DEBUG, "[HyperShader] Source: %s", result);
+			blog(LOG_DEBUG, "[hypershader] Source: %s", result);
 		}
 	}
 
@@ -1455,8 +1455,8 @@ static gs_effect_t *create_effect_with_includes(const char *path, char **error_b
 		if (os_quick_write_utf8_file(temp_path, source, strlen(source), false)) {
 			effect = gs_effect_create_from_file(temp_path, error_buf);
 		} else {
-			blog(LOG_WARNING, "[HyperShader] ┌─ Temp effect write failed");
-			blog(LOG_WARNING, "[HyperShader] └─ Path : %s", temp_path);
+			blog(LOG_WARNING, "[hypershader] ┌─ Temp effect write failed");
+			blog(LOG_WARNING, "[hypershader] └─ Path : %s", temp_path);
 		}
 		bfree(temp_path);
 	}
@@ -1466,9 +1466,9 @@ static gs_effect_t *create_effect_with_includes(const char *path, char **error_b
 	}
 
 	if (error_buf && *error_buf && (*error_buf)[0] != '\0') {
-		blog(LOG_WARNING, "[HyperShader] ┌─ Shader compile diagnostics");
-		blog(LOG_WARNING, "[HyperShader] ├─ Path : %s", path);
-		blog(LOG_WARNING, "[HyperShader] └─ Detail:\n%s", *error_buf);
+		blog(LOG_WARNING, "[hypershader] ┌─ Shader compile diagnostics");
+		blog(LOG_WARNING, "[hypershader] ├─ Path : %s", path);
+		blog(LOG_WARNING, "[hypershader] └─ Detail:\n%s", *error_buf);
 	}
 
 	bfree(source);
@@ -2098,29 +2098,29 @@ static shader_resource_t *load_shader_resource(struct hypershader_data *s, const
 	{
 		if (preprocessed_source) {
 			size_t len = strlen(preprocessed_source);
-			blog(LOG_INFO, "[HyperShader] DEBUG: preprocessed_source len=%zu", len);
-			blog(LOG_INFO, "[HyperShader] DEBUG: first 100: %.100s", preprocessed_source);
-			blog(LOG_INFO, "[HyperShader] DEBUG: last 50: %.50s",
+			blog(LOG_INFO, "[hypershader] DEBUG: preprocessed_source len=%zu", len);
+			blog(LOG_INFO, "[hypershader] DEBUG: first 100: %.100s", preprocessed_source);
+			blog(LOG_INFO, "[hypershader] DEBUG: last 50: %.50s",
 			     preprocessed_source + (len > 50 ? len - 50 : 0));
 			/* Check for null bytes */
 			if (memchr(preprocessed_source, '\0', len)) {
-				blog(LOG_ERROR, "[HyperShader] DEBUG: FOUND NULL BYTES in preprocessed_source!");
+				blog(LOG_ERROR, "[hypershader] DEBUG: FOUND NULL BYTES in preprocessed_source!");
 			}
 		} else {
-			blog(LOG_INFO, "[HyperShader] DEBUG: preprocessed_source is NULL");
+			blog(LOG_INFO, "[hypershader] DEBUG: preprocessed_source is NULL");
 		}
 	}
 
 	/* 3. Effect Creation - the caller explicitly holds the graphics
 	 * context lock; merely queuing OBS_TASK_GRAPHICS is insufficient. */
 	if (use_native_loader) {
-		blog(LOG_INFO, "[HyperShader] Using gs_effect_create_from_file: %s", shader_path);
+		blog(LOG_INFO, "[hypershader] Using gs_effect_create_from_file: %s", shader_path);
 		res->effect = gs_effect_create_from_file(shader_path, &error_buf);
 	} else {
 		/* Every shader instance owns its compiled source. A shared temporary
 		 * filename caused OBS to keep using old shader code after Apply. */
 		res->effect = gs_effect_create(preprocessed_source, shader_path, &error_buf);
-		blog(LOG_INFO, "[HyperShader] Compiled preprocessed shader: path=%s effect=%p error=%s",
+		blog(LOG_INFO, "[hypershader] Compiled preprocessed shader: path=%s effect=%p error=%s",
 		     shader_path, (void *)res->effect, error_buf ? error_buf : "(null)");
 	}
 	/* graphics lock already held — see note above */
@@ -2280,7 +2280,7 @@ static bool hs_ensure_native_mediapipe(struct hypershader_data *s)
 	s->mp_runner = mp_create(true, path.array);
 	dstr_free(&path);
 	if (!s->mp_runner) {
-		blog(LOG_WARNING, "[HyperShader] Native MediaPipe unavailable; Sight mode can still work");
+		blog(LOG_WARNING, "[hypershader] Native MediaPipe unavailable; Sight mode can still work");
 		return false;
 	}
 	s->mp_thread_run = true; /* Worker checks this immediately after pthread_create. */
@@ -2288,10 +2288,10 @@ static bool hs_ensure_native_mediapipe(struct hypershader_data *s)
 		s->mp_thread_run = false;
 		mp_destroy(s->mp_runner);
 		s->mp_runner = NULL;
-		blog(LOG_WARNING, "[HyperShader] Failed to create native MediaPipe worker thread");
+		blog(LOG_WARNING, "[hypershader] Failed to create native MediaPipe worker thread");
 		return false;
 	}
-	blog(LOG_INFO, "[HyperShader] MediaPipe Runner initialized (Backend: %s)", mp_get_backend_name());
+	blog(LOG_INFO, "[hypershader] MediaPipe Runner initialized (Backend: %s)", mp_get_backend_name());
 	return true;
 }
 
@@ -2358,7 +2358,7 @@ static void filter_update(void *data, obs_data_t *settings)
 			graph_ready = mp_start_graph(s->mp_runner, (mp_graph_type_t)graph);
 		s->mp_enabled = s->mp_thread_run && graph_ready && graph != MP_GRAPH_NONE;
 		if (!graph_ready)
-			blog(LOG_WARNING, "[HyperShader] MediaPipe mode %d unavailable; processing disabled", graph);
+			blog(LOG_WARNING, "[hypershader] MediaPipe mode %d unavailable; processing disabled", graph);
 	} else {
 		s->mp_enabled = false;
 	}
@@ -2555,7 +2555,7 @@ static void filter_update(void *data, obs_data_t *settings)
 	s->audio_test_tone = (bool)obs_data_get_bool(settings, "audio_test_tone");
 	s->audio_debug = (bool)obs_data_get_bool(settings, "audio_debug");
 	if (prev_debug != s->audio_debug) {
-		blog(LOG_INFO, "[HyperShader] Audio debug %s", s->audio_debug ? "enabled" : "disabled");
+		blog(LOG_INFO, "[hypershader] Audio debug %s", s->audio_debug ? "enabled" : "disabled");
 	}
 
 	/* FFT settings: if changed, reallocate FFT resources safely */
@@ -2625,13 +2625,13 @@ static void filter_update(void *data, obs_data_t *settings)
 			if (secure_path[0] == '/') {
 				memmove(secure_path, secure_path + 1, strlen(secure_path));
 			}
-			blog(LOG_INFO, "[HyperShader] SECURITY: Converted absolute path '%s' to relative '%s'",
+			blog(LOG_INFO, "[hypershader] SECURITY: Converted absolute path '%s' to relative '%s'",
 			     original_path, secure_path);
 			new_path = secure_path;
 		} else if (!hs_path_in_managed_dir(new_path)) {
 			/* File loading rejects paths outside installed assets and managed revisions. */
 			blog(LOG_WARNING,
-			     "[HyperShader] SECURITY: Path '%s' is outside plugin data directory (data_path='%s') "
+			     "[hypershader] SECURITY: Path '%s' is outside plugin data directory (data_path='%s') "
 			     "and not a managed revision; rejected by shader loader",
 			     new_path, s->data_path);
 		}
@@ -2733,7 +2733,7 @@ static void filter_update(void *data, obs_data_t *settings)
 	if (should_run_worker && !currently_running) {
 		/* Start worker */
 		if (!audio_thread_start(&s->audio_thread_mgr, audio_worker, s)) {
-			blog(LOG_ERROR, "[HyperShader] Failed to start audio worker thread");
+			blog(LOG_ERROR, "[hypershader] Failed to start audio worker thread");
 		}
 	} else if (!should_run_worker && currently_running) {
 		/* Stop worker immediately when leaving audio mode */
@@ -2768,7 +2768,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 {
 	struct hypershader_data *s = bzalloc(sizeof(struct hypershader_data));
 	if (!s) {
-		blog(LOG_ERROR, "[HyperShader] Failed to allocate filter data structure");
+		blog(LOG_ERROR, "[hypershader] Failed to allocate filter data structure");
 		return NULL;
 	}
 	atomic_init(&s->last_audio_capture_ns, 0);
@@ -2805,7 +2805,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 
 	/* Initialize audio subsystem */
 	if (!hyper_audio_init(s)) {
-		blog(LOG_ERROR, "[HyperShader] Failed to initialize audio subsystem");
+		blog(LOG_ERROR, "[hypershader] Failed to initialize audio subsystem");
 		s->audio_system_healthy = false;
 	} else {
 		s->audio_system_healthy = true;
@@ -2825,7 +2825,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->shader_load_thread_run = true;
 	if (pthread_create(&s->shader_load_thread, NULL, shader_load_worker_thread, s) != 0) {
 		s->shader_load_thread_run = false;
-		blog(LOG_ERROR, "[HyperShader] Failed to create shader load worker thread");
+		blog(LOG_ERROR, "[hypershader] Failed to create shader load worker thread");
 	}
 	s->audio_debug = false;
 	s->audio_phase = 0.0f;
@@ -2838,7 +2838,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->audio_mono_scratch_size = 8192; /* Covers typical audio chunk sizes */
 	s->audio_mono_scratch = bzalloc(s->audio_mono_scratch_size * sizeof(float));
 	if (!s->audio_mono_scratch) {
-		blog(LOG_WARNING, "[HyperShader] Failed to allocate audio scratch buffer, using fallback path");
+		blog(LOG_WARNING, "[hypershader] Failed to allocate audio scratch buffer, using fallback path");
 		s->audio_mono_scratch_size = 0;
 	}
 
@@ -2859,8 +2859,8 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	/* Initialize plugin data path for security validation & model loading */
 	s->data_path = hs_plugin_data_path();
 	if (!s->data_path) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Data path unavailable");
-		blog(LOG_ERROR, "[HyperShader] └─ Action: plugin data path could not be resolved");
+		blog(LOG_ERROR, "[hypershader] ┌─ Data path unavailable");
+		blog(LOG_ERROR, "[hypershader] └─ Action: plugin data path could not be resolved");
 		filter_destroy(s);
 		return NULL;
 	}
@@ -2874,7 +2874,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->mp_preallocated_frame = bzalloc(MP_FRAME_SIZE);
 	s->mp_frame_buffer_in_use = false;
 	if (!s->mp_preallocated_frame) {
-		blog(LOG_WARNING, "[HyperShader] Failed to pre-allocate MediaPipe frame buffer");
+		blog(LOG_WARNING, "[hypershader] Failed to pre-allocate MediaPipe frame buffer");
 	}
 
 	/* Native models load below only when the instance requests them. */
@@ -2883,7 +2883,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->audio_localbuf_size = 8192;
 	s->audio_localbuf = bzalloc(s->audio_localbuf_size * sizeof(float));
 	if (!s->audio_localbuf) {
-		blog(LOG_WARNING, "[HyperShader] Failed to allocate audio worker buffer, using fallback");
+		blog(LOG_WARNING, "[hypershader] Failed to allocate audio worker buffer, using fallback");
 		s->audio_localbuf_size = 0;
 	}
 
@@ -2897,23 +2897,23 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	if (!settings || !obs_data_get_bool(settings, "sight_use_tracking"))
 		hs_ensure_native_mediapipe(s);
 	else
-		blog(LOG_INFO, "[HyperShader] Sight selected: skipping redundant native MediaPipe models");
+		blog(LOG_INFO, "[hypershader] Sight selected: skipping redundant native MediaPipe models");
 
 	/* Initialize EnTT Scene */
 	s->scene = scene_create();
 	s->entity_count_max = 100;
 	s->entity_data = (float *)bzalloc(s->entity_count_max * 4 * sizeof(float));
 	if (!s->entity_data) {
-		blog(LOG_ERROR, "[HyperShader] Failed to allocate entity data");
+		blog(LOG_ERROR, "[hypershader] Failed to allocate entity data");
 		filter_destroy(s);
 		return NULL;
 	}
-	blog(LOG_INFO, "[HyperShader] EnTT Scene Manager initialized.");
+	blog(LOG_INFO, "[hypershader] EnTT Scene Manager initialized.");
 
 #ifdef __linux__
 	s->x11_display = XOpenDisplay(NULL);
 	if (!s->x11_display) {
-		blog(LOG_WARNING, "[HyperShader] Failed to open X11 display for cursor tracking");
+		blog(LOG_WARNING, "[hypershader] Failed to open X11 display for cursor tracking");
 	}
 #endif
 
@@ -3065,7 +3065,7 @@ static void sight_update_tracking(struct hypershader_data *s,
 		s->sight_gesture[i]=sight_gesture_code(snapshot->gesture[i]);
 	}
 	if (!s->sight_announced) {
-		blog(LOG_INFO,"[HyperShader] Sight shared tracking: channel=%s kind=%u count=%u",
+		blog(LOG_INFO,"[hypershader] Sight shared tracking: channel=%s kind=%u count=%u",
 		     s->sight_render_channel,snapshot->kind,snapshot->point_count);
 		s->sight_announced=true;
 	}
@@ -3101,7 +3101,7 @@ static void sight_depth_tick(struct hypershader_data *s,bool enabled)
     s->sight_depth_present=s->sight_depth_tex&&s->sight_depth_sequence==snap.sequence;
     if(s->sight_depth_present&&!s->sight_depth_announced){
         s->sight_depth_announced=true;
-        blog(LOG_INFO,"[HyperShader] SIGHT_DEPTH_BRIDGE_20261118: %ux%u R8 relative inverse depth",snap.width,snap.height);
+        blog(LOG_INFO,"[hypershader] SIGHT_DEPTH_BRIDGE_20261118: %ux%u R8 relative inverse depth",snap.width,snap.height);
     }
 }
 
@@ -3136,7 +3136,7 @@ static void sight_matte_tick(struct hypershader_data *s, bool enabled)
     s->sight_matte_present=s->sight_matte_tex && s->sight_matte_sequence==snapshot.sequence;
     if (s->sight_matte_present && !s->sight_matte_announced) {
         s->sight_matte_announced=true;
-        blog(LOG_INFO,"[HyperShader] SIGHT_SHARED_MATTE_20261117: %ux%u R8",snapshot.width,snapshot.height);
+        blog(LOG_INFO,"[hypershader] SIGHT_SHARED_MATTE_20261117: %ux%u R8",snapshot.width,snapshot.height);
     }
 }
 
@@ -3181,7 +3181,7 @@ static void sight_flow_tick(struct hypershader_data *s,bool enabled)
         s->sight_flow_coverage=snap.coverage;
         if(!s->sight_flow_announced){
             s->sight_flow_announced=true;
-            blog(LOG_INFO,"[HyperShader] SIGHT_FLOW_BRIDGE_20261117: 32x18 backward motion grid");
+            blog(LOG_INFO,"[hypershader] SIGHT_FLOW_BRIDGE_20261117: 32x18 backward motion grid");
         }
     }
 }
@@ -3227,7 +3227,7 @@ static void sight_text_tick(struct hypershader_data *s,bool enabled)
         s->sight_text_count=snapshot.count;
         if(!s->sight_text_announced) {
             s->sight_text_announced=true;
-            blog(LOG_INFO,"[HyperShader] SIGHT_TEXT_GEOMETRY_20261117: shared OCR line mask");
+            blog(LOG_INFO,"[hypershader] SIGHT_TEXT_GEOMETRY_20261117: shared OCR line mask");
         }
     }
 }
@@ -3302,7 +3302,7 @@ static void sight_tick(struct hypershader_data *s)
             s->sight_motion_energy=motion.energy;
             if (!s->sight_motion_announced) {
                 s->sight_motion_announced=true;
-                blog(LOG_INFO,"[HyperShader] SIGHT_MOTION_ENERGY_20261117: source-local worker motion");
+                blog(LOG_INFO,"[hypershader] SIGHT_MOTION_ENERGY_20261117: source-local worker motion");
             }
         }
     }
@@ -3654,9 +3654,9 @@ static void shader_load_complete_task(void *param)
 		s->ep_graph_frame = gs_effect_get_param_by_name(s->effect, "hs_graph_frame");
 		if (s->graph.enabled && s->graph.valid) {
 			if (s->graph.named)
-				blog(LOG_INFO, "[HyperShader] Named pass graph enabled: %u passes", s->graph.count);
+				blog(LOG_INFO, "[hypershader] Named pass graph enabled: %u passes", s->graph.count);
 			else
-				blog(LOG_INFO, "[HyperShader] Two-buffer graph enabled: A -> B -> Draw");
+				blog(LOG_INFO, "[hypershader] Two-buffer graph enabled: A -> B -> Draw");
 		}
 
 		s->ep_segmentation = gs_effect_get_param_by_name(s->effect, "hs_segmentation");
@@ -3841,7 +3841,7 @@ static void shader_load_complete_task(void *param)
 		}
 		pthread_mutex_unlock(&s->mutex);
 
-		blog(LOG_INFO, "[HyperShader] Loaded shader: %s", task->path);
+		blog(LOG_INFO, "[hypershader] Loaded shader: %s", task->path);
 
 	} else {
 		/* Error handling */
@@ -3849,17 +3849,17 @@ static void shader_load_complete_task(void *param)
 			if (s->shader_error)
 				bfree(s->shader_error);
 			s->shader_error = bstrdup(res->error);
-			blog(LOG_ERROR, "[HyperShader] ┌─ Shader load failed");
-			blog(LOG_ERROR, "[HyperShader] ├─ Path : %s", task->path);
-			blog(LOG_ERROR, "[HyperShader] └─ Detail:\n%s", res->error);
+			blog(LOG_ERROR, "[hypershader] ┌─ Shader load failed");
+			blog(LOG_ERROR, "[hypershader] ├─ Path : %s", task->path);
+			blog(LOG_ERROR, "[hypershader] └─ Detail:\n%s", res->error);
 		} else {
 			if (s->shader_error)
 				bfree(s->shader_error);
 			s->shader_error = bstrdup("Unknown shader load error");
 		}
-		blog(LOG_ERROR, "[HyperShader] ┌─ Shader load failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ Path : %s", task->path);
-		blog(LOG_ERROR, "[HyperShader] └─ Action: see diagnostics above");
+		blog(LOG_ERROR, "[hypershader] ┌─ Shader load failed");
+		blog(LOG_ERROR, "[hypershader] ├─ Path : %s", task->path);
+		blog(LOG_ERROR, "[hypershader] └─ Action: see diagnostics above");
 	}
 
 	publish_builder_compile_result(task, compiled, res ? res->error : NULL);
@@ -3962,7 +3962,7 @@ void *mp_worker_thread(void *data)
 						memcpy(update_data->ref_landmark_data, update_data->landmark_data,
 						       landmarks.count * 4 * sizeof(float));
 						update_data->ref_landmark_count = landmarks.count;
-						blog(LOG_INFO, "[HyperShader] Reference landmarks captured: %d",
+						blog(LOG_INFO, "[hypershader] Reference landmarks captured: %d",
 						     landmarks.count);
 					}
 				}
@@ -4282,7 +4282,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 			s->audio_texture =
 				gs_texture_create(AUDIO_TEX_WIDTH, AUDIO_TEX_HEIGHT, GS_R8, 1, NULL, GS_DYNAMIC);
 			if (!s->audio_texture) {
-				blog(LOG_ERROR, "[HyperShader] Failed to create audio texture (out of VRAM?)");
+				blog(LOG_ERROR, "[hypershader] Failed to create audio texture (out of VRAM?)");
 				s->audio_system_healthy = false;
 				/* Graceful degradation - shader continues without audio reactivity */
 			} else {
@@ -4294,7 +4294,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 						s->channel_textures[channel] = s->audio_texture;
 				}
 				memset(s->audio_texture_prev, 0, sizeof(s->audio_texture_prev));
-				blog(LOG_INFO, "[HyperShader] Audio texture created (%dx%d)", AUDIO_TEX_WIDTH,
+				blog(LOG_INFO, "[hypershader] Audio texture created (%dx%d)", AUDIO_TEX_WIDTH,
 				     AUDIO_TEX_HEIGHT);
 			}
 		}
@@ -4962,13 +4962,13 @@ static bool output_compositor_prepare(struct hypershader_data *s, enum gs_color_
     if (!s->output_compositor) {
         char *filename = obs_module_file("stdlib/hyper_output_compositor.effect");
         if (!filename) {
-            blog(LOG_ERROR, "[HyperShader] Compositor shader resource missing");
+            blog(LOG_ERROR, "[hypershader] Compositor shader resource missing");
             return false;
         }
         char *error = NULL;
         s->output_compositor = gs_effect_create_from_file(filename, &error);
         if (!s->output_compositor)
-            blog(LOG_ERROR, "[HyperShader] Compositor compile failed: %s",
+            blog(LOG_ERROR, "[hypershader] Compositor compile failed: %s",
                  error ? error : "unknown error");
         if (error)
             bfree(error);
@@ -5225,7 +5225,7 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 	if (!valid || bytes > limit) {
 		if (!s->graph_budget_rejected) {
 			graph_release_targets(s);
-			blog(LOG_WARNING, "[HyperShader] Graph resource budget exceeded (%ux%u, bytes=%" PRIu64
+			blog(LOG_WARNING, "[hypershader] Graph resource budget exceeded (%ux%u, bytes=%" PRIu64
 			     ", limit=%" PRIu64 ", overflow=%d); passing upstream source",
 			     width, height, bytes, limit, !valid);
 			s->graph_budget_rejected = true;
@@ -5234,7 +5234,7 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 	}
 	if (s->graph_budget_rejected) {
 		s->graph_budget_rejected = false;
-		blog(LOG_INFO, "[HyperShader] Graph resource budget recovered (%ux%u)", width, height);
+		blog(LOG_INFO, "[hypershader] Graph resource budget recovered (%ux%u)", width, height);
 	}
 	return true;
 }
@@ -5397,7 +5397,7 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 	s->graph_flow_sequence = flow_sequence;
     if(s->ep_sight_flow_step&&flow_step&&!s->graph_flow_announced) {
         s->graph_flow_announced=true;
-        blog(LOG_INFO,"[HyperShader] SIGHT_FLOW_GRAPH_STEP_20261118: consumed new motion snapshot");
+        blog(LOG_INFO,"[hypershader] SIGHT_FLOW_GRAPH_STEP_20261118: consumed new motion snapshot");
     }
 	s->graph_frame++;
 	s->graph_valid = true;
@@ -5510,7 +5510,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 			return;
 		}
 		if (!graph_render_filter(s, target, width, height, format)) {
-			blog(LOG_WARNING, "[HyperShader] Graph render failed; passing upstream source");
+			blog(LOG_WARNING, "[hypershader] Graph render failed; passing upstream source");
 			obs_source_skip_video_filter(s->context);
 		}
 		update_performance_stats(s, (double)(os_gettime_ns() - start_time) / 1000000.0);
@@ -5593,7 +5593,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 						s->history_idx=pong;
 						update_performance_stats(s,(double)(os_gettime_ns()-start_time)/1000000.0);
 						if(!s->feedback_first_render_logged) {
-							blog(LOG_INFO,"[HyperShader] ACTIVE_FEEDBACK_CAPTURE_20261010: %ux%u",width,height);
+							blog(LOG_INFO,"[hypershader] ACTIVE_FEEDBACK_CAPTURE_20261010: %ux%u",width,height);
 							s->feedback_first_render_logged=true;
 						}
 						return;
@@ -5601,14 +5601,14 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 				}
 			}
 		}
-		blog(LOG_WARNING,"[HyperShader] Feedback targets unavailable; passing through source");
+		blog(LOG_WARNING,"[hypershader] Feedback targets unavailable; passing through source");
 		obs_source_skip_video_filter(s->context);
 		return;
 	}
 
     if (output_composition_enabled(s)) {
         if (!output_render_composited_filter(s, target, width, height, format)) {
-            blog(LOG_WARNING, "[HyperShader] Composition render failed; passing source");
+            blog(LOG_WARNING, "[hypershader] Composition render failed; passing source");
             obs_source_skip_video_filter(s->context);
         }
         update_performance_stats(s, (double)(os_gettime_ns()-start_time)/1000000.0);
@@ -5712,7 +5712,7 @@ void free_effect_param_cache(struct hypershader_data *s)
 const char *get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return "HyperShader";
+	return "hypershader";
 }
 
 bool reload_examples_clicked(obs_properties_t *props, obs_property_t *property, void *data)
@@ -5778,7 +5778,7 @@ struct obs_source_info hypershader_filter_info = {
 };
 
 /* ============================================================================
- * HYPERSHADER SOURCE IMPLEMENTATION
+ * hypershader SOURCE IMPLEMENTATION
  * ============================================================================ */
 
 static enum gs_color_space source_get_color_space(void *data, size_t count, const enum gs_color_space *preferred)
@@ -5917,7 +5917,7 @@ static void source_video_render(void *data, gs_effect_t *effect)
         if (result) {
             if (output_composition_enabled(s)) {
                 if (!output_draw_composited(s, NULL, result, width, height, format))
-                    blog(LOG_ERROR, "[HyperShader] Standalone source composite failed");
+                    blog(LOG_ERROR, "[hypershader] Standalone source composite failed");
             } else {
                 while (gs_effect_loop(default_effect, "Draw"))
                     gs_draw_sprite(result, 0, width, height);
@@ -5931,7 +5931,7 @@ static void source_video_render(void *data, gs_effect_t *effect)
         if (output_composition_enabled(s)) {
             gs_texture_t *fx = output_render_effect(s, s->dummy_texture, width, height, format);
             if (!fx || !output_draw_composited(s, NULL, fx, width, height, format))
-                blog(LOG_ERROR, "[HyperShader] Standalone source composite failed");
+                blog(LOG_ERROR, "[hypershader] Standalone source composite failed");
         } else {
             while (gs_effect_loop(current_effect, "Draw"))
                 gs_draw_sprite(s->dummy_texture, 0, width, height);
@@ -5964,7 +5964,7 @@ struct obs_source_info hypershader_source_info = {
 };
 
 /* ============================================================================
- * HYPERSHADER TRANSITION IMPLEMENTATION
+ * hypershader TRANSITION IMPLEMENTATION
  * ============================================================================ */
 
 static void mix_render_callback(void *data, gs_texture_t *a, gs_texture_t *b, float t, uint32_t width, uint32_t height)
@@ -6023,7 +6023,7 @@ static void mix_render_callback(void *data, gs_texture_t *a, gs_texture_t *b, fl
         if (output_composition_enabled(s)) {
             gs_texture_t *fx = output_render_effect(s, a, width, height, GS_RGBA);
             if (!fx || !output_draw_composited(s, a, fx, width, height, GS_RGBA))
-                blog(LOG_ERROR, "[HyperShader] Transition compositor failed");
+                blog(LOG_ERROR, "[hypershader] Transition compositor failed");
         } else {
             while (gs_effect_loop(s->effect, "Draw"))
                 gs_draw_sprite(a, 0, width, height);

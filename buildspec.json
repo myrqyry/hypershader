@@ -1,8 +1,8 @@
 {
   "name": "hypershader",
-  "displayName": "HyperShader",
+  "displayName": "hypershader",
   "version": "0.1.0",
-  "author": "HyperShader Contributors",
+  "author": "hypershader Contributors",
   "email": "",
   "website": "https://github.com/myrqyry/hypershader",
   "dependencies": {

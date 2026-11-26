@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Noise Functions
+// hypershader Standard Library - Noise Functions
 
 #ifndef _STDLIB_NOISE_H_
 #define _STDLIB_NOISE_H_

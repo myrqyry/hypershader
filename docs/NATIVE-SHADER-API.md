@@ -1,6 +1,6 @@
 # Native shader vocabulary
 
-HyperShader owns its shader runtime contract. First-party shaders, builder
+hypershader owns its shader runtime contract. First-party shaders, builder
 output, examples and authoring tools use the reserved `hs_` namespace;
 external-format vocabulary belongs only in explicit import adapters.
 The underlying OBS effect language, `ViewProj`, `image`, user-defined
@@ -33,9 +33,9 @@ sampling primitives.
 
 ## Sight semantic region signals
 
-Add Sight Privacy V2 before HyperShader on the same source. Enable its
+Add Sight Privacy V2 before hypershader on the same source. Enable its
 custom semantic detector and **Analysis only (shader signals; no concealment)**;
-leave approved-frame buffering off. Enable Sight tracking in HyperShader.
+leave approved-frame buffering off. Enable Sight tracking in hypershader.
 A missing, disabled, stale, ambiguous or incompatible producer is unavailable.
 Unknown intervening filters are coordinate barriers. No second model is loaded.
 
@@ -76,10 +76,10 @@ These are creative effects, not a privacy guarantee.
 Semantic Materials additionally accepts the existing source-local depth,
 flow and foreground matte signals. Place semantic detection, Depth Camera
 (Original source/share depth), Subject Cutout (Original source) and
-Spatial Motion (Original source/share motion) before HyperShader in the
+Spatial Motion (Original source/share motion) before hypershader in the
 same source's render chain. Each optional producer must be unique and
 analysis-only; no coordinate-changing filter may intervene. Enable Sight
-shared snapshots in HyperShader. There is no additional model inside the
+shared snapshots in hypershader. There is no additional model inside the
 shader.
 
 - **Depth Response** uses four adjacent inverse-depth taps plus the center
@@ -106,7 +106,7 @@ The shader does not reconstruct metric geometry or true mesh UVs.
 The optional **Persistent Surface Coordinates** slider is off by default
 to preserve existing material presets. Set it to 1 for full locking.
 The new linked Sight flow procedure reports the actual predecessor
-sequence of each backward motion snapshot. HyperShader transports a
+sequence of each backward motion snapshot. hypershader transports a
 32×18 coordinate-offset field once per linked snapshot, not once per
 render or graph pass. A missing predecessor, replacement, resize, or
 skipped snapshot reseeds the field; low-confidence cells and samples

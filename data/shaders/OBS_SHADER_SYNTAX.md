@@ -1,17 +1,17 @@
 # OBS-Compatible Shader Syntax (Windows + macOS)
 
-Use this guide when authoring HyperShader `.effect` files that should run cleanly across OBS on Windows and macOS.
+Use this guide when authoring hypershader `.effect` files that should run cleanly across OBS on Windows and macOS.
 
 ## Core Syntax Rules
 
 - Start from OBS effect syntax (HLSL/Cg-style), not raw GLSL.
-- Native HyperShader effects include `#include "../../stdlib/hypershader_standard.glsl"` when using the standard runtime uniforms/helpers.
-- External-format compatibility headers are adapters only; do not use them as the base for first-party HyperShader effects.
+- Native hypershader effects include `#include "../../stdlib/hypershader_standard.glsl"` when using the standard runtime uniforms/helpers.
+- External-format compatibility headers are adapters only; do not use them as the base for first-party hypershader effects.
 - Effects that declare their own native `ViewProj`/`VertData`/`VSDefault` (full custom passes) do not include the compat layer.
-- Use either OBS-native `float2/3/4` or HyperShader's native `vec2/3/4` authoring aliases.
+- Use either OBS-native `float2/3/4` or hypershader's native `vec2/3/4` authoring aliases.
 - Use `frac`, not `fract`.
-- Use `lerp` or HyperShader's native `mix` alias.
-- Use `texture(tex, uv)` with the native HyperShader standard, or OBS-native texture sampling in full custom effects.
+- Use `lerp` or hypershader's native `mix` alias.
+- Use `texture(tex, uv)` with the native hypershader standard, or OBS-native texture sampling in full custom effects.
 
 ## Avoid These Cross-Platform Pitfalls
 

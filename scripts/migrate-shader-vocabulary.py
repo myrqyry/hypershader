@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in migration of pre-namespace HyperShader effect source; not an engine importer."""
+"""Opt-in migration of pre-namespace hypershader effect source; not an engine importer."""
 import argparse
 import re
 from pathlib import Path

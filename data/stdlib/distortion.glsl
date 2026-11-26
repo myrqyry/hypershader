@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Distortion Functions
+// hypershader Standard Library - Distortion Functions
 // UV manipulation and warping algorithms
 
 #ifndef _STDLIB_DISTORTION_H_

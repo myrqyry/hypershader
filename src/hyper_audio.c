@@ -26,7 +26,7 @@ bool hyper_audio_init(struct hypershader_data *s)
 
 	// Initialize audio thread state machine
 	if (!audio_thread_manager_init(&s->audio_thread_mgr)) {
-		blog(LOG_ERROR, "[HyperShader] Failed to init audio thread manager");
+		blog(LOG_ERROR, "[hypershader] Failed to init audio thread manager");
 		goto fail;
 	}
 
@@ -70,7 +70,7 @@ bool hyper_audio_init(struct hypershader_data *s)
 
 	/* Check lock-free ring allocation */
 	if (!s->audio_lockfree_ring.data) {
-		blog(LOG_ERROR, "[HyperShader] Failed to allocate lock-free audio ring buffer");
+		blog(LOG_ERROR, "[hypershader] Failed to allocate lock-free audio ring buffer");
 		goto fail;
 	}
 
@@ -144,7 +144,7 @@ void hyper_audio_update_settings(struct hypershader_data *s, obs_data_t *setting
 	bool pending_matches = atomic_load_explicit(&s->audio_reconfig_pending, memory_order_seq_cst) &&
 		new_fft == s->next_audio_fft_size && new_window == s->next_audio_window_type;
 	if (!active_matches && !pending_matches) {
-		blog(LOG_INFO, "[HyperShader] Scheduling FFT reconfig: %d->%d", s->audio_fft_size, new_fft);
+		blog(LOG_INFO, "[hypershader] Scheduling FFT reconfig: %d->%d", s->audio_fft_size, new_fft);
 		s->next_audio_fft_size = new_fft;
 		s->next_audio_window_type = new_window;
 		atomic_store_explicit(&s->audio_reconfig_pending, true, memory_order_seq_cst);

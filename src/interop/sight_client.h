@@ -13,7 +13,7 @@ static inline obs_source_t *hs_sight_reader_create(void)
     if (!obs_source_get_display_name("sight_tracking_receiver_filter"))
         return NULL;
     return obs_source_create_private("sight_tracking_receiver_filter",
-                                     "HyperShader Sight snapshot reader", NULL);
+                                     "hypershader Sight snapshot reader", NULL);
 }
 
 /* Properties/control thread only. Ask the same provider that owns

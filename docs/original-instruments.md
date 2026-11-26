@@ -1,6 +1,6 @@
-# Original Instruments — six first-party HyperShader effects
+# Original Instruments — six first-party hypershader effects
 
-These are newly authored, native HyperShader effects built around
+These are newly authored, native hypershader effects built around
 its real signal/texture contracts. The collection has **three standalone
 sources and three live-video filters**. No shader ports or imported
 code were used to write them.
@@ -44,39 +44,39 @@ not screenshots of an installed live OBS scene.
 
 ## Setup
 
-**Brass Register**, **Paper Tide** and **Spectral Garden** — Add HyperShader Source,
+**Brass Register**, **Paper Tide** and **Spectral Garden** — Add hypershader Source,
 choose the named native effect file, and choose the live Audio Source
-in HyperShader. In silence the effects retain a deliberate quiet
+in hypershader. In silence the effects retain a deliberate quiet
 composition. Audio moves separate, genuinely measured frequency-band
 features; these shaders do not claim to measure additional FFT bins.
 
 **Spectral Garden** connects each of eight blossoms to one existing FFT
 band; the existing kick signal opens the flowers, while the idle wind
 animates without audio. The shader adds no models, audio worker or history
-texture. Choose an Audio Source in HyperShader to see its response.
+texture. Choose an Audio Source in hypershader to see its response.
 
 **Topographic Etching** — On the *same source*, add
-LLL.sight Depth Camera (Depth Anything) **above** HyperShader
+LLL.sight Depth Camera (Depth Anything) **above** hypershader
 with its Original source / share depth output mode. Enable
 **Use Sight shared snapshots (tracking, matte, text, flow, depth)**
-on HyperShader. This effect maps relative (not metric) depth values
+on hypershader. This effect maps relative (not metric) depth values
 into engraved contour lines. Absent current depth means exact
 passthrough; no fake depth or extra inference engine is launched.
 
 **Contact Filaments** — Add LLL.sight Tracking in Hands & gestures
 mode, with overlay disabled, upstream on the same source. Select a
-shared hand channel, enable Sight shared snapshots in HyperShader,
+shared hand channel, enable Sight shared snapshots in hypershader,
 and select that channel. Actual wrist/fingertip coordinates become
 copper threads, with pearl nodes. Audio and pinch change the
 appearance. Missing current hand landmarks means exact passthrough.
 
-**Afterimage Press** — Add to video as a HyperShader Filter.
+**Afterimage Press** — Add to video as a hypershader Filter.
 It uses the existing GPU previous-output history passed through
 `hs_history`, not a simulated time-based ghost. The
 current source alpha is retained. A selected audio source can change
 the plate registration with measured spectral flux.
 
-The three sources use HyperShader's **first-party native standard
+The three sources use hypershader's **first-party native standard
 library** and are not plain OBS Shaderfilter files.
 
 ## Verification and scope
@@ -87,7 +87,7 @@ library** and are not plain OBS Shaderfilter files.
   pinch and prior-image fixture inputs change real pixels; source
   alpha is invariant between compared states.
 - `bash scripts/verify-original-instruments-plugin.sh`
-  loads the **actual HyperShader module** under isolated OBS,
+  loads the **actual hypershader module** under isolated OBS,
   shows all three original sources animated, confirms the two Sight
   filters preserve the camera image without a signal, and confirms
   the feedback filter changes and evolves across moving image

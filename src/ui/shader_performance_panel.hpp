@@ -36,7 +36,7 @@ public:
  using Target=std::function<QString()>;
  explicit ShaderPerformancePanel(Target target,QWidget*parent=nullptr):QWidget(parent),targetUuid(std::move(target)){
   auto*l=new QVBoxLayout(this);l->setContentsMargins(6,6,6,6);l->setSpacing(4);
-  status=new QLabel("Select a HyperShader instance above.",this);status->setWordWrap(true);
+  status=new QLabel("Select a hypershader instance above.",this);status->setWordWrap(true);
   status->setTextFormat(Qt::PlainText);status->setObjectName("hsPerformanceStatus");l->addWidget(status);
   signalLabel=new QLabel(this);signalLabel->setTextFormat(Qt::PlainText);signalLabel->setWordWrap(true);signalLabel->setObjectName("hsPerformanceSignals");l->addWidget(signalLabel);
   meter=new QProgressBar(this);meter->setRange(0,1000);meter->setTextVisible(false);meter->setFixedHeight(6);meter->hide();l->addWidget(meter);
@@ -76,7 +76,7 @@ public:
  void refresh(bool force=false){
   if(!isVisible()&&!force)return;
   auto src=resolve();
-  if(!src){if(force||!identity.isEmpty()){identity.clear();clearLooks();replaceForm(nullptr,nullptr);formReady=false;setReady(false);status->setText("Select a HyperShader instance above.");}enabled->setEnabled(false);signalLabel->clear();meter->hide();return;}
+  if(!src){if(force||!identity.isEmpty()){identity.clear();clearLooks();replaceForm(nullptr,nullptr);formReady=false;setReady(false);status->setText("Select a hypershader instance above.");}enabled->setEnabled(false);signalLabel->clear();meter->hide();return;}
   auto s=settings(src.get());auto p=privateSettings(src.get());
   const QString path=string(s.get(),"shader_file"),state=string(p.get(),"hypershader_live_state");
   const bool ready=!path.isEmpty()&&state=="ready"&&path==string(p.get(),"hypershader_live_path");

@@ -1,5 +1,5 @@
 /**
- * HyperShader - AI Pilot
+ * hypershader - AI Pilot
  * Integrates FunctionGemma for NL-to-Graph and Graph Modification
  */
 
@@ -19,7 +19,7 @@ class ShaderAIPilot {
         const currentGraph = this.app.graph.serialize();
         const catalogData = this.getSimplifiedCatalog();
 
-        const systemPrompt = `You are the HyperShader AI Pilot. 
+        const systemPrompt = `You are the hypershader AI Pilot.
 Your goal is to help the user build or modify an OBS shader node graph.
 You MUST output ONLY valid JSON that represents the updated graph.
 
@@ -39,13 +39,13 @@ Output format: { "version": 1, "nodes": [...], "edges": [...] }`;
             this.showToast('🧠 Gemma is thinking...', 'info');
             
             // Call C++ backend via bridge
-            // We expect the bridge to expose 'window.hyperShader_generateText(prompt)'
-            if (typeof window.hyperShader_generateText !== 'function') {
+            // We expect the bridge to expose 'window.hypershader_generateText(prompt)'
+            if (typeof window.hypershader_generateText !== 'function') {
                 throw new Error("AI Backend not available (Bridge missing)");
             }
 
             const fullPrompt = `${systemPrompt}\n\nUSER REQUEST: ${prompt}\n\nUPDATED JSON GRAPH:`;
-            const result = await window.hyperShader_generateText(fullPrompt);
+            const result = await window.hypershader_generateText(fullPrompt);
 
             if (!result) throw new Error("Gemma returned empty result");
 

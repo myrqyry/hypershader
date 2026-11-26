@@ -1,4 +1,4 @@
-# HyperShader Play dock
+# hypershader Play dock
 
 ## Design
 
@@ -61,7 +61,7 @@ consumer poll, or earlier if the cached value expires. No claim of hard
 real-time delivery. JSON strings, arrays, and objects are not coerced into
 numbers; select the exact scalar on the provider. Other plugins can reuse
 the same provider without duplicating the HTTP request. No provider
-installation or configuration is performed by HyperShader.
+installation or configuration is performed by hypershader.
 
 ## Verification
 

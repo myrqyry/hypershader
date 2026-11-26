@@ -26,13 +26,13 @@ To allow internal non-UI keys, add them to `INTERNAL_KEYS_WITHOUT_UI` in `script
 
 The Qt Builder now offers **Validate Native Shader (no live changes)**.
 It writes the current draft to an atomic, UUID-named temporary managed revision,
-loads it through an isolated **private** HyperShader filter, and reports the
+loads it through an isolated **private** hypershader filter, and reports the
 result returned by the **real libobs effect compiler**. It does not install a
 binary, attach a filter to a scene, or update the selected OBS source. The
 validation revision is deleted when the private source is released; a failed
 validation attempts a separate recoverable draft snapshot.
 
-**Apply** remains a separate explicit action for the selected active HyperShader
+**Apply** remains a separate explicit action for the selected active hypershader
 instance. The runtime returns compile success or the actual error through
 per-source private settings keyed by the exact managed revision path. The
 Builder refuses to attribute unrelated or superseded async results to the
@@ -67,7 +67,7 @@ shader pack. Tested upstream revision `be4440b7553275f3bec0a407ac70b65fde203efb`
 (MIT; no upstream GLSL is vendored here): **25 shaders**, comprising 22
 numbered AI-generated examples and three demos.
 
-To reproduce the isolated test, clone that repository outside HyperShader,
+To reproduce the isolated test, clone that repository outside hypershader,
 check out the pinned commit, and run:
 
 ```sh
@@ -84,7 +84,7 @@ coordinates, simple two-argument `atan`, and native wrapper boilerplate. It
 is **not a production GLSL importer**, does not support arbitrary inputs or
 helper-level `gl_FragCoord`, and cannot guarantee visual semantics.
 
-On the original pinned corpus, the actual HyperShader native compiler
+On the original pinned corpus, the actual hypershader native compiler
 reported **0/25** for raw WebGL2 files (`#version 300 es` is not a native
 OBS effect directive). The test-only wrapper yielded **22/25** compilations;
 the other three were `gpt-created-13` (matrix/rotation syntax),

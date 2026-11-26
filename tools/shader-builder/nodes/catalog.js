@@ -1,5 +1,5 @@
 /**
- * HyperShader Visual Builder - Node Catalog
+ * hypershader Visual Builder - Node Catalog
  * Defines all available nodes organized by category
  * Auto-generated from stdlib analysis + built-in nodes
  */

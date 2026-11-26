@@ -1,6 +1,6 @@
 # Readable shader names in OBS and Shader Manager
 
-HyperShader uses one shared display-name resolver for the OBS **Shader Preset**
+hypershader uses one shared display-name resolver for the OBS **Shader Preset**
 dropdown, user presets, and the Qt **Shader Manager** catalog. These names are
 presentation only; **stored paths, existing preset IDs, scenes, and shaders do
 not change**.
@@ -64,7 +64,7 @@ The first dropdown is a navigation-only view:
 Additional collection folders create their own categories automatically.
 An empty category isn't offered (e.g. Transitions before installing a
 dedicated transition shader). The dropdown initially selects the relevant
-role for a new HyperShader Filter/Source; if that role is unavailable,
+role for a new hypershader Filter/Source; if that role is unavailable,
 it shows All Shaders. Existing category choices are stored per OBS source.
 
 The second dropdown lists just the selected category's shaders, using
@@ -79,7 +79,7 @@ Choosing a different shader is the only action that changes the effect.
 Switching back to a previously chosen category restores its contents.
 
 Category filtering is for finding effects, **not a compatibility rule**.
-A shader remains selectable in another HyperShader plugin type through
+A shader remains selectable in another hypershader plugin type through
 All Shaders or its collection. Roles identify intended use, not guaranteed
 output behavior. As the plugin has not been distributed, no separate
 external scene-migration layer was introduced; its existing shader paths

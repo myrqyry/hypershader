@@ -1,6 +1,6 @@
 #pragma once
 /**
- * HyperShader - Shader Builder Dock
+ * hypershader - Shader Builder Dock
  * Qt dock widget with native shader manager and code editor
  */
 

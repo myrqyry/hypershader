@@ -1,6 +1,6 @@
 // @label "Afterimage Press"
 // @description "Video is repeatedly impressed into a slowly fading two-ink plate using the actual prior rendered output. Spectral flux loosens registration."
-// Original first-party HyperShader artwork. Requires hs_history history, owned by HyperShader.
+// Original first-party hypershader artwork. Requires hs_history history, owned by hypershader.
 // Source alpha is preserved; disable the filter to release its history.
 uniform float4x4 ViewProj;
 uniform texture2d image;

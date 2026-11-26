@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Transition Effects
+// hypershader Standard Library - Transition Effects
 // Smooth blending and transition algorithms between two sources
 
 #ifndef _STDLIB_TRANSITIONS_H_

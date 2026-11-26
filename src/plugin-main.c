@@ -2,20 +2,20 @@
 
 static void log_startup_banner(void)
 {
-	blog(LOG_INFO, "[HyperShader] ╔════════════════════════════════════╗");
-	blog(LOG_INFO, "[HyperShader] ║  HyperShader loaded successfully  ║");
-	blog(LOG_INFO, "[HyperShader] ╚════════════════════════════════════╝");
+	blog(LOG_INFO, "[hypershader] ╔════════════════════════════════════╗");
+	blog(LOG_INFO, "[hypershader] ║  hypershader loaded successfully  ║");
+	blog(LOG_INFO, "[hypershader] ╚════════════════════════════════════╝");
 }
 
 static void log_runtime_status(void)
 {
-	blog(LOG_INFO, "[HyperShader] Runtime status:");
-	blog(LOG_INFO, "[HyperShader]  ├─ Filters     : registered");
-	blog(LOG_INFO, "[HyperShader]  ├─ Source types : registered");
+	blog(LOG_INFO, "[hypershader] Runtime status:");
+	blog(LOG_INFO, "[hypershader]  ├─ Filters     : registered");
+	blog(LOG_INFO, "[hypershader]  ├─ Source types : registered");
 #ifdef HAVE_SHADER_BUILDER_DOCK
-	blog(LOG_INFO, "[HyperShader]  └─ Shader dock  : enabled");
+	blog(LOG_INFO, "[hypershader]  └─ Shader dock  : enabled");
 #else
-	blog(LOG_INFO, "[HyperShader]  └─ Shader dock  : unavailable");
+	blog(LOG_INFO, "[hypershader]  └─ Shader dock  : unavailable");
 #endif
 }
 
@@ -69,7 +69,7 @@ bool obs_module_load(void)
 #endif
 
 	if (!hs_channel_image_runtime_init())
-		blog(LOG_WARNING, "[HyperShader] Image-file channels are unavailable on this OBS runtime");
+		blog(LOG_WARNING, "[hypershader] Image-file channels are unavailable on this OBS runtime");
 
 	hyper_ui_init();
 	obs_register_source(&hypershader_filter_info);
@@ -79,7 +79,7 @@ bool obs_module_load(void)
 
 #ifdef HAVE_SHADER_BUILDER_DOCK
 	register_shader_builder_dock();
-	blog(LOG_INFO, "[HyperShader] └─ Dock bridge    : online");
+	blog(LOG_INFO, "[hypershader] └─ Dock bridge    : online");
 #endif
 
 	return true;

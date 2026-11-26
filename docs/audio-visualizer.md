@@ -1,10 +1,10 @@
 # Audio visualization presets
 
-Audio visualization uses the ordinary **HyperShader Source** and its shared native audio engine.
+Audio visualization uses the ordinary **hypershader Source** and its shared native audio engine.
 
 ## Using it (after an intentional installation)
 
-1. In OBS, **Sources → + → HyperShader Source**.
+1. In OBS, **Sources → + → hypershader Source**.
 2. Select **Audio Spectrum Orbit** in the shader preset picker, a transparent radial spectrum
    with warm amber / sage colors. Place it over a camera, game, or background.
 3. By default it listens to **OBS audio mix 0**. In its properties, enable Sound
@@ -14,7 +14,7 @@ Audio visualization uses the ordinary **HyperShader Source** and its shared nati
 4. Change **Spokes (Interpolated)**, **Inner Radius**, **Spectrum Reach**,
    **Spoke Width**, **Audio Gain**, **Soft Halo**, **Opacity**, and the two colors
    from the ordinary shader parameter UI. The canvas width/height follow the
-   existing HyperShader Source controls.
+   existing hypershader Source controls.
 
 ### Available visualizations
 
@@ -51,16 +51,16 @@ FFT magnitudes; row 1 contains 512 downsampled mono PCM values mapped from
 The waveform is a short, free-running sample window, **not a trigger-locked
 oscilloscope**. If you explicitly override Channel 0, set **Channel 0 → Audio Spectrum** to restore the waveform.
 
-These presets use HyperShader's existing native audio connection, FFT worker,
+These presets use hypershader's existing native audio connection, FFT worker,
 standard uniforms `audio_band0..7`, shader loader, and OBS GPU renderer.
 No Electron, Browser Source, duplicate audio engine, or copied CaYatur code is
-included. The artwork and shader were authored for HyperShader; the
+included. The artwork and shader were authored for hypershader; the
 source/parameter separation was motivated by
 [CaYatur/SoundVisualizer](https://github.com/CaYatur/SoundVisualizer) (MIT).
 
 ## Native audio uniform contract (2026-11-22)
 
-HyperShader owns the scalar shader uniforms
+hypershader owns the scalar shader uniforms
 `audio_level`, `audio_peak`, `audio_beat`, `audio_envelope`,
 `audio_kick`, `audio_snare`, `audio_flux`, `audio_bpm`,
 `audio_beat_phase`, `audio_bar_phase`, `audio_beat_confidence`, and
@@ -125,7 +125,7 @@ to change while this branch is under development.
 
 ## Spectral musical signals (2026-11-18)
 
-The existing native HyperShader audio capture, KissFFT and 512×2 FFT /
+The existing native hypershader audio capture, KissFFT and 512×2 FFT /
 waveform texture now produce seven additional scalar uniforms. They are
 bound in both normal and BufferA/BufferB/Draw graph rendering without
 changing the meaning of existing `audio_beat` or `audio_envelope`:

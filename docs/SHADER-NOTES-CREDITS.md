@@ -1,4 +1,4 @@
-# Shader Information in HyperShader
+# Shader Information in hypershader
 
 The shader properties panel has a **Shader Information** section below
 shader parameters and global overrides. This is *documentation about the

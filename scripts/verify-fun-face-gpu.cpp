@@ -144,7 +144,7 @@ int main(int argc,char**argv){
                 gs_effect_set_float(parameter,active?1.f:0.f);
             }
             // Raw libobs shaders default uniforms to zero. Supply the same
-            // @default values HyperShader's metadata/UI loader normally sets.
+            // @default values hypershader's metadata/UI loader normally sets.
             for(const auto& control:std::array<std::pair<const char*,float>,8>{{
                 {"nose_size",1.0f},{"mouth_strength",0.65f},
                 {"mouth_radius",0.17f},{"eye_scale",0.65f},

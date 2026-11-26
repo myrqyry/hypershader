@@ -45,7 +45,7 @@ class NativeEffectPackTests(unittest.TestCase):
                 "manifest.json", "root/demo.effect", "stdlib/helper.glsl",
                 "textures/pattern.png"])
             manifest = json.loads(z.read("manifest.json"))
-            self.assertEqual(manifest["format"], "HyperShader-native-effect")
+            self.assertEqual(manifest["format"], "hypershader-native-effect")
             self.assertEqual(manifest["version"], 1)
             self.assertEqual(manifest["entry"], "root/demo.effect")
             for name, sha in manifest["files"].items():
@@ -87,7 +87,7 @@ class NativeEffectPackTests(unittest.TestCase):
     def test_refuse_archive_path_traversal(self):
         evil = self.base / "evil.hs"
         with zipfile.ZipFile(evil, "w") as z:
-            z.writestr("manifest.json", json.dumps({"format": "HyperShader-native-effect",
+            z.writestr("manifest.json", json.dumps({"format": "hypershader-native-effect",
                 "version": 1, "entry": "../evil.effect",
                 "files": {"../evil.effect": hashlib.sha256(b"x").hexdigest()}}))
             z.writestr("../evil.effect", b"x")

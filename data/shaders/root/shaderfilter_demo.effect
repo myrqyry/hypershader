@@ -1,5 +1,5 @@
 // --- SHADERFILTER CONVERSION DEMO ---
-// Demonstrates how to bring obs-shaderfilter shaders into HyperShader's native structure.
+// Demonstrates how to bring obs-shaderfilter shaders into hypershader's native structure.
 //
 // HOW TO USE THIS DEMO:
 // 1. Add the compat include if needed.

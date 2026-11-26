@@ -1,4 +1,4 @@
-// Native OBS integration: the dedicated HyperShader scope must load
+// Native OBS integration: the dedicated hypershader scope must load
 // its preset, preserve alpha, and respond to PCM from a selected OBS source.
 #include <obs.h>
 #include <obs-module.h>

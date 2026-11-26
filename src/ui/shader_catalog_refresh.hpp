@@ -5,7 +5,7 @@
 
 // Collect strong refs while enumerating, then notify outside the source-list
 // enumeration. Rebuilding an OBS properties panel may itself enumerate sources.
-inline void refreshHyperShaderProperties()
+inline void refresh_hypershader_properties()
 {
     std::vector<obs_source_t *> sources;
     obs_enum_all_sources([](void *param, obs_source_t *source) {

@@ -10,7 +10,7 @@ class ProjectName(unittest.TestCase):
     def test_metadata_and_registrations(self):
         info = json.loads((ROOT / 'buildspec.json').read_text())
         self.assertEqual(info['name'], 'hypershader')
-        self.assertEqual(info['displayName'], 'HyperShader')
+        self.assertEqual(info['displayName'], 'hypershader')
         self.assertEqual(info['platformConfig']['macos']['bundleId'], 'dev.hypershader.plugin')
         self.assertIn('OBS_MODULE_USE_DEFAULT_LOCALE("hypershader", "en-US")', (ROOT / 'src/plugin-main.c').read_text())
         source = (ROOT / 'src/filter-hypershader.c').read_text()
@@ -25,6 +25,6 @@ class ProjectName(unittest.TestCase):
             if pattern.search(name): failures.append(name)
             try: content = (ROOT / name).read_text()
             except (UnicodeDecodeError, IsADirectoryError): continue
-            if pattern.search(content): failures.append(name)
+            if pattern.search(content) or re.search(r"[H]yper[S]hader|[H]ypershader|hyper[S]hader|\bHYPERSHADER\b", content): failures.append(name)
         self.assertEqual(failures, [])
 if __name__ == '__main__': unittest.main()

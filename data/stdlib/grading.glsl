@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Color Grading
+// hypershader Standard Library - Color Grading
 // Professional color correction and grading tools
 
 #ifndef _STDLIB_GRADING_H_

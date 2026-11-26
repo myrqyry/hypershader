@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# This exercises the actual installed-style example through the HyperShader
+# This exercises the actual installed-style example through the hypershader
 # filter, not direct shader compilation or a substitute renderer.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"

@@ -1,4 +1,4 @@
-// Real HyperShader async filter test: native shader loading, property
+// Real hypershader async filter test: native shader loading, property
 // controls, bright moving frames, halo generation and shader bypass.
 // No plugin mocks or fabricated image results.
 #include <obs.h>
@@ -178,6 +178,6 @@ int main(int argc,char** argv) {
  bool pass=controls && zero_diff==0 &&
           (disabled ? (total==0&&late==0&&dim==0) :
                       (total>300&&late>18&&dim>18));
- if(pass)std::cout<<"PASS: real HyperShader halation filter loads, brightens actual frames, and bypasses cleanly\n";
+ if(pass)std::cout<<"PASS: real hypershader halation filter loads, brightens actual frames, and bypasses cleanly\n";
  return pass?0:1;
 }

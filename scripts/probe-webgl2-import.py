@@ -3,7 +3,7 @@
 
 This is deliberately NOT a general GLSL importer. It only stages temporary
 fixtures for real libobs compile/readback analysis of a pinned external corpus.
-It is not used by the HyperShader runtime or editor.
+It is not used by the hypershader runtime or editor.
 """
 import argparse
 import re

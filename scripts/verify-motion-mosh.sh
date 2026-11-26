@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exercises the real native HyperShader graph, moving footage, and shader controls.
+# Exercises the real native hypershader graph, moving footage, and shader controls.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 module="${1:-$repo/build_x86_64/hypershader.so}"

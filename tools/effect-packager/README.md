@@ -1,4 +1,4 @@
-# Portable native HyperShader effect bundles
+# Portable native hypershader effect bundles
 
 This is an **offline pack/unpack tool**, not an OBS plugin importer or a new
 shader dialect. It packages an existing native `.effect`, its **quoted**
@@ -41,13 +41,13 @@ Test it with `python3 tools/effect-packager/test_pack.py -q`.
 ## Boundaries
 
 - No archives are loaded by OBS automatically. You can inspect the unpacked
-  native effect and assets before placing them in a HyperShader library.
+  native effect and assets before placing them in a hypershader library.
 - Shader includes must remain under the provided `--root` tree.
 - Existing folders are never overwritten; extracting does not modify OBS
   configuration or user shader catalogs.
 - Packaging an effect doesn't prove it compiles or renders. Test the unpacked
-  shader in the native HyperShader runtime.
-- This format is HyperShader-specific; it is not a `.shadertastic` importer.
+  shader in the native hypershader runtime.
+- This format is hypershader-specific; it is not a `.shadertastic` importer.
 - The package tool does not include any third-party shader licenses unless you
   explicitly add the relevant license file via `--asset`. Preserve licenses and
   attribution when distributing third-party effects.

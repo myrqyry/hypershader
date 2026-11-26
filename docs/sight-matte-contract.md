@@ -1,9 +1,9 @@
 # Source-local Sight subject mattes
 
-HyperShader consumes the existing Sight mask without running a second
+hypershader consumes the existing Sight mask without running a second
 segmentation model. Place one enabled Sight Subject Cutout on the same
-source, upstream of HyperShader, select a compatible U2Net model and
-use Original source in Sight's Diagnostic view. Enable HyperShader's
+source, upstream of hypershader, select a compatible U2Net model and
+use Original source in Sight's Diagnostic view. Enable hypershader's
 Sight shared-snapshot switch. The landmark channel does not select a
 matte. Keep unrelated geometry-changing filters out of the analysis
 chain; mismatched, ambiguous, disabled, detached, misordered or expired
@@ -13,7 +13,7 @@ Native shaders receive an inference-resolution, temporally stabilized
 mask in hs_segmentation. Check hs_sight_matte_present > 0.5 before sampling
 the red channel at normalized source UV; otherwise preserve the original
 image. An all-zero matte is valid when no foreground is detected.
-Sight's GPU edge refinement and the native HyperShader face-region mask
+Sight's GPU edge refinement and the native hypershader face-region mask
 are separate from this shared mask. The original bridge uses a 750 ms
 freshness limit. Independent analysis snapshots are not frame-synchronized.
 

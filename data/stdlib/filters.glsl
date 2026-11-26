@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Video Filters
+// hypershader Standard Library - Video Filters
 
 #ifndef _STDLIB_FILTERS_H_
 #define _STDLIB_FILTERS_H_

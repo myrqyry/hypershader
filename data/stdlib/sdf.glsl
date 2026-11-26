@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Signed Distance Fields
+// hypershader Standard Library - Signed Distance Fields
 
 #ifndef _STDLIB_SDF_H_
 #define _STDLIB_SDF_H_

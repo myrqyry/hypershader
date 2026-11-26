@@ -1,5 +1,5 @@
 /**
- * HyperShader - Shader Builder Dock Implementation
+ * hypershader - Shader Builder Dock Implementation
  * Qt dock widget with native shader manager and code editor
  */
 
@@ -119,7 +119,7 @@ ShaderBuilderDock::ShaderBuilderDock(QWidget *parent)
 	  m_llm(nullptr)
 {
 	setObjectName("ShaderBuilderDock");
-	setWindowTitle("HyperShader");
+	setWindowTitle("hypershader");
 	setMinimumSize(280, 300);
 
 	char *path = obs_module_file("builder/index.html");
@@ -144,7 +144,7 @@ ShaderBuilderDock::ShaderBuilderDock(QWidget *parent)
 		// This runs from a debounced Qt timer, never from a property callback
 		// or the render thread. The catalog lock is released before notification.
 		scan_shaders_dir();
-		refreshHyperShaderProperties();
+		refresh_hypershader_properties();
 		refreshManagerLists();
 	}, this);
 
@@ -181,7 +181,7 @@ ShaderBuilderDock::~ShaderBuilderDock()
 	obs_frontend_remove_save_callback(save_callback, this);
 	obs_frontend_remove_event_callback(frontend_event_callback, this);
 
-	blog(LOG_INFO, "[HyperShader] Shader Builder dock cleaned up");
+	blog(LOG_INFO, "[hypershader] Shader Builder dock cleaned up");
 }
 
 QString ShaderBuilderDock::recoveryDirectoryPath() const
@@ -254,7 +254,7 @@ void ShaderBuilderDock::initializeRecoveryStorage()
 
 	char *path = obs_module_config_path("shader-drafts");
 	if (!path) {
-		blog(LOG_WARNING, "[HyperShader] Recovery storage path unavailable");
+		blog(LOG_WARNING, "[hypershader] Recovery storage path unavailable");
 		return;
 	}
 
@@ -266,7 +266,7 @@ void ShaderBuilderDock::initializeRecoveryStorage()
 
 	QDir dir(m_recoveryDir);
 	if (!dir.exists() && !dir.mkpath(".")) {
-		blog(LOG_WARNING, "[HyperShader] Failed to create recovery directory: %s",
+		blog(LOG_WARNING, "[hypershader] Failed to create recovery directory: %s",
 		     m_recoveryDir.toUtf8().constData());
 		return;
 	}
@@ -285,7 +285,7 @@ void ShaderBuilderDock::loadRecoveredDrafts()
 	for (const QFileInfo &info : files) {
 		QFile file(info.absoluteFilePath());
 		if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-			blog(LOG_WARNING, "[HyperShader] Failed to read recovery draft: %s",
+			blog(LOG_WARNING, "[hypershader] Failed to read recovery draft: %s",
 			     info.absoluteFilePath().toUtf8().constData());
 			continue;
 		}
@@ -294,7 +294,7 @@ void ShaderBuilderDock::loadRecoveredDrafts()
 		const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
 		file.close();
 		if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-			blog(LOG_WARNING, "[HyperShader] Invalid recovery draft JSON: %s",
+			blog(LOG_WARNING, "[hypershader] Invalid recovery draft JSON: %s",
 			     info.absoluteFilePath().toUtf8().constData());
 			continue;
 		}
@@ -308,7 +308,7 @@ void ShaderBuilderDock::loadRecoveredDrafts()
 		m_recoveredDrafts.append(draft);
 	}
 
-	blog(LOG_INFO, "[HyperShader] Loaded %d recovered shader draft(s)",
+	blog(LOG_INFO, "[hypershader] Loaded %d recovered shader draft(s)",
 	     static_cast<int>(m_recoveredDrafts.size()));
 }
 
@@ -323,14 +323,14 @@ bool ShaderBuilderDock::saveDraftSnapshot(const ShaderDraft &draft)
 
 	QDir dir(m_recoveryDir);
 	if (!dir.exists() && !dir.mkpath(".")) {
-		blog(LOG_WARNING, "[HyperShader] Failed to prepare recovery directory: %s",
+		blog(LOG_WARNING, "[hypershader] Failed to prepare recovery directory: %s",
 		     m_recoveryDir.toUtf8().constData());
 		return false;
 	}
 
 	QFile file(filePath);
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-		blog(LOG_WARNING, "[HyperShader] Failed to open recovery draft for writing: %s",
+		blog(LOG_WARNING, "[hypershader] Failed to open recovery draft for writing: %s",
 		     filePath.toUtf8().constData());
 		return false;
 	}
@@ -352,7 +352,7 @@ bool ShaderBuilderDock::removeDraftSnapshot(const QString &draftId)
 		return true;
 
 	if (!QFile::remove(filePath)) {
-		blog(LOG_WARNING, "[HyperShader] Failed to remove recovery draft: %s", filePath.toUtf8().constData());
+		blog(LOG_WARNING, "[hypershader] Failed to remove recovery draft: %s", filePath.toUtf8().constData());
 		return false;
 	}
 
@@ -370,14 +370,14 @@ bool ShaderBuilderDock::saveRecoveryDraft(const QString &draftId, const QString 
 
 	QDir dir(m_recoveryDir);
 	if (!dir.exists() && !dir.mkpath(".")) {
-		blog(LOG_WARNING, "[HyperShader] Failed to prepare recovery directory: %s",
+		blog(LOG_WARNING, "[hypershader] Failed to prepare recovery directory: %s",
 		     m_recoveryDir.toUtf8().constData());
 		return false;
 	}
 
 	QFile file(filePath);
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-		blog(LOG_WARNING, "[HyperShader] Failed to open recovery draft for writing: %s",
+		blog(LOG_WARNING, "[hypershader] Failed to open recovery draft for writing: %s",
 		     filePath.toUtf8().constData());
 		return false;
 	}
@@ -566,7 +566,7 @@ void ShaderBuilderDock::setupUI()
 	targetRow->addWidget(new QLabel("Target instance", mainWidget));
 	targetRow->addStretch();
 	auto *targetRefresh = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload), QString(), mainWidget);
-	targetRefresh->setToolTip("Refresh available HyperShader instances and library");
+	targetRefresh->setToolTip("Refresh available hypershader instances and library");
 	connect(targetRefresh, &QPushButton::clicked, this, &ShaderBuilderDock::refreshManagerLists);
 	targetRow->addWidget(targetRefresh);
 	mainLayout->addLayout(targetRow);
@@ -623,7 +623,7 @@ void ShaderBuilderDock::setupManagerUI()
     m_activeShadersList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_activeShadersList->setMaximumHeight(132);
     m_activeShadersList->setToolTip(
-        "Choose which HyperShader instance the editor's Apply action will update.");
+        "Choose which hypershader instance the editor's Apply action will update.");
     connect(m_activeShadersList, &QListWidget::itemDoubleClicked, this,
             &ShaderBuilderDock::onActiveShaderDoubleClicked);
     layout->addWidget(m_activeShadersList);
@@ -752,7 +752,7 @@ void ShaderBuilderDock::filterShaderFiles()
     int previews = 0;
     for (int i = 0; i < m_shaderFilesList->count(); ++i) {
         auto *item = m_shaderFilesList->item(i);
-        HyperShaderCatalogEntry shader {
+        hypershader_catalog_entry shader {
             item->data(Qt::UserRole).toString(),
             item->data(Qt::UserRole + 1).toString()
         };
@@ -918,7 +918,7 @@ void ShaderBuilderDock::refreshManagerLists()
     }
 
     QSet<QString> categories;
-    for (const auto &shader : discoverHyperShaderFiles(getShaderFolderPath())) {
+    for (const auto &shader : discover_hypershader_files(getShaderFolderPath())) {
         addShaderFileItem(shader.path, shader.category);
         categories.insert(shader.category);
     }
@@ -980,7 +980,7 @@ void ShaderBuilderDock::openSelectedShaderFile(const QString &path)
 
 	QFile file(path);
 	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-		blog(LOG_WARNING, "[HyperShader] Failed to open shader file: %s", path.toUtf8().constData());
+		blog(LOG_WARNING, "[hypershader] Failed to open shader file: %s", path.toUtf8().constData());
 		return;
 	}
 
@@ -1054,14 +1054,14 @@ void ShaderBuilderDock::onSaveAsClicked()
 	    file.write(bytes) != bytes.size() || !file.commit()) {
 		file.cancelWriting();
 		QMessageBox::critical(this, "Save Failed", "Could not save shader to: " + filePath);
-		blog(LOG_ERROR, "[HyperShader] Failed to save shader: %s", filePath.toUtf8().constData());
+		blog(LOG_ERROR, "[hypershader] Failed to save shader: %s", filePath.toUtf8().constData());
 		return;
 	}
 
 	QFileInfo info(filePath);
 	QString shaderName = info.completeBaseName();
 
-	blog(LOG_INFO, "[HyperShader] Shader saved: %s", filePath.toUtf8().constData());
+	blog(LOG_INFO, "[hypershader] Shader saved: %s", filePath.toUtf8().constData());
 	emit shaderExported(filePath, shaderName);
 	m_loadedEditorText = code;
 
@@ -1247,7 +1247,7 @@ void ShaderBuilderDock::onApplyClicked()
 	QListWidgetItem *selected = m_activeShadersList ? m_activeShadersList->currentItem() : nullptr;
 	if (!selected) {
 		QMessageBox::warning(this, "Select an Apply Target",
-				     "Select a HyperShader instance above first.");
+				     "Select a hypershader instance above first.");
 		return;
 	}
 	const QString uuid = selected->data(Qt::UserRole).toString();
@@ -1261,7 +1261,7 @@ void ShaderBuilderDock::onApplyClicked()
 	const char *sourceId = obs_source_get_unversioned_id(target);
 	if (!isShaderBuilderTargetSourceId(sourceId)) {
 		obs_source_release(target);
-		QMessageBox::warning(this, "Wrong Apply Target", "The selection is not a HyperShader instance.");
+		QMessageBox::warning(this, "Wrong Apply Target", "The selection is not a hypershader instance.");
 		return;
 	}
 
@@ -1348,7 +1348,7 @@ void ShaderBuilderDock::onApplyClicked()
 	m_compileStatusLabel->setText("Compiling revision with native OBS shader compiler...");
 	m_compilePollTimer->start();
 
-	blog(LOG_INFO, "[HyperShader] Shader Builder submitted revision %s to instance %s", path.toUtf8().constData(),
+	blog(LOG_INFO, "[hypershader] Shader Builder submitted revision %s to instance %s", path.toUtf8().constData(),
 	     uuid.toUtf8().constData());
 	const QString targetName = selected->text();
 	obs_source_release(target);
@@ -1528,7 +1528,7 @@ QString ShaderBuilderDock::finalizeGeneratedShader(const QString &generatedCode)
 
 	QString effect;
 	effect += "// @label \"AI Generated Shader\"\n";
-	effect += "// @description \"Generated in the HyperShader Shader Builder\"\n\n";
+	effect += "// @description \"Generated in the hypershader Shader Builder\"\n\n";
 
 	// Complete native effects own their techniques/passes and are not wrapped.
 	if (hasTechnique) {
@@ -1537,7 +1537,7 @@ QString ShaderBuilderDock::finalizeGeneratedShader(const QString &generatedCode)
 		return effect;
 	}
 
-	// Simple hs_shade_pixel effects use HyperShader's native standard layer.
+	// Simple hs_shade_pixel effects use hypershader's native standard layer.
 	if ((hasNativePixel || hasNativeWrapper) && !hasNativeStandard)
 		effect += "#include \"hypershader_standard.glsl\"\n\n";
 
@@ -1585,7 +1585,7 @@ void ShaderBuilderDock::onGenerateAiClicked()
 				error = "Local Qwen model not found. Run tools/download_llm.sh.";
 			} else {
 				const QByteArray modelPath = modelDir.toUtf8();
-				blog(LOG_INFO, "[HyperShader] Loading dock LLM from: %s", modelPath.constData());
+				blog(LOG_INFO, "[hypershader] Loading dock LLM from: %s", modelPath.constData());
 				if (llm_load_model(m_llm, modelPath.constData())) {
 					m_llmModelLoaded = true;
 				} else {
@@ -1638,7 +1638,7 @@ void ShaderBuilderDock::finishAiGeneration(const QString &generatedCode, const Q
 	if (!errorMessage.isEmpty()) {
 		if (m_aiStatusLabel)
 			m_aiStatusLabel->setText("Generation failed: " + errorMessage);
-		blog(LOG_ERROR, "[HyperShader] Dock AI generation failed: %s",
+		blog(LOG_ERROR, "[hypershader] Dock AI generation failed: %s",
 		     errorMessage.toUtf8().constData());
 		return;
 	}
@@ -1669,7 +1669,7 @@ void ShaderBuilderDock::finishAiGeneration(const QString &generatedCode, const Q
 	if (m_aiStatusLabel)
 		m_aiStatusLabel->setText("Generated draft - review it, then Save As");
 
-	blog(LOG_INFO, "[HyperShader] AI shader draft generated in Shader Builder (%lld chars)",
+	blog(LOG_INFO, "[hypershader] AI shader draft generated in Shader Builder (%lld chars)",
 	     static_cast<long long>(effect.size()));
 }
 
@@ -1692,7 +1692,7 @@ void ShaderBuilderDock::onLiveReloadRequested(const QString &filePath)
 	QString reason;
 	if (!m_codeEditor ||
 	    !hsBuilderReloadFileEligible(filePath, m_lastShader, m_codeEditor->toPlainText(), &reason)) {
-		blog(LOG_WARNING, "[HyperShader] Live reload rejected: %s", reason.toUtf8().constData());
+		blog(LOG_WARNING, "[hypershader] Live reload rejected: %s", reason.toUtf8().constData());
 		if (m_compileStatusLabel)
 			m_compileStatusLabel->setText("Reload not applied: " + reason);
 		return;
@@ -1716,14 +1716,14 @@ void ShaderBuilderDock::onShaderExport(const QString &shaderCode, const QString 
 		file.close();
 		refreshManagerLists();
 
-		blog(LOG_INFO, "[HyperShader] Shader exported: %s", outputPath.toUtf8().constData());
+		blog(LOG_INFO, "[hypershader] Shader exported: %s", outputPath.toUtf8().constData());
 		if (m_codeEditor && m_codeEditor->toPlainText() == shaderCode) {
 			m_lastShader = outputPath;
 			m_loadedEditorText = shaderCode;
 		}
 		emit shaderExported(outputPath, shaderName);
 	} else {
-		blog(LOG_ERROR, "[HyperShader] Failed to export shader: %s", outputPath.toUtf8().constData());
+		blog(LOG_ERROR, "[hypershader] Failed to export shader: %s", outputPath.toUtf8().constData());
 	}
 }
 
@@ -1742,7 +1742,7 @@ void ShaderBuilderDock::setupHotkeys()
 void ShaderBuilderDock::saveSettings(obs_data_t *settings)
 {
 	obs_data_set_string(settings, "shader_builder.last_shader", m_lastShader.toUtf8().constData());
-	blog(LOG_DEBUG, "[HyperShader] Settings saved");
+	blog(LOG_DEBUG, "[hypershader] Settings saved");
 }
 
 void ShaderBuilderDock::loadSettings(obs_data_t *settings)
@@ -1750,7 +1750,7 @@ void ShaderBuilderDock::loadSettings(obs_data_t *settings)
 	const char *lastShader = obs_data_get_string(settings, "shader_builder.last_shader");
 	if (lastShader) {
 		m_lastShader = QString(lastShader);
-		blog(LOG_DEBUG, "[HyperShader] Settings loaded: last_shader=%s", lastShader);
+		blog(LOG_DEBUG, "[hypershader] Settings loaded: last_shader=%s", lastShader);
 	}
 }
 
@@ -1828,7 +1828,7 @@ static void deferred_dock_callback(obs_frontend_event event, void *data)
 
 		QMainWindow *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
 		if (!mainWindow) {
-			blog(LOG_WARNING, "[HyperShader] Could not get main window for dock");
+			blog(LOG_WARNING, "[hypershader] Could not get main window for dock");
 			return;
 		}
 
@@ -1839,7 +1839,7 @@ static void deferred_dock_callback(obs_frontend_event event, void *data)
 		// Passing our QDockWidget there produced two stacked title bars.
 		// Register this existing dock through the dedicated custom-dock API.
 		if (!obs_frontend_add_custom_qdock("ShaderBuilderDock", shaderBuilderDock)) {
-			blog(LOG_ERROR, "[HyperShader] OBS rejected the Shader Builder custom dock");
+			blog(LOG_ERROR, "[hypershader] OBS rejected the Shader Builder custom dock");
 			shaderBuilderDock->deleteLater();
 			shaderBuilderDock = nullptr;
 			return;
@@ -1851,15 +1851,15 @@ static void deferred_dock_callback(obs_frontend_event event, void *data)
 			if (!menu->actions().contains(shaderBuilderDock->toggleViewAction()))
 				menu->addAction(shaderBuilderDock->toggleViewAction());
 			shaderDockMenu = menu;
-			blog(LOG_INFO, "[HyperShader] Shader Builder View > Docks toggle registered");
+			blog(LOG_INFO, "[hypershader] Shader Builder View > Docks toggle registered");
 		} else {
-			blog(LOG_WARNING, "[HyperShader] View > Docks menu not available for toggle registration");
+			blog(LOG_WARNING, "[hypershader] View > Docks menu not available for toggle registration");
 		}
 #else
 		obs_frontend_add_dock(shaderBuilderDock);
 #endif
 
-		blog(LOG_INFO, "[HyperShader] Shader Builder dock registered");
+		blog(LOG_INFO, "[hypershader] Shader Builder dock registered");
 		remove_deferred_dock_callback();
 	} else if (event == OBS_FRONTEND_EVENT_THEME_CHANGED) {
 		if (shaderBuilderDock)
@@ -1887,7 +1887,7 @@ extern "C" void register_shader_builder_dock(void)
 		return;
 	obs_frontend_add_event_callback(deferred_dock_callback, nullptr);
 	deferredDockCallbackRegistered = true;
-	blog(LOG_INFO, "[HyperShader] Shader Builder dock deferred to FINISHED_LOADING");
+	blog(LOG_INFO, "[hypershader] Shader Builder dock deferred to FINISHED_LOADING");
 }
 
 extern "C" void unregister_shader_builder_dock(void)
@@ -1903,7 +1903,7 @@ extern "C" void unregister_shader_builder_dock(void)
 		shaderBuilderDock->hide();
 		shaderBuilderDock->deleteLater();
 		shaderBuilderDock = nullptr;
-		blog(LOG_INFO, "[HyperShader] Shader Builder dock unregistered");
+		blog(LOG_INFO, "[hypershader] Shader Builder dock unregistered");
 	}
 }
 

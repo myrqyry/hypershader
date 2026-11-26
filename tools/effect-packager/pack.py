@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and extract portable, inspectable HyperShader native effect bundles.
+"""Build and extract portable, inspectable hypershader native effect bundles.
 
 Only copies existing native .effect and explicitly listed assets. No shader
 translation, OBS installation, auto-execution, or arbitrary filesystem writes.
@@ -16,7 +16,7 @@ import sys
 import tempfile
 import zipfile
 
-FORMAT = "HyperShader-native-effect"
+FORMAT = "hypershader-native-effect"
 MAX_FILES = 128
 MAX_FILE_SIZE = 16 * 1024 * 1024
 MAX_TOTAL = 64 * 1024 * 1024
