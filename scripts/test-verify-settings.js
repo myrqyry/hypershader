@@ -14,6 +14,7 @@ const inputs = [
   'src/filter-hypershader.c',
   'data/shaders/root/source.reactive_sprite.effect',
   'data/shaders/root/filter.reactive_sprite.effect',
+  'src/ui/shader_performance_panel.hpp',
 ];
 function check(t, mutate) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hs-settings-'));
