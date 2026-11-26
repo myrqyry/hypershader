@@ -15,7 +15,7 @@ previous-output texture the effect is not temporal moshing.
 
 ## Try it in OBS
 
-Add **HyperShaderFX** to a camera or moving video source. Select
+Add **HyperShader** to a camera or moving video source. Select
 `P-Frame Drift — Lost Reference Stream` in the shader list, or choose
 `pframe_drift.effect` from the plugin's installed shader folder.
 
@@ -44,7 +44,7 @@ It tests: carrying prior damaged frames; changes as motion continues;
 clean forced keyframe; bypass at zero loss; and alpha preservation.
 
 **Full runtime verification:** `scripts/verify-pframe-filter-runtime.sh`
-loads the actual HyperShaderFX module into a headless libobs video graph,
+loads the actual HyperShader module into a headless libobs video graph,
 creates a real filter and synthetic moving video source, waits for its
 asynchronous shader load, inspects the runtime parameter controls, and
 renders 75 frames with both high-loss and zero-loss settings. It asserts
@@ -57,8 +57,8 @@ For testing an installed plugin without running the user's OBS session:
 
 ```bash
 scripts/verify-pframe-filter-runtime.sh \
-  "$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit/hyperShaderFX.so" \
-  "$HOME/.config/obs-studio/plugins/hyperShaderFX/data"
+  "$HOME/.config/obs-studio/plugins/hypershader/bin/64bit/hypershader.so" \
+  "$HOME/.config/obs-studio/plugins/hypershader/data"
 ```
 
 **Remaining boundaries:** neither test accesses actual H.264/H.265

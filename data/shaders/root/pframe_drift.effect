@@ -7,7 +7,7 @@
 // the characteristic accumulation of inter-frame prediction errors.
 // A keyframe replaces the damaged decoded picture with the actual live source.
 // Native self-contained OBS effect: no imports, macros or external shader
-// preprocessor dependencies. Built-in variables are managed by HyperShaderFX.
+// preprocessor dependencies. Built-in variables are managed by HyperShader.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform float3 hs_resolution;

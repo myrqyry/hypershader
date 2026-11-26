@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and extract portable, inspectable HyperShaderFX native effect bundles.
+"""Build and extract portable, inspectable HyperShader native effect bundles.
 
 Only copies existing native .effect and explicitly listed assets. No shader
 translation, OBS installation, auto-execution, or arbitrary filesystem writes.
@@ -16,7 +16,7 @@ import sys
 import tempfile
 import zipfile
 
-FORMAT = "HyperShaderFX-native-effect"
+FORMAT = "HyperShader-native-effect"
 MAX_FILES = 128
 MAX_FILE_SIZE = 16 * 1024 * 1024
 MAX_TOTAL = 64 * 1024 * 1024
@@ -112,7 +112,7 @@ def pack(effect, output, root, assets):
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp = None
     try:
-        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".hsfx-", suffix=".tmp",
+        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".hs-", suffix=".tmp",
                                          delete=False) as handle:
             tmp = Path(handle.name)
         with zipfile.ZipFile(tmp, "w") as archive:
@@ -166,7 +166,7 @@ def unpack(archive_path, destination):
             blobs[name] = blob
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".hsfx-unpack-", dir=destination.parent))
+    staging = Path(tempfile.mkdtemp(prefix=".hs-unpack-", dir=destination.parent))
     try:
         for name, blob in blobs.items():
             target = staging.joinpath(*PurePosixPath(name).parts)

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Load actual HyperShaderFX native OBS filter in isolated libobs video graph.
+# Load actual HyperShader native OBS filter in isolated libobs video graph.
 # The module defaults to the locally verified installed binary; no OBS GUI needed.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-installed="$HOME/.config/obs-studio/plugins/hyperShaderFX"
-module="${1:-$installed/bin/64bit/hyperShaderFX.so}"
+installed="$HOME/.config/obs-studio/plugins/hypershader"
+module="${1:-$installed/bin/64bit/hypershader.so}"
 plugin_data="${2:-$repo/data}"
 shader="${3:-$repo/data/shaders/root/optical_halation.effect}"
 test -r "$module" && test -r "$shader"
@@ -14,7 +14,7 @@ inc="$(pkg-config --variable=includedir libobs)/obs"
 libdir="$(pkg-config --variable=libdir libobs)"
 g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-optical-halation-filter.cpp" \
   -o "$work/real-filter" $(pkg-config --libs libobs) -Wl,-rpath,"$libdir"
-mkdir "$work/hyperShaderFX"
+mkdir "$work/hypershader"
 export LD_LIBRARY_PATH="$installed/bin/64bit:${LD_LIBRARY_PATH:-}"
 for variant in bloom no_bloom; do
   echo "TEST optical_halation: $variant"

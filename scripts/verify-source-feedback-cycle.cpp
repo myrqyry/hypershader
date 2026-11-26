@@ -56,7 +56,7 @@ int main(int argc,char** argv){
     obs_module_t* module=nullptr;
     if(obs_open_module(&module,argv[1],argv[2])!=MODULE_SUCCESS||
         !obs_init_module(module)){
-        fprintf(stderr,"HyperShaderFX module loading failed\n");
+        fprintf(stderr,"HyperShader module loading failed\n");
         obs_shutdown();return 5;
     }
     auto* settings=obs_data_create();

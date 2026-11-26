@@ -1,5 +1,5 @@
 /**
- * HyperShaderFX Visual Builder - Main Application
+ * HyperShader Visual Builder - Main Application
  * Ties together UI, graph engine, and code generation
  */
 
@@ -1019,7 +1019,7 @@ function initQtWebChannel() {
                 const exportBtn = document.getElementById('btnExport');
                 if (exportBtn) {
                     exportBtn.textContent = '📤 Export to OBS';
-                    exportBtn.title = 'Export shader directly to HyperShaderFX plugin';
+                    exportBtn.title = 'Export shader directly to HyperShader plugin';
                 }
                 
                 // Listen for shader saved events

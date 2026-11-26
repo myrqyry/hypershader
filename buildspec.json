@@ -1,9 +1,9 @@
 {
-  "name": "hyperShaderFX",
-  "displayName": "HyperShader FX",
+  "name": "hypershader",
+  "displayName": "HyperShader",
   "version": "0.1.0",
-  "author": "HyperShaderFX Contributors",
-  "email": "maintainers@hypershaderfx.dev",
+  "author": "HyperShader Contributors",
+  "email": "",
   "website": "https://github.com/myrqyry/hypershader",
   "dependencies": {
     "obs-studio": {
@@ -40,7 +40,7 @@
   },
   "platformConfig": {
     "macos": {
-      "bundleId": "dev.hypershaderfx.plugin"
+      "bundleId": "dev.hypershader.plugin"
     }
   }
 }

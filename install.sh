@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install an existing Linux build or structured HyperShaderFX package.
+# Install an existing Linux build or structured HyperShader package.
 set -euo pipefail
 
-PLUGIN_NAME=hyperShaderFX
+PLUGIN_NAME=hypershader
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 destination="${2:-${XDG_CONFIG_HOME:-$HOME/.config}/obs-studio/plugins/$PLUGIN_NAME}"
 
@@ -44,7 +44,7 @@ fi
 legacy="$payload/bin/64bit/$PLUGIN_NAME.so"
 modern="$payload/$PLUGIN_NAME.so"
 if [[ ! -s "$legacy" || ! -d "$payload/data/shaders/root" || ! -d "$payload/data/stdlib" || ! -d "$payload/data/locale" ]]; then
-    echo "Incomplete HyperShaderFX package: module, shader library, stdlib and locale are required." >&2
+    echo "Incomplete HyperShader package: module, shader library, stdlib and locale are required." >&2
     exit 1
 fi
 if [[ -e "$modern" ]] && ! cmp -s "$modern" "$legacy"; then
@@ -62,4 +62,4 @@ cp -a "$payload/bin" "$payload/data" "$destination/"
 # OBS 33 loads the root copy; older OBS versions use bin/64bit.
 cp -L "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
 cmp "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
-echo "Installed HyperShaderFX into $destination"
+echo "Installed HyperShader into $destination"

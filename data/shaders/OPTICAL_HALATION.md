@@ -8,7 +8,7 @@ and a warm extended fringe. Existing shadows and the source alpha remain
 untouched. It is a **single-pass approximation**, not a true multilevel
 downsample/upsample bloom pyramid.
 
-Add HyperShaderFX to a video source and choose **Optical Halation** from
+Add HyperShader to a video source and choose **Optical Halation** from
 the shader picker. The six settings are:
 
 - **Bloom Intensity:** 0 bypasses the effect; 0.85 is the starting point
@@ -32,7 +32,7 @@ The first test compiles the real effect using libobs/OpenGL and verifies
 bright-pixel spread, warm fringe, no effect when disabled or when no
 highlight meets the threshold, and unmodified alpha.
 
-The second runs the **actual HyperShaderFX plugin** in a disposable
+The second runs the **actual HyperShader plugin** in a disposable
 libobs video graph with moving high-contrast video, verifies the async
 shader loader and both exposed settings, and compares actual rendered
 pixels with the input at nonzero and zero intensity. It uses the source

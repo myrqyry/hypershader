@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_qt_reload/hyperShaderFX.so}"
+module="${1:-$repo/build_qt_reload/hypershader.so}"
 data="${2:-$repo/data}"
 work="$(mktemp -d /tmp/hyper-reactive-sprite-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
@@ -25,7 +25,7 @@ PY
 printf %s R0lGODlhQABAAIEAAAD/AAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAKAAAACwAAAAAQABAAAAIaQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFixgzatzIsaPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmzhz6tzJs6fPn0CDCh1KtKjRo0iTKl3KtKnTp1CjSp1KtarVq1izagUQEAAh+QQBKAABACwAAAAAQABAAIEAAP8AAAAAAAAAAAAIaQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFixgzatzIsaPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmzhz6tzJs6fPn0CDCh1KtKjRo0iTKl3KtKnTp1CjSp1KtarVq1izagUQEAAh+QQBKAABACwAAAAAQABAAIEA//8AAAAAAAAAAAAIaQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFixgzatzIsaPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmzhz6tzJs6fPn0CDCh1KtKjRo0iTKl3KtKnTp1CjSp1KtarVq1izagUQEAA7 | base64 -d > "$work/expression.gif"
 inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-reactive-sprite.cpp" -o "$work/probe" $(pkg-config --libs libobs)
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 for mode in ${HS_REACTION_TEST_MODES:-source filter source-motion filter-motion source-timing source-instant filter-timing filter-instant source-stale filter-stale source-instant-stale source-mapped source-gif filter-gif source-gif-idle source-atlas filter-atlas source-atlas-idle source-atlas-burst source-atlas-strong filter-atlas-accent}; do
   kind="${mode%%-*}"
   effect="$data/shaders/root/$kind.reactive_sprite.effect"

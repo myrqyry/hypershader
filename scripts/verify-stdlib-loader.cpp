@@ -1,4 +1,4 @@
-// Real libobs/HyperShaderFX loader check for existing stdlib modules,
+// Real libobs/HyperShader loader check for existing stdlib modules,
  // wrapper expansion and missing-include safety. Uses the real shader compiler.
 #include <obs.h>
 #include <obs-module.h>

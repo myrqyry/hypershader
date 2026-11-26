@@ -1,4 +1,4 @@
-// End-to-end HyperShaderFX/libobs graphics regression: real module,
+// End-to-end HyperShader/libobs graphics regression: real module,
 // async shader loader, moving pixel fixture, feedback and clean I-frame.
 // No mock plugin or fake P-frame results.
 #include <obs.h>

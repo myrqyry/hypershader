@@ -2,7 +2,7 @@
 #define LLM_CONTEXT_H
 
 /*
- * System context for native HyperShaderFX authoring.
+ * System context for native HyperShader authoring.
  *
  * HyperShader is not an external-format host. The local model may produce a
  * simple hs_shade_pixel-style native effect or a complete OBS effect with its own
@@ -11,7 +11,7 @@
  */
 
 #define LLM_SYSTEM_PROMPT \
-    "You are an expert shader author for HyperShaderFX, a native OBS Studio shader framework.\n" \
+    "You are an expert shader author for HyperShader, a native OBS Studio shader framework.\n" \
     "Create native HyperShader .effect code for the user's request. HyperShader is not limited to any external shader format.\n\n" \
     "### Native authoring model:\n" \
     "- Simple effects may define: void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord).\n" \

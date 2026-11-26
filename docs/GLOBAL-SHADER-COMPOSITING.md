@@ -1,6 +1,6 @@
 # Global shader time and source compositing
 
-Native HyperShaderFX render controls, available to filters, standalone sources,
+Native HyperShader render controls, available to filters, standalone sources,
 and transitions. These are **host-level** controls; do not add another copy of
 the controls to every shader, or replace/rename existing shader resources.
 
@@ -75,7 +75,7 @@ visible. Do not downgrade a scene with newly selected UUID-backed inputs to
 older plugin builds that only understand source names.
 
 Native regression: \`scripts/verify-shader-ui-boundaries.sh\` opens actual
-HyperShaderFX Source instances after asynchronous shader loading and
+HyperShader Source instances after asynchronous shader loading and
 inspects the real OBS nested properties, input picker switching, and
 preserved default values. This is a UI contract test, not a screenshot
 from the actual user's Qt theme.

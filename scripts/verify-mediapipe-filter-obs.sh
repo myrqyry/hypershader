@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 face="${2:?pass a 256x256 RGBA public test image}"
 effect="${3:-$repo/data/shaders/tests/mediapipe_pipeline_probe.effect}"
 work="$(mktemp -d /tmp/hyper-mp-filter-XXXXXX)"

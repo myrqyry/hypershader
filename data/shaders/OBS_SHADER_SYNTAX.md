@@ -1,6 +1,6 @@
 # OBS-Compatible Shader Syntax (Windows + macOS)
 
-Use this guide when authoring HyperShaderFX `.effect` files that should run cleanly across OBS on Windows and macOS.
+Use this guide when authoring HyperShader `.effect` files that should run cleanly across OBS on Windows and macOS.
 
 ## Core Syntax Rules
 

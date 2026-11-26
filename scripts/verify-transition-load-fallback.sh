@@ -2,7 +2,7 @@
 # Real libobs failure-path test: missing effect must display scenes without GL shader errors.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="$repo/build_x86_64/hyperShaderFX.so"
+module="$repo/build_x86_64/hypershader.so"
 data="$repo/data"
 test -s "$module"
 temp="$(mktemp -d /tmp/hyper-transition-fallback-XXXXXXXX)"
@@ -10,7 +10,7 @@ trap 'rm -rf "$temp"' EXIT
 inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -Wall -Wextra -Wno-missing-field-initializers -I"$inc" \
   "$repo/scripts/verify-warp-dither-transition.cpp" -o "$temp/test" $(pkg-config --libs libobs)
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 export MESA_SHADER_CACHE_DISABLE=true
 # The absolute .effect path deliberately does not exist, so shader creation fails.
 # A missing shader must still fall back safely instead of drawing without a vertex shader.

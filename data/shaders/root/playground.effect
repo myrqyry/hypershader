@@ -1,4 +1,4 @@
-// HyperShaderFX Playground — native OBS effect, no legacy compatibility layer.
+// HyperShader Playground — native OBS effect, no legacy compatibility layer.
 // Switchable procedural backgrounds, UV distortions, post effects, and color grade.
 uniform float4x4 ViewProj;
 uniform texture2d image;

@@ -7,7 +7,7 @@
 #include <random>
 #include <cmath>
 
-namespace hsfx {
+namespace hs {
 
 // ===================================
 // Components
@@ -201,4 +201,4 @@ public:
 	}
 };
 
-} // namespace hsfx
+} // namespace hs

@@ -1,4 +1,4 @@
-// Native OBS integration: an ordinary HyperShaderFX source must load
+// Native OBS integration: an ordinary HyperShader source must load
 // its preset, preserve alpha, and respond to PCM from a selected OBS source.
 #include <obs.h>
 #include <obs-module.h>

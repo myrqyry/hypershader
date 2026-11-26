@@ -1,6 +1,6 @@
 // @label "Sight: Hand Highlights"
 // Uses the existing Sight Hand & Gesture Motion producer. No extra inference.
-// HyperShaderFX: enable "Use Sight Tracking" and set channel to hand.
+// HyperShader: enable "Use Sight Tracking" and set channel to hand.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform texture2d hs_sight_hands;

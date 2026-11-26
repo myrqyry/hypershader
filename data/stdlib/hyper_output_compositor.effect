@@ -1,4 +1,4 @@
-// HyperShaderFX shared native compositor.
+// HyperShader shared native compositor.
 // Two independently transparent layers: incoming/base and effect output.
 // This is a postprocess; it never mutates temporal shader feedback history.
 uniform float4x4 ViewProj;

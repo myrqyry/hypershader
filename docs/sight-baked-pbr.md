@@ -74,7 +74,7 @@ per-frame synthesis or timing benchmark.
   with the actual baked PNG and controlled semantic, depth, matte and
   persistent coordinate textures. Dedicated probe passed all six checks,
   with zero GL errors on Mesa llvmpipe.
-- `scripts/verify-shipped-shaders.sh /path/to/hyperShaderFX.so /path/to/data`:
+- `scripts/verify-shipped-shaders.sh /path/to/hypershader.so /path/to/data`:
   37/37 actual native loader checks passed, including new filter, single
   texture input visibility and missing-Sight pass-through; zero GL_INVALID_ENUM.
   This is not a live-camera model inference qualification or proof of

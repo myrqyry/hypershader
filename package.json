@@ -1,5 +1,5 @@
 {
-  "name": "hypershaderfx-dev-tools",
+  "name": "hypershader-dev-tools",
   "private": true,
   "scripts": {
     "verify:settings": "node scripts/verify-settings.js",

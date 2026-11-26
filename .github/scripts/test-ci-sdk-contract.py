@@ -15,12 +15,12 @@ assert "set(dependencies_list obs-studio)" in text
 assert "_check_dependencies()" in text
 
 defaults = (root / "cmake/linux/defaults.cmake").read_text()
-assert "HYPERSHADERFX_BUILD_OBS_FROM_SOURCE" in defaults
+assert "HYPERSHADER_BUILD_OBS_FROM_SOURCE" in defaults
 assert "include(buildspec)" in defaults
-assert "_hypershaderfx_pinned_libobs_dir" in defaults
+assert "_hypershader_pinned_libobs_dir" in defaults
 assert "DEFINED ENV{libobs_DIR}" in defaults
 assert "elseif(NOT libobs_DIR)" in defaults
-assert "HYPERSHADERFX_BUILD_OBS_FROM_SOURCE AND (NOT DEFINED libobs_DIR OR NOT libobs_DIR)" in defaults
+assert "HYPERSHADER_BUILD_OBS_FROM_SOURCE AND (NOT DEFINED libobs_DIR OR NOT libobs_DIR)" in defaults
 assert r"\.deps/" in defaults, "source packages must exclude downloaded SDKs"
 assert r"\.meristem/local/" in defaults, "source packages must exclude local Meristem state"
 
@@ -29,7 +29,7 @@ assert "elseif(OS_LINUX)" in bootstrap
 assert 'set(_cmake_generator "Ninja")' in bootstrap
 
 builder = (root / ".github/scripts/build-ubuntu").read_text()
-assert "-DHYPERSHADERFX_BUILD_OBS_FROM_SOURCE=ON" in builder
+assert "-DHYPERSHADER_BUILD_OBS_FROM_SOURCE=ON" in builder
 
 setup = (root / ".github/scripts/utils.zsh/setup_ubuntu").read_text()
 assert "ppa:obsproject/obs-studio" not in setup
@@ -109,4 +109,4 @@ for candidate in (workflow, obs33_workflow):
 assert "check_readme_links.py" in workflow
 assert "test-readme-links.py" in workflow
 
-print("PASS: HyperShaderFX CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")
+print("PASS: HyperShader CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
-scratch="$(mktemp -d /tmp/hsfx-gnoma-pair-XXXXXX)"
+scratch="$(mktemp -d /tmp/hs-gnoma-pair-XXXXXX)"
 trap 'rm -rf "$scratch"' EXIT
 g++ -std=c++17 -O2 -I"$(pkg-config --variable=includedir libobs)/obs" \
  "$repo/scripts/verify-gnomalab-signal-pair.cpp" -o "$scratch/probe" $(pkg-config --libs libobs)
 export MESA_SHADER_CACHE_DISABLE=true
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 for name in topo_scan broke_in_bad; do
  shader="$data/shaders/root/filter.gnomalab_${name}.effect"
  test -f "$shader" || { echo "EXPECTED_SHADER_MISSING=$shader" >&2; exit 1; }

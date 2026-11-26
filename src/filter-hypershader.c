@@ -733,9 +733,9 @@ static char *hs_plugin_data_path(void)
 		char *slash = strrchr(module_dir, '/');
 		if (slash) {
 			*slash = '\0';
-			if (strlen(module_dir) + strlen("/hyperShaderFX") < PATH_MAX) {
+			if (strlen(module_dir) + strlen("/hypershader") < PATH_MAX) {
 				char candidate[PATH_MAX];
-				snprintf(candidate, sizeof(candidate), "%s/hyperShaderFX", module_dir);
+				snprintf(candidate, sizeof(candidate), "%s/hypershader", module_dir);
 				if (hs_stat_dir(candidate))
 					return bstrdup(candidate);
 			}
@@ -744,7 +744,7 @@ static char *hs_plugin_data_path(void)
 		const char *lib_segment = strstr(module_file, "/lib/");
 		if (lib_segment) {
 			size_t root_len = (size_t)(lib_segment - module_file);
-			const char *resource_suffix = "/share/obs/obs-plugins/hyperShaderFX";
+			const char *resource_suffix = "/share/obs/obs-plugins/hypershader";
 			if (root_len + strlen(resource_suffix) < PATH_MAX) {
 				char candidate[PATH_MAX];
 				memcpy(candidate, module_file, root_len);
@@ -759,11 +759,11 @@ static char *hs_plugin_data_path(void)
 	char *home = getenv("HOME");
 	if (home && home[0]) {
 		char candidate[PATH_MAX];
-		snprintf(candidate, sizeof(candidate), "%s/.local/share/obs/obs-plugins/hyperShaderFX", home);
+		snprintf(candidate, sizeof(candidate), "%s/.local/share/obs/obs-plugins/hypershader", home);
 		if (hs_stat_dir(candidate))
 			return bstrdup(candidate);
 
-		snprintf(candidate, sizeof(candidate), "%s/.config/obs-studio/plugins/hyperShaderFX/data", home);
+		snprintf(candidate, sizeof(candidate), "%s/.config/obs-studio/plugins/hypershader/data", home);
 		if (hs_stat_dir(candidate))
 			return bstrdup(candidate);
 
@@ -808,7 +808,7 @@ static bool hs_path_in_data_dir(const char *path, const char *data_path)
  * Only UUID-named .effect files in this per-user directory are accepted. */
 static char *hs_managed_shader_dir(void)
 {
-	obs_module_t *module = obs_get_module("hyperShaderFX");
+	obs_module_t *module = obs_get_module("hypershader");
 	return module ? obs_module_get_config_path(module, "builder-applied") : NULL;
 }
 
@@ -3065,7 +3065,7 @@ static void sight_update_tracking(struct hypershader_data *s,
 		s->sight_gesture[i]=sight_gesture_code(snapshot->gesture[i]);
 	}
 	if (!s->sight_announced) {
-		blog(LOG_INFO,"[HyperShaderFX] Sight shared tracking: channel=%s kind=%u count=%u",
+		blog(LOG_INFO,"[HyperShader] Sight shared tracking: channel=%s kind=%u count=%u",
 		     s->sight_render_channel,snapshot->kind,snapshot->point_count);
 		s->sight_announced=true;
 	}
@@ -3101,7 +3101,7 @@ static void sight_depth_tick(struct hypershader_data *s,bool enabled)
     s->sight_depth_present=s->sight_depth_tex&&s->sight_depth_sequence==snap.sequence;
     if(s->sight_depth_present&&!s->sight_depth_announced){
         s->sight_depth_announced=true;
-        blog(LOG_INFO,"[HyperShaderFX] SIGHT_DEPTH_BRIDGE_20261118: %ux%u R8 relative inverse depth",snap.width,snap.height);
+        blog(LOG_INFO,"[HyperShader] SIGHT_DEPTH_BRIDGE_20261118: %ux%u R8 relative inverse depth",snap.width,snap.height);
     }
 }
 
@@ -3136,7 +3136,7 @@ static void sight_matte_tick(struct hypershader_data *s, bool enabled)
     s->sight_matte_present=s->sight_matte_tex && s->sight_matte_sequence==snapshot.sequence;
     if (s->sight_matte_present && !s->sight_matte_announced) {
         s->sight_matte_announced=true;
-        blog(LOG_INFO,"[HyperShaderFX] SIGHT_SHARED_MATTE_20261117: %ux%u R8",snapshot.width,snapshot.height);
+        blog(LOG_INFO,"[HyperShader] SIGHT_SHARED_MATTE_20261117: %ux%u R8",snapshot.width,snapshot.height);
     }
 }
 
@@ -3181,7 +3181,7 @@ static void sight_flow_tick(struct hypershader_data *s,bool enabled)
         s->sight_flow_coverage=snap.coverage;
         if(!s->sight_flow_announced){
             s->sight_flow_announced=true;
-            blog(LOG_INFO,"[HyperShaderFX] SIGHT_FLOW_BRIDGE_20261117: 32x18 backward motion grid");
+            blog(LOG_INFO,"[HyperShader] SIGHT_FLOW_BRIDGE_20261117: 32x18 backward motion grid");
         }
     }
 }
@@ -3227,7 +3227,7 @@ static void sight_text_tick(struct hypershader_data *s,bool enabled)
         s->sight_text_count=snapshot.count;
         if(!s->sight_text_announced) {
             s->sight_text_announced=true;
-            blog(LOG_INFO,"[HyperShaderFX] SIGHT_TEXT_GEOMETRY_20261117: shared OCR line mask");
+            blog(LOG_INFO,"[HyperShader] SIGHT_TEXT_GEOMETRY_20261117: shared OCR line mask");
         }
     }
 }
@@ -3302,7 +3302,7 @@ static void sight_tick(struct hypershader_data *s)
             s->sight_motion_energy=motion.energy;
             if (!s->sight_motion_announced) {
                 s->sight_motion_announced=true;
-                blog(LOG_INFO,"[HyperShaderFX] SIGHT_MOTION_ENERGY_20261117: source-local worker motion");
+                blog(LOG_INFO,"[HyperShader] SIGHT_MOTION_ENERGY_20261117: source-local worker motion");
             }
         }
     }
@@ -5397,7 +5397,7 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 	s->graph_flow_sequence = flow_sequence;
     if(s->ep_sight_flow_step&&flow_step&&!s->graph_flow_announced) {
         s->graph_flow_announced=true;
-        blog(LOG_INFO,"[HyperShaderFX] SIGHT_FLOW_GRAPH_STEP_20261118: consumed new motion snapshot");
+        blog(LOG_INFO,"[HyperShader] SIGHT_FLOW_GRAPH_STEP_20261118: consumed new motion snapshot");
     }
 	s->graph_frame++;
 	s->graph_valid = true;
@@ -5712,7 +5712,7 @@ void free_effect_param_cache(struct hypershader_data *s)
 const char *get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return "HyperShaderFX";
+	return "HyperShader";
 }
 
 bool reload_examples_clicked(obs_properties_t *props, obs_property_t *property, void *data)

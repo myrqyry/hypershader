@@ -1,15 +1,15 @@
 # Reactive Sprite
 
-Native HyperShaderFX source and filter effects, independently implemented after
+Native HyperShader source and filter effects, independently implemented after
 reviewing OBS Image Reaction's two-state interaction model.
 
 ## Setup
 
-- Add a HyperShaderFX **source**, choose Source / Reactive Sprite, set the
+- Add a HyperShader **source**, choose Source / Reactive Sprite, set the
   canvas size, then set Channel 0 to the idle image. Optional channels 1, 2,
   and 3 are active, strong, and accent images. Missing optional textures
   fall back to the previous available state.
-- Or add a HyperShaderFX **filter** to an existing video/image source and
+- Or add a HyperShader **filter** to an existing video/image source and
   choose Filter / Reactive Sprite. The original source is the idle image;
   optional channels 0, 1 and 2 provide the other three states.
 - Enable Sound and select the desired OBS audio source (for example, a

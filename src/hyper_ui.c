@@ -458,7 +458,7 @@ void properties_add_header(obs_properties_t *props)
 						OBS_PATH_FILE, "Effect Files (*.effect);;All Files (*.*)",
 						NULL);
 	obs_property_set_long_description(pfile,
-		"Custom shader files must be in HyperShaderFX's data folder. "
+		"Custom shader files must be in HyperShader's data folder. "
 		"Absolute paths outside that folder are blocked by the shader loader.");
 	obs_property_set_modified_callback2(pfile, shader_file_changed, NULL);
 }
@@ -939,7 +939,7 @@ static int compare_verified_examples(const void *lhs, const void *rhs)
 
 static char *get_user_presets_dir(void)
 {
-	obs_module_t *module = obs_get_module("hyperShaderFX");
+	obs_module_t *module = obs_get_module("hypershader");
 	if (!module) {
 		/* Fallback for local testing or if module not found by name */
 		const char *xdg = getenv("XDG_CONFIG_HOME");
@@ -948,9 +948,9 @@ static char *get_user_presets_dir(void)
 			const char *home = getenv("HOME");
 			if (!home)
 				return NULL;
-			snprintf(buf, sizeof(buf), "%s/.config/obs-studio/plugins/hyperShaderFX/presets", home);
+			snprintf(buf, sizeof(buf), "%s/.config/obs-studio/plugins/hypershader/presets", home);
 		} else {
-			snprintf(buf, sizeof(buf), "%s/obs-studio/plugins/hyperShaderFX/presets", xdg);
+			snprintf(buf, sizeof(buf), "%s/obs-studio/plugins/hypershader/presets", xdg);
 		}
 		return bstrdup(buf);
 	}
@@ -3345,9 +3345,9 @@ char *shaders_dir_from_known(void)
 		char *slash = strrchr(module_dir, '/');
 		if (slash) {
 			*slash = '\0';
-			if (strlen(module_dir) + strlen("/hyperShaderFX/shaders") < PATH_MAX) {
+			if (strlen(module_dir) + strlen("/hypershader/shaders") < PATH_MAX) {
 				char candidate[PATH_MAX];
-				snprintf(candidate, sizeof(candidate), "%s/hyperShaderFX/shaders", module_dir);
+				snprintf(candidate, sizeof(candidate), "%s/hypershader/shaders", module_dir);
 				struct stat st;
 				if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode))
 					return bstrdup(candidate);
@@ -3357,7 +3357,7 @@ char *shaders_dir_from_known(void)
 		const char *lib_segment = strstr(module_file, "/lib/");
 		if (lib_segment) {
 			size_t root_len = (size_t)(lib_segment - module_file);
-			const char *resource_suffix = "/share/obs/obs-plugins/hyperShaderFX/shaders";
+			const char *resource_suffix = "/share/obs/obs-plugins/hypershader/shaders";
 			if (root_len + strlen(resource_suffix) < PATH_MAX) {
 				char candidate[PATH_MAX];
 				memcpy(candidate, module_file, root_len);
@@ -3373,7 +3373,7 @@ char *shaders_dir_from_known(void)
 	char *home = getenv("HOME");
 	if (home && home[0]) {
 		char candidate[PATH_MAX];
-		snprintf(candidate, sizeof(candidate), "%s/.local/share/obs/obs-plugins/hyperShaderFX/shaders", home);
+		snprintf(candidate, sizeof(candidate), "%s/.local/share/obs/obs-plugins/hypershader/shaders", home);
 		blog(LOG_INFO, "[HyperShader] Checking: %s", candidate);
 		struct stat st;
 		if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode)) {
@@ -3381,7 +3381,7 @@ char *shaders_dir_from_known(void)
 			return bstrdup(candidate);
 		}
 
-		snprintf(candidate, sizeof(candidate), "%s/.config/obs-studio/plugins/hyperShaderFX/data/shaders",
+		snprintf(candidate, sizeof(candidate), "%s/.config/obs-studio/plugins/hypershader/data/shaders",
 			 home);
 		blog(LOG_INFO, "[HyperShader] Checking: %s", candidate);
 		if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode)) {
@@ -3433,8 +3433,8 @@ char *shaders_dir_from_known(void)
 	}
 
 	/* Fallback 2: Development environment path relative to module data */
-	/* Often modules are in build/rundir/../../plugins/hyperShaderFX/data */
-	p = obs_module_file("../../plugins/hyperShaderFX/data/shaders");
+	/* Often modules are in build/rundir/../../plugins/hypershader/data */
+	p = obs_module_file("../../plugins/hypershader/data/shaders");
 	if (p) {
 		struct stat st;
 		if (stat(p, &st) == 0 && S_ISDIR(st.st_mode)) {

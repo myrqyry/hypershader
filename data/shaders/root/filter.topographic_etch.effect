@@ -1,6 +1,6 @@
 // @label "Topographic Etching"
 // @description "Real Sight depth becomes engraved contour ink across the original camera image. No depth signal means exact pass-through."
-// Original first-party HyperShaderFX artwork. Requires a separate LLL.sight Depth Camera producer.
+// Original first-party HyperShader artwork. Requires a separate LLL.sight Depth Camera producer.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform texture2d hs_sight_depth;

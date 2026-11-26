@@ -1,9 +1,9 @@
 # Source-local Sight subject mattes
 
-HyperShaderFX consumes the existing Sight mask without running a second
+HyperShader consumes the existing Sight mask without running a second
 segmentation model. Place one enabled Sight Subject Cutout on the same
-source, upstream of HyperShaderFX, select a compatible U2Net model and
-use Original source in Sight's Diagnostic view. Enable HyperShaderFX's
+source, upstream of HyperShader, select a compatible U2Net model and
+use Original source in Sight's Diagnostic view. Enable HyperShader's
 Sight shared-snapshot switch. The landmark channel does not select a
 matte. Keep unrelated geometry-changing filters out of the analysis
 chain; mismatched, ambiguous, disabled, detached, misordered or expired

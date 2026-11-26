@@ -23,6 +23,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Verify canonical project identity
+        run: python3 scripts/test-project-name.py
       - name: Check README links
         run: |
           python3 .github/scripts/test-readme-links.py
@@ -53,7 +55,7 @@ jobs:
       - name: Verify Linux payload
         shell: bash
         run: |
-          module="$(find release -type f -name 'hyperShaderFX.so' -print -quit)"
+          module="$(find release -type f -name 'hypershader.so' -print -quit)"
           test -n "$module" && test -s "$module"
           test -d release/RelWithDebInfo/data
 
@@ -71,10 +73,10 @@ jobs:
       - name: Verify Windows payload
         shell: pwsh
         run: |
-          $modern = 'release/RelWithDebInfo/hyperShaderFX/hyperShaderFX.dll'
-          $legacy = 'release/RelWithDebInfo/hyperShaderFX/bin/64bit/hyperShaderFX.dll'
-          if (-not (Test-Path $modern)) { throw 'Missing OBS 33 modern-layout hyperShaderFX.dll' }
-          if (-not (Test-Path $legacy)) { throw 'Missing legacy-layout hyperShaderFX.dll' }
+          $modern = 'release/RelWithDebInfo/hypershader/hypershader.dll'
+          $legacy = 'release/RelWithDebInfo/hypershader/bin/64bit/hypershader.dll'
+          if (-not (Test-Path $modern)) { throw 'Missing OBS 33 modern-layout hypershader.dll' }
+          if (-not (Test-Path $legacy)) { throw 'Missing legacy-layout hypershader.dll' }
 
   macos:
     name: macOS universal build
@@ -90,6 +92,6 @@ jobs:
       - name: Verify macOS payload
         shell: bash
         run: |
-          bundle="$(find release -type d -name 'hyperShaderFX.plugin' -print -quit)"
+          bundle="$(find release -type d -name 'hypershader.plugin' -print -quit)"
           test -n "$bundle"
-          test -s "$bundle/Contents/MacOS/hyperShaderFX"
+          test -s "$bundle/Contents/MacOS/hypershader"

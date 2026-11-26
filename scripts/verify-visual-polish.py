@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real libobs/Mesa image regressions for visually deficient HyperShaderFX demos.
+"""Real libobs/Mesa image regressions for visually deficient HyperShader demos.
 
 Uses the existing effect thumbnail renderer, not mocked shader math. Temporary
 metadata variants exercise actual UI uniforms without touching user OBS files.

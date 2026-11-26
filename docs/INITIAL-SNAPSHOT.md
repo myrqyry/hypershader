@@ -1,13 +1,12 @@
 # Initial distribution scope
 
-This standalone repository starts from the project-authored HyperShaderFX
+This standalone repository starts from the project-authored HyperShader
 native framework, with a reduced preset library and retained upstream notices.
 It has no imported collection history or connection to a previous Git remote.
 
 Included: native OBS source/filter/transition framework, original instruments,
 reactive sprites, Sight interoperability, visual shader builder, core shader
-library, native test infrastructure, and credited dependencies. The module name
-and OBS IDs are unchanged to preserve compatibility.
+library, native test infrastructure, and credited dependencies. The module name is `hypershader`; the three native OBS source IDs already use this name.
 
 Withheld: unreviewed third-party shader collections, reference-based effects,
 the explicitly ported Datamosh, Droste, Gravity, Pixel Sort and Hologram

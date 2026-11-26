@@ -1,4 +1,4 @@
-// Loads the actual HyperShaderFX OBS module: native source playback, absent
+// Loads the actual HyperShader OBS module: native source playback, absent
 // tracking passthrough, and camera-output feedback under isolated libobs.
 #include <obs.h>
 #include <obs-module.h>

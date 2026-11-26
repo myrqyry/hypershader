@@ -1,5 +1,5 @@
 /**
- * HyperShaderFX - AI Pilot
+ * HyperShader - AI Pilot
  * Integrates FunctionGemma for NL-to-Graph and Graph Modification
  */
 

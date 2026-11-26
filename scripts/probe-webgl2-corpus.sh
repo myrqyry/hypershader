@@ -5,7 +5,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 source_dir="${1:?Pass the upstream directory containing .glsl files}"
-module="${2:-$root/build_x86_64/hyperShaderFX.so}"
+module="${2:-$root/build_x86_64/hypershader.so}"
 data="${3:-$root/data}"
 source_dir="$(realpath "$source_dir")"
 module="$(realpath "$module")"
@@ -16,7 +16,7 @@ inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -w -I"$inc" "$root/scripts/probe-webgl2-native.cpp" -o "$work/compile" $(pkg-config --libs libobs)
 python3 "$root/scripts/probe-webgl2-import.py" "$source_dir" "$work/raw" --mode raw
 python3 "$root/scripts/probe-webgl2-import.py" "$source_dir" "$work/wrapped" --mode wrapped
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 for mode in raw wrapped; do
   mkdir -p "$work/home-$mode"
   (cd "$work" && HOME="$work/home-$mode" XDG_CONFIG_HOME="$work/home-$mode" \

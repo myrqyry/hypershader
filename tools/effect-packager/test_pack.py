@@ -29,7 +29,7 @@ class NativeEffectPackTests(unittest.TestCase):
             'technique Draw { pass { pixel_shader = Draw; } }\n')
         (self.root / "stdlib" / "helper.glsl").write_text("float helper() { return 1.; }\n")
         (self.root / "textures" / "pattern.png").write_bytes(b"fake texture for pack tests")
-        self.archive = self.base / "demo.hsfx"
+        self.archive = self.base / "demo.hs"
         self.dest = self.base / "extracted"
 
     def pack(self):
@@ -45,7 +45,7 @@ class NativeEffectPackTests(unittest.TestCase):
                 "manifest.json", "root/demo.effect", "stdlib/helper.glsl",
                 "textures/pattern.png"])
             manifest = json.loads(z.read("manifest.json"))
-            self.assertEqual(manifest["format"], "HyperShaderFX-native-effect")
+            self.assertEqual(manifest["format"], "HyperShader-native-effect")
             self.assertEqual(manifest["version"], 1)
             self.assertEqual(manifest["entry"], "root/demo.effect")
             for name, sha in manifest["files"].items():
@@ -58,7 +58,7 @@ class NativeEffectPackTests(unittest.TestCase):
 
     def test_deterministic_archive(self):
         self.assertEqual(self.pack().returncode, 0)
-        other = self.base / "second.hsfx"
+        other = self.base / "second.hs"
         self.assertEqual(run("pack", self.root / "root/demo.effect", other, "--root", self.root,
                              "--asset", self.root / "textures/pattern.png").returncode, 0)
         self.assertEqual(self.archive.read_bytes(), other.read_bytes())
@@ -75,7 +75,7 @@ class NativeEffectPackTests(unittest.TestCase):
 
     def test_refuse_tampered_entry_without_partial_import(self):
         self.assertEqual(self.pack().returncode, 0)
-        altered = self.base / "tampered.hsfx"
+        altered = self.base / "tampered.hs"
         with zipfile.ZipFile(self.archive) as source, zipfile.ZipFile(altered, "w") as output:
             for item in source.infolist():
                 output.writestr(item.filename, b"tampered" if item.filename == "root/demo.effect"
@@ -85,9 +85,9 @@ class NativeEffectPackTests(unittest.TestCase):
         self.assertFalse(self.dest.exists())
 
     def test_refuse_archive_path_traversal(self):
-        evil = self.base / "evil.hsfx"
+        evil = self.base / "evil.hs"
         with zipfile.ZipFile(evil, "w") as z:
-            z.writestr("manifest.json", json.dumps({"format": "HyperShaderFX-native-effect",
+            z.writestr("manifest.json", json.dumps({"format": "HyperShader-native-effect",
                 "version": 1, "entry": "../evil.effect",
                 "files": {"../evil.effect": hashlib.sha256(b"x").hexdigest()}}))
             z.writestr("../evil.effect", b"x")

@@ -3,7 +3,7 @@
 For a native time-mosaic example using previous-output feedback, see
 [Slit Scan Tape](../../docs/slit-scan-tape.md).
 
-This guide explains how to write custom effect files (`.effect`) for the HyperShaderFX plugin.
+This guide explains how to write custom effect files (`.effect`) for the HyperShader plugin.
 
 Native runtime identifiers use the reserved `hs_` namespace.
 See [native shader vocabulary and migration](../../docs/NATIVE-SHADER-API.md)
@@ -240,7 +240,7 @@ See `OBS_SHADER_SYNTAX.md` in this folder for a concise compatibility checklist.
 
 ## Reusing Sight's face, body and hand tracking
 
-With **Use Sight shared snapshots (tracking, matte, text, flow, depth)** enabled on a HyperShaderFX
+With **Use Sight shared snapshots (tracking, matte, text, flow, depth)** enabled on a HyperShader
 filter, \`Sight Tracking Channel\` chooses an existing publisher in the same
 OBS process (e.g. Sight's Face/Body/Hand Motion filter using the channel
 \`face\`, \`body\`, or \`hand\`). This does **not** run a new MediaPipe model.
@@ -278,7 +278,7 @@ when no current hand is detected.
 Hand Ripples (`data/shaders/root/filter.sight_hand_ripples.effect`) replaces
 the old standalone Sight Touch Field filter. On the same native source,
 place LLL.sight Tracking (Hands & gestures) upstream, turn off its overlay,
-then choose Sight: Hand Ripples in HyperShaderFX and enable shared Sight
+then choose Sight: Hand Ripples in HyperShader and enable shared Sight
 snapshots with that hand channel. One tracker supplies both fingertip and
 pinch data. The consumer launches up to eight bounded wavefronts as index
 fingertips move, preserving the original 1.6 second decay and aspect-aware
@@ -300,7 +300,7 @@ interface exposes scores rather than a named rig API.
 
 Put one enabled Sight Subject Cutout (U2Net) upstream on the
 same source, choose Diagnostic view → Original source, then enable shared
-Sight mode on HyperShaderFX. The landmark channel is independent.
+Sight mode on HyperShader. The landmark channel is independent.
 
 | Uniform | Type | Meaning |
 | --- | --- | --- |
@@ -364,9 +364,9 @@ Audio-reactive combination itself has not been verified with live audio.
 ### Source-local Sight OCR text geometry
 
 Put exactly one enabled **Sight: Text Obfuscation (OCR)** filter
-upstream of HyperShaderFX on the same source. Select Original source in Sight
+upstream of HyperShader on the same source. Select Original source in Sight
 and opt in to **Use Sight shared snapshots (tracking, matte, text, flow, depth)** in
-HyperShaderFX. Requires an OCR-enabled Sight build and local language data.
+HyperShader. Requires an OCR-enabled Sight build and local language data.
 The landmark channel is independent; this does not start a second OCR or
 MediaPipe model.
 
@@ -404,7 +404,7 @@ cd ../live-latent-lab-sight
 tests/run_text_ocr.sh bridge "$PWD/build-verified/sight_obs_effect_render_smoke" \
   "$PWD/build-verified/live-latent-lab-sight.so" /path/to/tessdata \
   /usr/local/lib/obs-plugins/image-source.so \
-  "$PWD/../hyperShaderFX/build_x86_64/hyperShaderFX.so" "$PWD/../hyperShaderFX/data"
+  "$PWD/../hypershader/build_x86_64/hypershader.so" "$PWD/../hypershader/data"
 ```
 Use absolute module and data paths if libobs cannot resolve relative paths.
 Pure union/validation fixtures run in `scripts/verify-sight-interop.sh`.
@@ -412,7 +412,7 @@ Pure union/validation fixtures run in `scripts/verify-sight-interop.sh`.
 ### Source-local spatial motion (DIS)
 
 Put exactly one enabled **Sight: Spatial Motion (DIS)**
-upstream of HyperShaderFX on the same source. Choose Original source and
+upstream of HyperShader on the same source. Choose Original source and
 opt in to **Use Sight shared snapshots (tracking, matte, text, flow, depth)**.
 Requires an OpenCV-enabled Sight module. Consecutive enabled analysis-only
 Sight filters may now be stacked. Only Original source modes of Subject
@@ -528,7 +528,7 @@ Flow Warp and stabilization tests. No live webcam or hardware benchmark.
 
 Flow Sparks now offers Spark Region 0 (All), 1 (Subject), 2 (Background).
 For 1 or 2, stack Subject Cutout Original source and Spatial Motion Original
-source before HyperShaderFX. Soft matte weights seeding and display, so
+source before HyperShader. Soft matte weights seeding and display, so
 background tracers are hidden over the foreground silhouette; density can
 persist behind it. Missing matte resets restricted modes to clean input;
 All mode remains independent. This is matte occlusion, not metric depth

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="$(realpath "${2:-$repo/data}")"
 work="$(mktemp -d /tmp/hyper-two-buffers-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-two-buffer-graph.cpp" -o "$work/test" $(pkg-config --libs libobs)
 export MESA_SHADER_CACHE_DISABLE=true
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 # Generate a known 3x2 RGBA texture locally; no third-party fixture asset.
 python3 - "$work/channel.png" <<'PYPNG'
 import struct,sys,zlib

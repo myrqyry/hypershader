@@ -2,7 +2,7 @@
  * @file filter-hypershader.h
  * @brief OBS Studio plugin for native HyperShader effects.
  *
- * HyperShaderFX hosts metadata-driven OBS effect shaders with native inputs,
+ * HyperShader hosts metadata-driven OBS effect shaders with native inputs,
  * audio analysis, persistence, scene data, and optional compatibility adapters
  * for external shader formats.
  */

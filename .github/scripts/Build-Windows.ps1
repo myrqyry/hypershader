@@ -75,7 +75,7 @@ function Build {
     Invoke-External cmake @CmakeArgs
 
     if ( $env:CI -ne $null ) {
-        $ProjectFile = Join-Path $ProjectRoot "build_${Target}/hyperShaderFX.vcxproj"
+        $ProjectFile = Join-Path $ProjectRoot "build_${Target}/hypershader.vcxproj"
         if ( ! (Test-Path $ProjectFile) ) {
             throw "Generated Visual Studio project not found: ${ProjectFile}"
         }

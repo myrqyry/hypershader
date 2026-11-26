@@ -16,7 +16,7 @@ class InstallerTest(unittest.TestCase):
         self.payload = self.root / "payload"
         self.destination = self.root / "destination"
         for rel, content in {
-            "bin/64bit/hyperShaderFX.so": b"module",
+            "bin/64bit/hypershader.so": b"module",
             "bin/64bit/libsample.so": b"dependency",
             "data/shaders/root/example.effect": b"shader",
             "data/stdlib/example.glsl": b"include",
@@ -36,7 +36,7 @@ class InstallerTest(unittest.TestCase):
         for p in self.payload.rglob("*"):
             if p.is_file():
                 self.assertEqual((self.destination / p.relative_to(self.payload)).read_bytes(), p.read_bytes())
-        self.assertEqual((self.destination / "hyperShaderFX.so").read_bytes(), b"module")
+        self.assertEqual((self.destination / "hypershader.so").read_bytes(), b"module")
 
     def test_structured_payload_copies_nested_resources_and_both_modules(self):
         result = self.install(self.payload)
@@ -57,13 +57,13 @@ class InstallerTest(unittest.TestCase):
         self.assert_payload()
 
     def test_missing_module_does_not_create_destination(self):
-        (self.payload / "bin/64bit/hyperShaderFX.so").unlink()
+        (self.payload / "bin/64bit/hypershader.so").unlink()
         result = self.install(self.payload)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.destination.exists())
 
     def test_mismatched_modules_fail_before_install(self):
-        (self.payload / "hyperShaderFX.so").write_bytes(b"stale")
+        (self.payload / "hypershader.so").write_bytes(b"stale")
         result = self.install(self.payload)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.destination.exists())

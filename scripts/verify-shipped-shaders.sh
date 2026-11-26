@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="$(realpath "${1:-$repo/build_x86_64/hyperShaderFX.so}")"
+module="$(realpath "${1:-$repo/build_x86_64/hypershader.so}")"
 data="$(realpath "${2:-$repo/data}")"
 work="$(mktemp -d /tmp/hs-shipped-audit.XXXXXX)"
 export MESA_SHADER_CACHE_DISABLE=true

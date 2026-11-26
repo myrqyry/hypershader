@@ -2,7 +2,7 @@
 # Isolated real libobs loader tests; never opens or modifies the user's OBS.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="$repo/data"
 work="$(mktemp -d /tmp/hyper-stdlib-verification-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
@@ -10,8 +10,8 @@ inc="$(pkg-config --variable=includedir libobs)/obs"
 libdir="$(pkg-config --variable=libdir libobs)"
 g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-stdlib-loader.cpp" \
     -o "$work/test-stdlib" $(pkg-config --libs libobs) -Wl,-rpath,"$libdir"
-mkdir -p "$work/hyperShaderFX"
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+mkdir -p "$work/hypershader"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 read -r -a modes <<< "${STDLIB_TEST_MODES:-math wrapper managed vector scalar macro bloom bloom_off sampling compat missing apply}"
 for mode in "${modes[@]}"; do
     echo "TEST: stdlib $mode"

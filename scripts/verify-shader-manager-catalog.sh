@@ -6,4 +6,4 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d /tmp/hyper-catalog-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 g++ -std=c++17 -O2 -fPIC $(pkg-config --cflags Qt6Core)     "$repo/scripts/verify-shader-manager-catalog.cpp"     -o "$work/catalog" $(pkg-config --libs Qt6Core)
-"$work/catalog" "$repo/data/shaders"     "$HOME/.config/obs-studio/plugins/hyperShaderFX/data/shaders"
+"$work/catalog" "$repo/data/shaders"     "$HOME/.config/obs-studio/plugins/hypershader/data/shaders"

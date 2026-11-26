@@ -2,13 +2,13 @@
 # Real libobs/OpenGL shader control and bypass validation for the 3D repairs.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 work="$(mktemp -d /tmp/hyper-geometry-controls-XXXXXXXX)"
 trap 'rm -rf "$work"' EXIT
 inc="$(pkg-config --variable=includedir libobs)/obs"
 export MESA_SHADER_CACHE_DISABLE=true
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 for name in ultimate gaussian-billboard; do
     case "$name" in
         ultimate) shader="3d_ultimate_showcase"; label="ULTIMATE_SCENE_CONTROLS";;

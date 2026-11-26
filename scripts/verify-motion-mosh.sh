@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Exercises the real native HyperShaderFX graph, moving footage, and shader controls.
+# Exercises the real native HyperShader graph, moving footage, and shader controls.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 shader="$data/shaders/root/filter.motion_mosh.effect"
 test -f "$shader"
@@ -23,7 +23,7 @@ trap 'rm -rf "$work"' EXIT
 g++ -std=c++17 -O2 -I"$(pkg-config --variable=includedir libobs)/obs" \
   "$repo/scripts/verify-creative-graph-shaders.cpp" -o "$work/test" $(pkg-config --libs libobs)
 export MESA_SHADER_CACHE_DISABLE=true
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 mkdir -p "$work/home"
 (cd "$work" && HOME="$work/home" XDG_CONFIG_HOME="$work/home" \
  xvfb-run -a timeout 30 "$work/test" "$module" "$data" "$shader" clean) > "$work/out.log" 2>&1 || {

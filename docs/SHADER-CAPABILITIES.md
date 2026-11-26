@@ -19,7 +19,7 @@ helper functions also failed to resolve reliably.
 
 Run:
 
-    STDLIB_TEST_MODES=sampling bash scripts/verify-stdlib-loader.sh /path/to/hyperShaderFX.so
+    STDLIB_TEST_MODES=sampling bash scripts/verify-stdlib-loader.sh /path/to/hypershader.so
 
 The test loads a real HyperShader filter, renders a moving color fixture
 with distinct left/right edge values, and compares all RGBA pixels for

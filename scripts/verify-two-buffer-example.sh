@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# This exercises the actual installed-style example through the HyperShaderFX
+# This exercises the actual installed-style example through the HyperShader
 # filter, not direct shader compilation or a substitute renderer.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 work="$(mktemp -d /tmp/hyper-ink-example-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
@@ -12,7 +12,7 @@ g++ -std=c++17 -O2 -w -I"$inc" "$repo/scripts/verify-stdlib-loader.cpp" \
   -o "$work/test" $(pkg-config --libs libobs)
 mkdir -p "$work/home" "$work/config"
 export MESA_SHADER_CACHE_DISABLE=true
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 (cd "$work" && HOME="$work/home" XDG_CONFIG_HOME="$work/config" \
  xvfb-run -a timeout 23 "$work/test" "$module" "$data" \
  "$data/shaders/root/ink_reaction_buffers.effect" audit) >"$work/output.log" 2>&1 || {
