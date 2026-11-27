@@ -31,6 +31,8 @@ jobs:
           python3 .github/scripts/check_readme_links.py README.md
       - name: Verify deterministic OBS SDK contract
         run: python3 .github/scripts/test-ci-sdk-contract.py
+      - name: Verify shared package adapter
+        run: python3 -B scripts/test-shared-ci.py
       - name: Verify candidate source export boundary
         run: python3 scripts/test-stage-release-source.py
       - name: Verify graph allocation budget

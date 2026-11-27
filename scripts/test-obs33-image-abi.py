@@ -39,10 +39,11 @@ assert "void *storage;" in header
 compat = (root / "src/channel_image_compat.c").read_text()
 assert "bzalloc(HS_CHANNEL_IMAGE_STORAGE_SIZE)" in compat
 assert "bfree(image->storage)" in compat
-builder = (root / ".github/scripts/build-obs33-compat.sh").read_text()
-assert "libopengl-dev" in builder or "libopengl-dev" in (root / ".github/workflows/obs33-compatibility.yml").read_text()
-
-builder = (root / ".github/scripts/build-obs33-compat.sh").read_text()
+# GLVND dependencies now come from the immutable shared caller workflow.
+workflow = (root / ".github/workflows/obs33-compatibility.yml").read_text()
+assert "myrqyry/obs-plugin-ci/.github/workflows/build.yml@70ce37b1015df80478f8ed559f5c88bf4007233f" in workflow
+assert "driver: caller" in workflow
+builder = (root / ".github/scripts/prepare-obs32-sdk.sh").read_text()
 assert "--target obs-frontend-api libobs-opengl" in builder, (
-    "OBS33 SDK install requires obs-frontend-api to be built before Development install"
+    "OBS33 SDK install requires both frontend API and graphics backend"
 )

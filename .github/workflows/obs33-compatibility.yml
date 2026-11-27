@@ -1,4 +1,4 @@
-name: OBS 33 compatibility
+name: Shared OBS plugin CI
 
 on:
   push:
@@ -11,27 +11,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: obs33-${{ github.event.pull_request.number || github.ref }}
+  group: shared-obs-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  stable-obs33:
-    name: OBS 33.0.1 / Ubuntu 26.04
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install OBS build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build extra-cmake-modules pkg-config \
-            libavcodec-dev libavformat-dev libavutil-dev \
-            libswresample-dev libswscale-dev \
-            libpulse-dev libasound2-dev libjansson-dev libsimde-dev \
-            libdrm-dev libegl-dev libgl-dev libopengl-dev libwayland-dev wayland-protocols \
-            libxkbcommon-dev \
-            uthash-dev uuid-dev libx11-dev libx11-xcb-dev libxcb1-dev zlib1g-dev
-      - name: Build plugin against stable OBS 33
-        run: .github/scripts/build-obs33-compat.sh
+  build:
+    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@70ce37b1015df80478f8ed559f5c88bf4007233f
+    with:
+      module: hypershader
+      profile: full
+      driver: caller
+      minimum-tests: 37
+      source-package: true

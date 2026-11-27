@@ -6,6 +6,10 @@ project(${_name} VERSION ${_version})
 
 option(ENABLE_FRONTEND_API "Use obs-frontend-api for UI functionality" OFF)
 option(ENABLE_QT "Use Qt functionality" OFF)
+option(HYPERSHADER_EXTERNAL_SDK "Use an explicitly provisioned OBS SDK" OFF)
+if(HYPERSHADER_EXTERNAL_SDK AND NOT EXISTS "${libobs_DIR}/libobsConfig.cmake")
+  message(FATAL_ERROR "External SDK requires an explicit libobs_DIR")
+endif()
 
 option(USE_ONNX_RUNTIME "Enable ONNX Runtime for LLM and MediaPipe" OFF)
 option(USE_LITERT "Enable native LiteRT (TFLite) support" OFF)

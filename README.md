@@ -298,7 +298,7 @@ installation, activation, or model transfer is performed.
 | Windows | Build/package workflow configured; no hosted result for this curated repository yet |
 | macOS | Universal build workflow configured; no hosted result for this curated repository yet |
 | OBS 31 / 32 | Main development compatibility baseline |
-| OBS 33 | Image API compatibility bridge and dedicated build workflow; curated hosted result pending |
+| OBS 33 | Image API compatibility bridge and shared native build matrix; hosted qualification pending |
 | HDR / 4K / diverse GPUs | Not comprehensively characterized yet |
 
 Generated platform variants are currently local-only pending review. Their previously documented direct-load include limitations remain unresolved.
@@ -473,11 +473,15 @@ These paths are intentionally opt-in or dependency-detected and have different v
 [Build and test](.github/workflows/ci.yml) checks README links, the pinned
 OBS SDK contract, shader metadata, installer behavior, source-export
 fixtures and the platform-specific build payloads.
-[OBS 33 compatibility](.github/workflows/obs33-compatibility.yml) is a
-separate build gate on Ubuntu 26.04. Both workflows cover main and master,
-use read-only repository permissions and pin checkout to a reviewed
-commit. No hosted runs of this curated repository have been established
-yet; passing local contract tests is not a platform qualification.
+[Shared native CI](.github/workflows/obs33-compatibility.yml) uses the
+pinned shared OBS plugin workflow for OBS 32.2.0 and 33.0.3 on Linux,
+Windows x64, macOS ARM64 and macOS Intel. The existing OBS 31.1.1
+baseline remains in place. Linux shared packages must pass the real
+37-effect catalog render gate, including pixel readback and fallback
+contracts. Shared packages use version-specific layouts, the reviewed
+asset inventory, license and archive checksums. The base configuration
+does not enable the optional Qt builder or ML runtimes.
+See [shared CI qualification](docs/SHARED-CI.md).
 
 
 hypershader has accumulated a fairly large set of deterministic and real-renderer checks because shader code that merely compiles is not enough.
