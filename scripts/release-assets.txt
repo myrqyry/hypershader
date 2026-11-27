@@ -10,7 +10,7 @@ include b7c38fb7c19ab7389dc606b6bc5ef1e1291613aa data/locale/en-US.ini
 include 1935fc8538182d0db23d9a86b19278c45d54c7d3 data/shaders/OBS_SHADER_SYNTAX.md
 include 2bc661310fa1093cf85d7f72aa82cd02c8ffc004 data/shaders/OPTICAL_HALATION.md
 include 0e912aa1a67527127465a80e99363da5d8f1c8e0 data/shaders/PFRAME_DRIFT.md
-include 5a08a8f0f60f0cc50624393e1a160b78f12f3b66 data/shaders/README.md
+include d0fbb2b820b5193047ca6a66d88659af1b4240f8 data/shaders/README.md
 include 739c3e3208d258af3122343bd3ae0b33d9e46de4 data/shaders/SHADERS.md
 include 36689da5e5319ce2be1f3577c316ed50d95d6995 data/shaders/root/audio_demo.effect
 include e86e4bed000bfca7e39d33dedeb0c1fef17d5602 data/shaders/root/filter.afterimage_press.effect
@@ -135,3 +135,5 @@ include e41cfd5e1525552715f3d596cf712abe7f4df0a5 data/materials/classic_red_bric
 include 4c9eef2d6ec6bfe975a051b2dcd41f9874db0331 data/materials/classic_red_brick/normal.png
 include b589be9bfad3b87c52cb7427e289ab561284968b data/materials/classic_red_brick/orm.png
 include abe3a7183158755d7ac0437efb27c7408058c507 data/materials/classic_red_brick/preview.png
+include 171fda962012d0cec8a6b381155f9e93088a8d94 data/shaders/root/source.wave_chamber.effect
+include 74ab2d5ce4b80e81b60e496281a2c4c15b7a321f data/shaders/root/source.chemical_garden.effect

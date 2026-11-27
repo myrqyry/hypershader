@@ -1,0 +1,77 @@
+// @label "Chemical Garden"
+// @description "A self-seeding Gray-Scott reaction-diffusion field with a second persistent pigment layer. No external image required."
+#include "../../stdlib/hypershader_standard.glsl"
+uniform int hs_pass_chemistry_order = 0;
+uniform int hs_pass_chemistry_divisor = 2;
+uniform int hs_pass_chemistry_format = 1;
+uniform texture2d hs_pass_chemistry;
+uniform texture2d hs_pass_chemistry_previous;
+uniform float3 hs_pass_chemistry_resolution;
+uniform int hs_pass_pigment_order = 1;
+uniform int hs_pass_pigment_divisor = 2;
+uniform int hs_pass_pigment_format = 1;
+uniform texture2d hs_pass_pigment;
+uniform texture2d hs_pass_pigment_previous;
+uniform float3 hs_pass_pigment_resolution;
+uniform int hs_graph_frame;
+uniform float simulation_step; // @min 0 @max 1 @step 0.01 @default 1 @label "Simulation Step (0 Pauses)" @group "Simulation"
+uniform float feed_rate; // @min 0.015 @max 0.08 @step 0.001 @default 0.037 @label "Feed" @group "Simulation"
+uniform float kill_rate; // @min 0.03 @max 0.08 @step 0.001 @default 0.060 @label "Kill" @group "Simulation"
+uniform float diffusion_u; // @min 0.02 @max 0.24 @step 0.005 @default 0.18 @label "Diffusion U" @group "Simulation"
+uniform float diffusion_v; // @min 0.01 @max 0.20 @step 0.005 @default 0.09 @label "Diffusion V" @group "Simulation"
+uniform float seeding; // @min 0 @max 1 @step 0.01 @default 0.7 @label "Moving Seed" @group "Simulation"
+uniform float persistence; // @min 0.8 @max 0.999 @step 0.001 @default 0.975 @label "Pigment Memory" @group "Appearance"
+uniform float3 paper_color; // @default "0.08,0.10,0.15" @label "Ground" @group "Palette"
+uniform float3 ink_color; // @default "0.18,0.64,0.52" @label "Pigment" @group "Palette"
+uniform float3 edge_color; // @default "0.96,0.71,0.32" @label "Growing Edge" @group "Palette"
+
+sampler_state gardenSampler { Filter=Linear; AddressU=Wrap; AddressV=Wrap; };
+float seedSpot(float2 uv,float2 center,float radius) {
+    float2 d=(uv-center)*float2(hs_resolution.z,1.0);
+    return 1.0-smoothstep(radius*0.65,radius,length(d));
+}
+float2 chem(float2 uv) { return hs_pass_chemistry_previous.Sample(gardenSampler,uv).rg; }
+float4 ChemistryStep(VertData v_in):TARGET {
+    float2 uv=v_in.uv;
+    if (hs_graph_frame==0) {
+        float2 cell=frac(uv*float2(4.0,3.0));
+        float2 pos=floor(uv*float2(4.0,3.0));
+        float radius=0.15+0.11*frac(sin(dot(pos,float2(13.7,41.9)))*1234.5);
+        float seed=1.0-smoothstep(radius*0.7,radius,length(cell-float2(0.5,0.5)));
+        return float4(1.0-seed*0.48,seed*0.64,0.0,1.0);
+    }
+    float2 c=hs_pass_chemistry_previous.Load(int3(min(int2(uv*hs_resolution.xy),int2(hs_resolution.xy)-int2(1,1)),0)).rg;
+    if (simulation_step<=0.0) return float4(c,0.0,1.0);
+    float2 px=1.0/max(hs_resolution.xy,float2(1.0,1.0));
+    float2 lap=chem(uv+float2(px.x,0))+chem(uv-float2(px.x,0))+
+               chem(uv+float2(0,px.y))+chem(uv-float2(0,px.y))-4.0*c;
+    float reaction=c.x*c.y*c.y;
+    float2 delta=float2(diffusion_u*lap.x-reaction+feed_rate*(1.0-c.x),
+                       diffusion_v*lap.y+reaction-(feed_rate+kill_rate)*c.y);
+    float t=float(hs_graph_frame)*0.016;
+    float seed=seedSpot(uv,float2(0.5+0.33*sin(t),0.5+0.32*cos(t*1.3)),0.06);
+    delta+=float2(-0.045,0.085)*seed*seeding;
+    return float4(saturate(c+delta*simulation_step),0.0,1.0);
+}
+float4 PigmentStep(VertData v_in):TARGET {
+    float2 uv=v_in.uv;
+    float2 old=hs_pass_pigment_previous.Load(int3(min(int2(uv*hs_resolution.xy),int2(hs_resolution.xy)-int2(1,1)),0)).rg;
+    if (simulation_step<=0.0 && hs_graph_frame>0) return float4(old,0.0,1.0);
+    float concentration=hs_pass_chemistry.Sample(textureSampler,uv).g;
+    float remembered=max(concentration,old.x*lerp(1.0,persistence,simulation_step));
+    float slow=lerp(old.y,concentration,0.09*simulation_step);
+    return float4(remembered,slow,0.0,1.0);
+}
+float4 GardenDraw(VertData v_in):TARGET {
+    float2 c=hs_pass_chemistry.Sample(textureSampler,v_in.uv).rg;
+    float2 pigment=hs_pass_pigment.Sample(textureSampler,v_in.uv).rg;
+    float coverage=smoothstep(0.015,0.42,max(c.y,pigment.x*0.72));
+    float edge=saturate(max(0.0,c.y-pigment.y)*4.0);
+    float3 color=lerp(paper_color,ink_color,coverage);
+    color=lerp(color,edge_color,edge);
+    color+=0.10*coverage*(0.5+0.5*cos(c.y*50.0));
+    return float4(saturate(color),1.0);
+}
+technique Pass_chemistry { pass { vertex_shader=VSDefault(v_in); pixel_shader=ChemistryStep(v_in); } }
+technique Pass_pigment { pass { vertex_shader=VSDefault(v_in); pixel_shader=PigmentStep(v_in); } }
+technique Draw { pass { vertex_shader=VSDefault(v_in); pixel_shader=GardenDraw(v_in); } }

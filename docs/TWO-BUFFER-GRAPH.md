@@ -243,3 +243,9 @@ the requested allocation. Graph mode remains intentionally opt-in.
   controls need dedicated integration regression coverage.
 
 - The budget is per-filter logical graph color payload only; aggregate VRAM admission and backend-specific overhead are not accounted for.
+
+## Standalone source instruments
+
+Wave Chamber uses a signed height/velocity field and a second persistent light field; Chemical Garden uses Gray–Scott chemistry and a separate pigment memory. Both store their state at half resolution in RGBA16F, require no external image, and draw at the selected source dimensions. Simulation Step = 0 stops the simulation updates (the GPU output is visually stationary, not guaranteed bit-exact); the runtime graph frame counter continues to advance. The exciter phase can therefore change on resume. The simulation advances per graph render, not at a guaranteed fixed wall-clock rate.
+
+Run the two native pixel regressions with `scripts/verify-source-instruments.sh /path/to/hypershader.so`. They check spatially varied opaque output, temporal change, visible controls, pause (at most eight 8-bit output levels at any channel and mean absolute channel change at most 0.01 over 40 samples), and resumed evolution.

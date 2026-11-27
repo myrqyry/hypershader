@@ -87,6 +87,7 @@ photographs are committed to this repository.
 - **Named texture inputs** with semantic names, custom labels and optional resolution/time uniforms, backed by the existing four input slots.
 - **Live source textures** from already-showing OBS sources and independent scenes, with real capture dimensions.
 - **Native persistent render graphs** in filters and standalone sources, with up to eight named ordered passes, independent history, configurable resolution, optional RGBA16F data storage and bounded per-instance allocations.
+  Bundled **Wave Chamber** and **Chemical Garden** source instruments demonstrate persistent signed wave state and reaction-diffusion with independent afterglow/pigment buffers. Both run without video inputs and support pausing field updates with Simulation Step = 0.
 - **Source compositing** and host-level blend modes without forcing every shader to reimplement them.
 - **Typed controls** for scalar, boolean, vector, and enumerated shader parameters.
 - **Readable shader names and categories** while preserving stored paths and scene compatibility.

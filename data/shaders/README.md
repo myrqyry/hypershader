@@ -32,10 +32,12 @@ See [shader authoring](SHADERS.md) and [OBS syntax](OBS_SHADER_SYNTAX.md).
 - `shaderfilter_demo.effect`
 - `source.audio_spectrum_orbit.effect`
 - `source.brass_register.effect`
+- `source.chemical_garden.effect` — self-seeding reaction-diffusion and persistent pigment memory; independent source
 - `source.paper_tide.effect`
 - `source.phosphor_scope.effect`
 - `source.reactive_sprite.effect`
 - `source.spectral_garden.effect`
 - `source.spectral_strata.effect`
+- `source.wave_chamber.effect` — signed wave propagation and phosphor history; independent source
 - `template.effect`
 - `warp_tape.effect`

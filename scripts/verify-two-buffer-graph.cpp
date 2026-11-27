@@ -132,6 +132,61 @@ int main(int argc,char** argv) {
  obs_module_t* module=nullptr;
  int open=obs_open_module(&module,argv[1],argv[2]);
  if(open!=MODULE_SUCCESS||!obs_init_module(module)){obs_shutdown();return 1;}
+ if(mode=="source-wave"||mode=="source-chemistry"){
+  auto* settings=obs_data_create();
+  obs_data_set_string(settings,"shader_file",argv[3]);
+  obs_data_set_int(settings,"source_width",W);
+  obs_data_set_int(settings,"source_height",H);
+  auto* src=obs_source_create("hypershader_source","Persistent instrument",settings,nullptr);
+  obs_data_release(settings);
+  if(!src){obs_shutdown();return 1;}
+  obs_source_inc_showing(src);
+  auto sample=[&](int n){
+   Frame f;
+   for(int i=0;i<n;i++){f=render(src);drain_ui();std::this_thread::sleep_for(35ms);}
+   return f;
+  };
+  auto set=[&](double value){
+   auto* cfg=obs_source_get_settings(src);
+   obs_data_set_double(cfg,"param_simulation_step",value);
+   obs_source_update(src,cfg);obs_data_release(cfg);
+  };
+  auto first=sample(25),later=sample(55);
+  auto* props=obs_source_properties(src);
+  bool controls=props&&obs_properties_get(props,"param_simulation_step")&&
+    obs_properties_get(props,mode=="source-wave"?"param_drive":"param_feed_rate");
+  if(props)obs_properties_destroy(props);
+  set(0.0);
+  auto stopped=sample(12),still=sample(40);
+  set(1.0);
+  auto resumed=sample(35);
+  auto varied=[](const Frame& f){
+   if(f.size()!=W*H*4)return false;
+   int lo=255,hi=0;size_t opaque=0;
+   for(size_t i=0;i<f.size();i+=4){lo=std::min(lo,int(f[i]));hi=std::max(hi,int(f[i]));opaque+=f[i+3]==255;}
+   return hi-lo>20&&opaque==W*H;
+  };
+  int maxFrozenDelta=256;
+  double meanFrozenDelta=256.0;
+  if(stopped.size()==W*H*4&&still.size()==stopped.size()){
+   maxFrozenDelta=0;
+   uint64_t totalDelta=0;
+   for(size_t i=0;i<still.size();i++){
+    int delta=abs(int(stopped[i])-int(still[i]));
+    maxFrozenDelta=std::max(maxFrozenDelta,delta);totalDelta+=delta;
+   }
+   meanFrozenDelta=double(totalDelta)/still.size();
+  }
+  bool ok=controls&&varied(first)&&varied(later)&&diff(first,later)>W*H/20&&
+    maxFrozenDelta<=8&&meanFrozenDelta<=0.01&&diff(still,resumed)>W*H/20;
+  std::cout<<"TWO_BUFFER_INSTRUMENT "<<mode<<" controls="<<controls
+    <<" temporal="<<diff(first,later)<<" frozen_max_delta="<<maxFrozenDelta
+    <<" frozen_mean_delta="<<meanFrozenDelta<<" freeze_diff="<<diff(stopped,still)<<" resumed="<<diff(still,resumed)<<" varied="<<varied(later)
+    <<" PASS="<<ok<<std::endl;
+  obs_source_dec_showing(src);obs_source_release(src);drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<ok<<std::endl;
+  return ok?0:1;
+ }
  if(mode=="source-builder"){
   auto* settings=obs_data_create();
   obs_data_set_string(settings,"shader_file",argv[3]);

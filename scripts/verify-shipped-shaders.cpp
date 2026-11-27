@@ -86,11 +86,13 @@ static const Contract contracts[] = {
  {"shaderfilter_demo.effect",0,0,0,"0000",0,0},
  {"source.audio_spectrum_orbit.effect",1,1,0,"0000",0,0},
  {"source.brass_register.effect",1,1,0,"0000",0,0},
+ {"source.chemical_garden.effect",1,0,0,"0000",0,0},
  {"source.paper_tide.effect",1,1,0,"0000",0,0},
  {"source.phosphor_scope.effect",1,1,0,"1000",0,0},
  {"source.reactive_sprite.effect",1,1,0,"1111",0,1},
  {"source.spectral_garden.effect",1,1,0,"0000",0,0},
  {"source.spectral_strata.effect",1,1,0,"1000",0,1},
+ {"source.wave_chamber.effect",1,0,0,"0000",0,0},
  {"template.effect",0,0,0,"0000",0,0},
  {"warp_tape.effect",0,0,0,"0000",0,0},
 };

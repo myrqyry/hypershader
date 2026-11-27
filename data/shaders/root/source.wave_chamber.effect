@@ -1,0 +1,73 @@
+// @label "Wave Chamber"
+// @description "A signed two-dimensional wave field with moving exciters and persistent luminous caustics. No external image required."
+#include "../../stdlib/hypershader_standard.glsl"
+uniform int hs_pass_wave_order = 0;
+uniform int hs_pass_wave_divisor = 2;
+uniform int hs_pass_wave_format = 1;
+uniform texture2d hs_pass_wave;
+uniform texture2d hs_pass_wave_previous;
+uniform float3 hs_pass_wave_resolution;
+uniform int hs_pass_afterglow_order = 1;
+uniform int hs_pass_afterglow_divisor = 2;
+uniform int hs_pass_afterglow_format = 1;
+uniform texture2d hs_pass_afterglow;
+uniform texture2d hs_pass_afterglow_previous;
+uniform float3 hs_pass_afterglow_resolution;
+uniform int hs_graph_frame;
+uniform float simulation_step; // @min 0 @max 1 @step 0.01 @default 1 @label "Simulation Step (0 Pauses)" @group "Simulation"
+uniform float drive; // @min 0 @max 1 @step 0.01 @default 0.65 @label "Excitation" @group "Simulation"
+uniform float propagation; // @min 0.03 @max 0.35 @step 0.005 @default 0.22 @label "Propagation" @group "Simulation"
+uniform float damping; // @min 0.85 @max 0.998 @step 0.001 @default 0.976 @label "Wave Persistence" @group "Simulation"
+uniform float decay; // @min 0.75 @max 0.999 @step 0.001 @default 0.955 @label "Light Persistence" @group "Appearance"
+uniform float exposure; // @min 0.2 @max 4 @step 0.05 @default 1.5 @label "Exposure" @group "Appearance"
+uniform float3 cold_color; // @default "0.08,0.55,0.95" @label "Trough Color" @group "Palette"
+uniform float3 warm_color; // @default "0.96,0.58,0.16" @label "Crest Color" @group "Palette"
+
+float waveSample(float2 uv) {
+    return hs_pass_wave_previous.Sample(textureSampler,uv).r;
+}
+float exciter(float2 uv,float2 center,float radius) {
+    float2 d=(uv-center)*float2(hs_resolution.z,1.0);
+    return 1.0-smoothstep(radius*0.25,radius,length(d));
+}
+float4 WaveStep(VertData v_in):TARGET {
+    float2 uv=v_in.uv;
+    float2 old=hs_pass_wave_previous.Load(int3(min(int2(uv*hs_resolution.xy),int2(hs_resolution.xy)-int2(1,1)),0)).rg;
+    if (hs_graph_frame==0) old=float2(0.0,0.0);
+    if (simulation_step<=0.0) return float4(old,0.0,1.0);
+    float2 px=1.0/max(hs_resolution.xy,float2(1.0,1.0));
+    float lap=waveSample(uv+float2(px.x,0.0))+waveSample(uv-float2(px.x,0.0))+
+              waveSample(uv+float2(0.0,px.y))+waveSample(uv-float2(0.0,px.y))-4.0*old.x;
+    float t=float(hs_graph_frame)*0.043;
+    float2 a=float2(0.36+0.17*sin(t*0.7),0.48+0.23*cos(t*0.9));
+    float2 b=float2(0.66+0.14*cos(t*0.8),0.53+0.20*sin(t*0.6));
+    float force=drive*0.09*(exciter(uv,a,0.065)*sin(t*4.0)+exciter(uv,b,0.045)*cos(t*5.7));
+    float velocity=(old.y+(propagation*lap+force)*simulation_step)*lerp(1.0,damping,simulation_step);
+    float height=clamp(old.x+velocity*simulation_step,-1.5,1.5);
+    return float4(height,clamp(velocity,-0.8,0.8),0.0,1.0);
+}
+float4 GlowStep(VertData v_in):TARGET {
+    float2 uv=v_in.uv;
+    float2 old=hs_pass_afterglow_previous.Load(int3(min(int2(uv*hs_resolution.xy),int2(hs_resolution.xy)-int2(1,1)),0)).rg;
+    if (simulation_step<=0.0) return float4(old,0.0,1.0);
+    float2 px=1.0/max(hs_pass_wave_resolution.xy,float2(1.0,1.0));
+    float height=hs_pass_wave.Sample(textureSampler,uv).r;
+    float gx=hs_pass_wave.Sample(textureSampler,uv+float2(px.x,0)).r-hs_pass_wave.Sample(textureSampler,uv-float2(px.x,0)).r;
+    float gy=hs_pass_wave.Sample(textureSampler,uv+float2(0,px.y)).r-hs_pass_wave.Sample(textureSampler,uv-float2(0,px.y)).r;
+    float light=saturate(length(float2(gx,gy))*8.0+abs(height)*0.45);
+    float peak=max(old.x*lerp(1.0,decay,simulation_step),light);
+    float trace=lerp(old.y,light,0.11*simulation_step);
+    return float4(peak,trace,0.0,1.0);
+}
+float4 WaveDraw(VertData v_in):TARGET {
+    float height=hs_pass_wave.Sample(textureSampler,v_in.uv).r;
+    float2 glow=hs_pass_afterglow.Sample(textureSampler,v_in.uv).rg;
+    float3 tint=lerp(cold_color,warm_color,smoothstep(-0.14,0.14,height));
+    float contours=(0.5+0.5*cos(height*36.0))*saturate(abs(height)*7.0);
+    float light=exposure*(abs(height)*1.35+glow.x*0.85+glow.y*0.4+contours*0.12);
+    float3 color=float3(0.012,0.018,0.032)+tint*(1.0-exp(-light));
+    return float4(saturate(color),1.0);
+}
+technique Pass_wave { pass { vertex_shader=VSDefault(v_in); pixel_shader=WaveStep(v_in); } }
+technique Pass_afterglow { pass { vertex_shader=VSDefault(v_in); pixel_shader=GlowStep(v_in); } }
+technique Draw { pass { vertex_shader=VSDefault(v_in); pixel_shader=WaveDraw(v_in); } }
