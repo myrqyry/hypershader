@@ -11,7 +11,7 @@ include 1935fc8538182d0db23d9a86b19278c45d54c7d3 data/shaders/OBS_SHADER_SYNTAX.
 include 2bc661310fa1093cf85d7f72aa82cd02c8ffc004 data/shaders/OPTICAL_HALATION.md
 include 0e912aa1a67527127465a80e99363da5d8f1c8e0 data/shaders/PFRAME_DRIFT.md
 include 5a08a8f0f60f0cc50624393e1a160b78f12f3b66 data/shaders/README.md
-include 978d7480665a0f5994e67ad3fa7b2d950d0d32e7 data/shaders/SHADERS.md
+include 739c3e3208d258af3122343bd3ae0b33d9e46de4 data/shaders/SHADERS.md
 include 36689da5e5319ce2be1f3577c316ed50d95d6995 data/shaders/root/audio_demo.effect
 include e86e4bed000bfca7e39d33dedeb0c1fef17d5602 data/shaders/root/filter.afterimage_press.effect
 include 4bdb7aab073e9cc8badecb237dc1d2b770a84ac8 data/shaders/root/filter.contact_filaments.effect

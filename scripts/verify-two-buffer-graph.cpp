@@ -70,6 +70,8 @@ Frame render(obs_source_t* source) {
  if(target&&stage&&gs_texrender_begin(target,W,H)){
   gs_projection_push();gs_matrix_push();gs_matrix_identity();
   gs_ortho(0,float(W),0,float(H),-100,100);
+  struct vec4 clear; vec4_zero(&clear);
+  gs_clear(GS_CLEAR_COLOR,&clear,0,0);
   obs_source_video_render(source);
   gs_matrix_pop();gs_projection_pop();gs_texrender_end(target);
   if(auto* texture=gs_texrender_get_texture(target)){
@@ -130,6 +132,99 @@ int main(int argc,char** argv) {
  obs_module_t* module=nullptr;
  int open=obs_open_module(&module,argv[1],argv[2]);
  if(open!=MODULE_SUCCESS||!obs_init_module(module)){obs_shutdown();return 1;}
+ if(mode=="source-graph"||mode=="source-graph-eight"||mode=="source-graph-ab"){
+  auto make=[&](const char* name){
+   auto* settings=obs_data_create();
+   obs_data_set_string(settings,"shader_file",argv[3]);
+   obs_data_set_int(settings,"source_width",W);
+   obs_data_set_int(settings,"source_height",H);
+   auto* src=obs_source_create("hypershader_source",name,settings,nullptr);
+   obs_data_release(settings);
+   if(src)obs_source_inc_showing(src);
+   return src;
+  };
+  auto* a=make("Standalone graph A");
+  auto pixel=[&](obs_source_t* src){
+   auto f=render(src);drain_ui();
+   size_t pos=4*(H/2*W+W/2);
+   return f.size()==W*H*4?std::vector<int>{f[pos],f[pos+1],f[pos+2],f[pos+3]}:std::vector<int>{-1,-1,-1,-1};
+  };
+  bool ok=a!=nullptr;
+  if(a){
+   int first=-1,last=-1,valid=0;
+   for(int i=0;i<45;i++){
+    auto p=pixel(a);
+    if(p[2]<=3&&p[2]>=0&&p[3]==255&&p[0]>0){
+     if(first<0)first=p[0];
+     last=p[0];++valid;
+    }
+    std::this_thread::sleep_for(40ms);
+   }
+   ok=ok&&valid>=20&&first>=0&&last>first+30;
+   auto* b=make("Standalone graph B");
+   int fresh=-1;
+   if(b){
+    for(int i=0;i<30;i++){
+     auto p=pixel(b);
+     if(p[2]==0&&p[3]==255&&p[0]>0){fresh=p[0];break;}
+     std::this_thread::sleep_for(40ms);
+    }
+    obs_source_dec_showing(b);obs_source_release(b);
+   }
+   ok=ok&&fresh>=0&&fresh<last-25;
+   std::cout<<"TWO_BUFFER_SOURCE first="<<first<<" last="<<last<<" independent="<<fresh<<" valid="<<valid<<" PASS="<<ok<<std::endl;
+   auto update=[&](const char* key,double value){
+    auto* settings=obs_source_get_settings(a);
+    obs_data_set_double(settings,key,value);
+    obs_source_update(a,settings);obs_data_release(settings);
+   };
+   update("param_output_gain",0.0);
+   int muted=0;
+   for(int i=0;i<10;i++){
+    auto p=pixel(a);
+    if(p[0]<=3&&p[1]<=3&&p[2]==0&&p[3]==255)++muted;
+    std::this_thread::sleep_for(40ms);
+   }
+   update("param_output_gain",1.0);
+   update("compose_effect_opacity",0.0);
+   int transparent=0;
+   for(int i=0;i<10;i++){
+    auto p=pixel(a);
+    if(p[3]==0)++transparent;
+    std::this_thread::sleep_for(40ms);
+   }
+   update("compose_effect_opacity",1.0);
+   int resumed=0;
+   for(int i=0;i<10;i++){
+    auto p=pixel(a);
+    if(p[0]>last&&p[2]==0&&p[3]==255)++resumed;
+    std::this_thread::sleep_for(40ms);
+   }
+   const bool controls=muted>=6&&transparent>=6&&resumed>=6;
+   ok=ok&&controls;
+   std::cout<<"TWO_BUFFER_SOURCE_CONTROL muted="<<muted<<" transparent="<<transparent<<" resumed="<<resumed<<" PASS="<<controls<<std::endl;
+   auto* settings=obs_source_get_settings(a);
+   obs_data_set_int(settings,"source_width",W-3);
+   obs_data_set_int(settings,"source_height",H-3);
+   obs_source_update(a,settings);obs_data_release(settings);
+   int reset=-1,after=-1;
+   for(int i=0;i<30;i++){
+    auto p=pixel(a);
+    if(obs_source_get_width(a)==W-3&&p[2]==0&&p[3]==255&&p[0]>0){
+     if(reset<0)reset=p[0];
+     after=p[0];
+    }
+    std::this_thread::sleep_for(40ms);
+   }
+   bool resized=reset>=0&&reset<last-25&&after>reset+15;
+   ok=ok&&resized;
+   std::cout<<"TWO_BUFFER_SOURCE_RESIZE reset="<<reset<<" later="<<after<<" PASS="<<resized<<std::endl;
+   obs_source_dec_showing(a);obs_source_release(a);
+  }
+  drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<ok<<std::endl;
+  return ok?0:1;
+ }
  auto* source=obs_source_create("hyper_pframe_test_source","Buffer fixture",nullptr,nullptr);
  auto* primary=active;
  obs_source_t* live=nullptr;

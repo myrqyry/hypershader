@@ -156,7 +156,7 @@ return lerp(current, prev, 0.9); // 90% trail
 
 ### Multi-resolution feedback
 
-Native filter effects with BufferA, BufferB and Draw techniques can
+Native filter and standalone source effects with BufferA, BufferB and Draw techniques can
 request independent internal buffer sizes using integer default uniforms
 `hs_buffer_a_divisor` and `hs_buffer_b_divisor` (1, 2, 4 or 8).
 Use `hs_buffer_a_format = 1` or `hs_buffer_b_format = 1` for RGBA16F state.
@@ -173,7 +173,7 @@ for declarations, defaults, reset behavior and verification scope.
 
 ### Named persistent passes
 
-New native filter graphs can use up to eight shader-defined passes,
+New native filter and standalone source graphs can use up to eight shader-defined passes,
 with a required integer `hs_pass_<id>_order` starting at zero, a matching
 `Pass_<id>` technique and current/previous texture2d uniforms.
 For example `hs_pass_diffuse` and `hs_pass_diffuse_previous`.

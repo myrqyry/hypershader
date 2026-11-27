@@ -110,7 +110,7 @@ automatic dependency sorter or transient-resource allocator.
 | Texture inputs | Four named or numbered input slots, source image, auxiliary signals; image and showing-source capture verified | Expand resource pool, type/size/format/color-space declarations |
 | Sampling | Native linear clamp plus opt-in addressing helpers | Mipmap and explicit LOD qualification, per-resource sampler capability probes |
 | Texture storage | Native 2D inputs and selected float data textures | Cubemap, volume, arrays/atlas, linear data formats and limits |
-| Render passes | One to eight named ordered persistent passes or existing A/B, Draw; independent size and RGBA16F; filter only | Explicit dependency DAG, transient resources, source/transition lanes and aggregate admission |
+| Render passes | One to eight named ordered persistent passes or existing A/B, Draw; independent size and RGBA16F; filter and source lanes | Explicit dependency DAG, transient resources, transition lane and aggregate admission |
 | Temporal state | Previous output and two persistent buffers with sized initial histories and resize reset | Named history, lifetime and aggregate memory budgets |
 | Scene buffers | Sight depth, flow, matte and tracking; estimated, not engine G-buffer | Unified sampling contract with valid/fresh/provenance and camera-space metadata |
 | Geometry | Fullscreen draw and shader-side helpers | Subdivided planes, mesh vertex attributes, transforms, depth and instance drawing |

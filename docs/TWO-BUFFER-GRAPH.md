@@ -1,8 +1,8 @@
 # Persistent render graphs — native OBS effect runtime
 
 ## Available now
-Opt-in fixed three-stage sequence, executed by the production hypershader filter:
-1. Capture the unfiltered upstream image.
+Opt-in fixed three-stage sequence, executed by the production hypershader filter and standalone source:
+1. Capture the unfiltered upstream image for a filter, or use the source lane’s opaque-black 1×1 placeholder.
 2. Run technique BufferA, with its own two ping-pong history targets.
 3. Run technique BufferB, sampling the **current** BufferA and its own previous-frame state.
 4. Run technique Draw, sampling both **current** A and B.
@@ -44,8 +44,7 @@ completed result: current-frame output for earlier stages, previous
 frame for the current or later stages. The explicit `_previous`
 resource always refers to the previous successful graph frame.
 In Draw all unsuffixed resources refer to current-frame results.
-The full-sized original image, controls, external texture inputs and
-resolution/time built-ins are rebound through the existing renderer.
+The original image (full-sized for filters, the black placeholder for sources), controls, external texture inputs and resolution/time built-ins are rebound through the existing renderer.
 This is an ordered schedule with implicit texture sampling dependencies,
 not an automatically sorted DAG or shader-language dependency analysis.
 Every declared stage owns two persistent surfaces. Use explicit
@@ -55,7 +54,7 @@ The loader rejects noncontiguous or duplicate orders, out-of-range
 orders, unknown reserved resource names, missing techniques, incorrect
 resource types and invalid allocation descriptors. A rejected named
 schedule leaves the previous working effect in place. Do not mix the
-named form with BufferA/BufferB. Named schedules are filter-only.
+named form with BufferA/BufferB. Named schedules work in filters and standalone sources; transitions remain unsupported.
 The existing A/B contract remains supported, not a second renderer.
 
 The native fixture
@@ -79,7 +78,7 @@ initialized to opaque black at their actual configured sizes and formats, never 
 starts at 0, resets on shader replacement or render-target resize,
 and increases only after a successful graph frame. This is separate from OBS hs_frame_index.
 
-The same original input image is bound into all three stages. Per-shader
+The same original input image (or source placeholder) is bound into all three stages. Per-shader
 metadata controls are rebound before each stage because effect parameters
 can be reset by OBS technique loops. A real libobs test checks that
 a saved output-gain control actually changes the final rendered pixels.
@@ -187,7 +186,7 @@ The cap is a conservative logical texture-payload estimate, not a GPU
 VRAM measurement or global limit. Driver allocation overhead, input
 channels, ML resources, other filters and OBS's output target are not
 included. An over-budget graph releases its graph targets and passes the
-upstream image through without silently changing its resolution or
+upstream image through for filters (standalone sources draw nothing) without silently changing its resolution or
 precision. Logging occurs once per rejection episode. When the source
 size fits again, fresh histories are allocated; old state is not reused.
 Existing two-buffer full-resolution 4K SDR and RGBA16F graphs fit the
@@ -231,7 +230,8 @@ The runtime checks actual texture dimensions and format, not only
 the requested allocation. Graph mode remains intentionally opt-in.
 
 ## Current limits
-- Not wired to the standalone source or transition lanes.
+- Standalone sources use the same scheduler and budget; transitions are not wired.
+- Standalone sources bind a 1×1 opaque-black image, not a full-sized input; use pass textures for integer texel reads. Opacity composites against transparency.
 - The single-output hs_history feedback path is separate; graph effects
   use explicit per-pass previous textures.
 - Real-time full-resolution performance, HDR correctness on other

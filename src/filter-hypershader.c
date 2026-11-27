@@ -185,7 +185,7 @@ static bool graph_configure(gs_effect_t *effect, struct hs_graph_plan *plan,
 		++plan->count;
 	}
 	if (plan->named) {
-		if (kind != HYPER_KIND_FILTER || !plan->count ||
+		if (kind == HYPER_KIND_TRANSITION || !plan->count ||
 		    occupied != (1U << plan->count) - 1 ||
 		    gs_effect_get_technique(effect, "BufferA") ||
 		    gs_effect_get_technique(effect, "BufferB"))
@@ -2197,7 +2197,7 @@ static shader_resource_t *load_shader_resource(struct hypershader_data *s, const
 
 	res->graph.valid = graph_configure(res->effect, &res->graph, s->kind);
 	if (!res->graph.valid && res->graph.named) {
-		res->error = bstrdup("Invalid named pass graph: require contiguous unique orders 0..7, matching Pass_name techniques and typed current/previous resources; filter lane only");
+		res->error = bstrdup("Invalid named pass graph: require contiguous unique orders 0..7, matching Pass_name techniques and typed current/previous resources; filter or source lane only");
 		goto cleanup_error;
 	}
 
@@ -5226,8 +5226,9 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 		if (!s->graph_budget_rejected) {
 			graph_release_targets(s);
 			blog(LOG_WARNING, "[hypershader] Graph resource budget exceeded (%ux%u, bytes=%" PRIu64
-			     ", limit=%" PRIu64 ", overflow=%d); passing upstream source",
-			     width, height, bytes, limit, !valid);
+			     ", limit=%" PRIu64 ", overflow=%d); %s",
+			     width, height, bytes, limit, !valid,
+			     s->kind == HYPER_KIND_SOURCE ? "drawing no output" : "passing upstream source");
 			s->graph_budget_rejected = true;
 		}
 		return false;
@@ -5239,7 +5240,7 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 	return true;
 }
 
-static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target,
+static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 				uint32_t width, uint32_t height, enum gs_color_format format)
 {
 	if (s->graph_width != width || s->graph_height != height ||
@@ -5250,7 +5251,7 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 		s->graph_format = format;
 	}
 
-	if (!s->feedback_input)
+	if (target && !s->feedback_input)
 		s->feedback_input = gs_texrender_create(format, GS_ZS_NONE);
 	for (int buffer = 0; buffer < (int)s->graph.count; buffer++)
 		for (int frame = 0; frame < 2; frame++)
@@ -5258,40 +5259,45 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
 				s->graph_history[buffer][frame] =
 					gs_texrender_create(s->graph.float16[buffer] ? GS_RGBA16F : format, GS_ZS_NONE);
 
-	if (!s->feedback_input)
+	if (target && !s->feedback_input)
 		return false;
 	for (int buffer = 0; buffer < (int)s->graph.count; buffer++)
 		for (int frame = 0; frame < 2; frame++)
 			if (!s->graph_history[buffer][frame])
 				return false;
 
-	/* Capture the upstream source independently of the filter-end helper. */
-	gs_texrender_reset(s->feedback_input);
-	if (!gs_texrender_begin(s->feedback_input, width, height))
-		return false;
-	gs_projection_push();
-	gs_matrix_push();
-	gs_matrix_identity();
-	gs_ortho(0, (float)width, 0, (float)height, -100, 100);
-    /* A nested filter (e.g. Sight) owns its capture/draw effect; entering
-     * a default-effect loop here can suppress its nested capture.
-     * Ordinary non-custom input sources still need an active Draw effect
-     * for obs_source_draw(). Preserve that established path. */
-    struct vec4 clear;
-    vec4_zero(&clear);
-    gs_clear(GS_CLEAR_COLOR,&clear,0,0);
-    if (obs_source_get_type(target) == OBS_SOURCE_TYPE_FILTER ||
-        (obs_source_get_output_flags(target) & OBS_SOURCE_CUSTOM_DRAW)) {
-        obs_source_video_render(target);
-    } else {
-        gs_effect_t *base=obs_get_base_effect(OBS_EFFECT_DEFAULT);
-        while (gs_effect_loop(base,"Draw"))
-            obs_source_video_render(target);
-    }
-	gs_matrix_pop();
-	gs_projection_pop();
-	gs_texrender_end(s->feedback_input);
-	gs_texture_t *input = gs_texrender_get_texture(s->feedback_input);
+	/* A standalone generator has no upstream image. Match the existing
+	 * source lane's opaque-black placeholder; external channels still work. */
+	gs_texture_t *input = s->dummy_texture;
+	if (target) {
+		/* Capture the upstream source independently of the filter-end helper. */
+		gs_texrender_reset(s->feedback_input);
+		if (!gs_texrender_begin(s->feedback_input, width, height))
+			return false;
+		gs_projection_push();
+		gs_matrix_push();
+		gs_matrix_identity();
+		gs_ortho(0, (float)width, 0, (float)height, -100, 100);
+		/* A nested filter (e.g. Sight) owns its capture/draw effect; entering
+		 * a default-effect loop here can suppress its nested capture.
+		 * Ordinary non-custom input sources still need an active Draw effect
+		 * for obs_source_draw(). Preserve that established path. */
+		struct vec4 clear;
+		vec4_zero(&clear);
+		gs_clear(GS_CLEAR_COLOR, &clear, 0, 0);
+		if (obs_source_get_type(target) == OBS_SOURCE_TYPE_FILTER ||
+		    (obs_source_get_output_flags(target) & OBS_SOURCE_CUSTOM_DRAW)) {
+			obs_source_video_render(target);
+		} else {
+			gs_effect_t *base = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+			while (gs_effect_loop(base, "Draw"))
+				obs_source_video_render(target);
+		}
+		gs_matrix_pop();
+		gs_projection_pop();
+		gs_texrender_end(s->feedback_input);
+		input = gs_texrender_get_texture(s->feedback_input);
+	}
 	if (!input)
 		return false;
 
@@ -5386,7 +5392,7 @@ static bool graph_render_filter(struct hypershader_data *s, obs_source_t *target
     graph_bind_resolutions(s, width, height);
     if (output_composition_enabled(s)) {
         gs_texture_t *fx = output_render_effect(s, input, width, height, format);
-        if (!fx || !output_draw_composited(s, input, fx, width, height, format))
+        if (!fx || !output_draw_composited(s, target ? input : NULL, fx, width, height, format))
             return false;
     } else {
         while (gs_effect_loop(s->effect, "Draw"))
@@ -5509,7 +5515,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 			obs_source_skip_video_filter(s->context);
 			return;
 		}
-		if (!graph_render_filter(s, target, width, height, format)) {
+		if (!graph_render(s, target, width, height, format)) {
 			blog(LOG_WARNING, "[hypershader] Graph render failed; passing upstream source");
 			obs_source_skip_video_filter(s->context);
 		}
@@ -5855,6 +5861,15 @@ static void source_video_render(void *data, gs_effect_t *effect)
 	enum gs_color_format format =
 		(space == GS_CS_SRGB_16F || space == GS_CS_709_EXTENDED || space == GS_CS_709_SCRGB) ? GS_RGBA16F
 												     : GS_RGBA;
+
+	/* Use the same persistent scheduler as the filter lane. On rejection
+	 * a generator has no upstream image to pass through: draw nothing. */
+	if (s->graph.enabled) {
+		if (s->graph.valid && graph_budget_allows(s, width, height, format))
+			graph_render(s, NULL, width, height, format);
+		update_performance_stats(s, (double)(os_gettime_ns() - start_time) / 1000000.0);
+		return;
+	}
 
 	/* Cache values we need before unlocking for render operations */
 	bool has_persistence = (s->ep_history != NULL);

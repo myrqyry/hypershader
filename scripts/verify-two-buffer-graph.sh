@@ -97,6 +97,10 @@ run_case() {
             grep -E 'bad-.*effect|Invalid named pass graph|Shader load failed|Detail:' "$log" | tail -80
             return 1
         fi
+    elif [[ "$mode" == source-graph ]]; then
+        grep -q "Named pass graph enabled: 3 passes" "$log"
+    elif [[ "$mode" == source-graph-eight ]]; then
+        grep -q "Named pass graph enabled: 8 passes" "$log"
     elif [[ "$mode" == ordered-eight ]]; then
         grep -q "Named pass graph enabled: 8 passes" "$log"
     elif [[ "$mode" == named ]]; then
@@ -118,7 +122,10 @@ else
     run_case "$data/shaders/tests/two_buffer_graph.effect" default
     run_case "$data/shaders/tests/two_buffer_scaled_graph.effect" scaled
     run_case "$data/shaders/tests/ordered_pass_graph.effect" ordered
+    run_case "$data/shaders/tests/ordered_pass_graph.effect" source-graph
     run_case "$generated/ordered-eight.effect" ordered-eight
+    run_case "$generated/ordered-eight.effect" source-graph-eight
+    run_case "$data/shaders/tests/two_buffer_scaled_graph.effect" source-graph-ab
     run_case "$data/shaders/tests/two_buffer_invalid_graph.effect" invalid
     run_case "$data/shaders/tests/two_buffer_budget_graph.effect" budget
     run_case "$data/shaders/tests/two_buffer_channel_graph.effect" channels
