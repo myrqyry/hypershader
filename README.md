@@ -180,8 +180,8 @@ See [Play dock verification](docs/performance-dock.md).
 
 Current builder work includes:
 
-- native graph-to-effect generation,
-- a real WebGL2 preview path,
+- native graph-to-effect generation, including 1–8 independent persistent stage graphs with current/previous buffer input nodes, adjustable dimensions and precision, and versioned save/load,
+- a real WebGL2 preview path for supported single-pass nodes; persistent simulations require native OBS preview,
 - named colormaps,
 - deterministic graph serialization,
 - compile feedback from real libobs,

@@ -630,6 +630,9 @@ body {
    ============================================ */
 .panel-right {
     width: 300px;
+    min-height: 0;
+    flex-shrink: 0;
+    overflow-y: auto;
     background: var(--bg-secondary);
     border-left: 1px solid var(--border-color);
     display: flex;
@@ -730,7 +733,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    min-height: 160px;
 }
 
 .code-preview {
@@ -938,3 +941,19 @@ body {
     padding: 6px 8px;
     line-height: 1.45;
 }
+
+/* The selected stage uses the existing node canvas; each pass owns its graph. */
+.pass-controls { padding: 10px; display: grid; gap: 7px; font-size: 12px; }
+.pass-controls label { color: var(--text-secondary); }
+.pass-controls input, .pass-controls select, #nodePassReference {
+    min-width: 0; max-width: 100%; color: var(--text-primary);
+    background: var(--bg-primary); border: 1px solid var(--border-color);
+    border-radius: 5px; padding: 5px 7px; font: inherit;
+}
+.pass-controls > select, #nodePassReference { width: 100%; }
+.pass-row { display: flex; align-items: center; gap: 5px; }
+.pass-row > input, .pass-row > select { flex: 1; min-width: 0; }
+.pass-row > label { min-width: 65px; }
+.pass-row .btn { padding: 5px 8px; font-size: 11px; min-height: 26px; }
+#passSettings:not([hidden]) { display: grid; gap: 6px; }
+.pass-section { flex-shrink: 0; }

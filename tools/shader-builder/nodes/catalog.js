@@ -51,6 +51,36 @@ const NODE_CATALOG = {
                     outputs: [{ name: 'output', type: 'float4', label: 'Color' }]
                 },
                 {
+                    id: 'input_pass_current',
+                    name: 'Pass: Latest Result',
+                    category: 'Input',
+                    persistentOnly: true,
+                    inputs: [{ name: 'uv', type: 'float2', label: 'UV (default: pixel UV)' }],
+                    outputs: [{ name: 'output', type: 'float4', label: 'State' }]
+                },
+                {
+                    id: 'input_pass_previous',
+                    name: 'Pass: Previous Frame',
+                    category: 'Input',
+                    persistentOnly: true,
+                    inputs: [{ name: 'uv', type: 'float2', label: 'UV (default: pixel UV)' }],
+                    outputs: [{ name: 'output', type: 'float4', label: 'State' }]
+                },
+                {
+                    id: 'input_pass_resolution',
+                    name: 'Pass: Resolution',
+                    category: 'Input',
+                    persistentOnly: true,
+                    outputs: [{ name: 'output', type: 'float3', label: 'Size' }]
+                },
+                {
+                    id: 'input_graph_frame',
+                    name: 'Graph Frame',
+                    category: 'Input',
+                    persistentOnly: true,
+                    outputs: [{ name: 'output', type: 'float', label: 'Frame' }]
+                },
+                {
                     id: 'input_float',
                     name: 'Float',
                     category: 'Input',

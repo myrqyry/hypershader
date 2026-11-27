@@ -132,6 +132,40 @@ int main(int argc,char** argv) {
  obs_module_t* module=nullptr;
  int open=obs_open_module(&module,argv[1],argv[2]);
  if(open!=MODULE_SUCCESS||!obs_init_module(module)){obs_shutdown();return 1;}
+ if(mode=="source-builder"){
+  auto* settings=obs_data_create();
+  obs_data_set_string(settings,"shader_file",argv[3]);
+  obs_data_set_int(settings,"source_width",W);
+  obs_data_set_int(settings,"source_height",H);
+  auto* src=obs_source_create("hypershader_source","Builder persistent graph",settings,nullptr);
+  obs_data_release(settings);
+  bool ok=src!=nullptr;
+  if(src){
+   obs_source_inc_showing(src);
+   int first=-1,last=-1,valid=0,rising=0;
+   for(int i=0;i<48;i++){
+    auto frame=render(src);drain_ui();
+    size_t pos=4*(H/2*W+W/2);
+    if(frame.size()==W*H*4&&frame[pos+3]==255&&frame[pos]>0&&
+       abs(int(frame[pos])-int(frame[pos+1]))<=1&&abs(int(frame[pos])-int(frame[pos+2]))<=1){
+     int value=frame[pos];
+     if(first<0)first=value;
+     if(last>=0&&value>last)++rising;
+     last=value;++valid;
+    }
+    std::this_thread::sleep_for(40ms);
+   }
+   // Generated pass 0 integrates its own previous red by 0.01;
+   // pass 1 reads the same-frame result and adds 0.02; Draw samples pass 1.
+   // At the first valid frame the result should be roughly 0.03*255.
+   ok=valid>=35&&first>=6&&first<=15&&last>first+80&&rising>=30;
+   std::cout<<"TWO_BUFFER_BUILDER first="<<first<<" last="<<last<<" valid="<<valid<<" rising="<<rising<<" PASS="<<ok<<std::endl;
+   obs_source_dec_showing(src);obs_source_release(src);
+  }
+  drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<ok<<std::endl;
+  return ok?0:1;
+ }
  if(mode=="source-graph"||mode=="source-graph-eight"||mode=="source-graph-ab"){
   auto make=[&](const char* name){
    auto* settings=obs_data_create();

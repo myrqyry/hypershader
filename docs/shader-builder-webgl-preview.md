@@ -23,10 +23,46 @@ pixel identity and timing are not guaranteed to match OBS.
 - Preview shader compilation reports actual browser GLSL compiler errors.
   Successful preview compilation **does not establish** native OBS compatibility.
 - The test texture is deliberately labeled in the UI, and its sampled colors
-  are procedural. Live OBS inputs, multi-pass effects, audio uniforms and
+  are procedural. Live OBS inputs, multi-pass simulation preview, audio uniforms and
   precise rendering parity are not provided by this browser surface.
 - The Qt dock's editor is separate and unchanged. The browser-based graph
   builder is not automatically embedded in that dock.
+
+## Persistent render-pass authoring
+
+The standalone visual builder now has a **Render passes** section. Add one to
+eight named stages, select a stage to edit its own node graph, move it earlier
+or later, and choose a resolution divisor (1, 2, 4, 8) and storage format
+(source format or RGBA16F). The final Draw graph is always last and full-sized.
+Each stage must have a connected Final Output.
+
+The Input palette gains Pass: Latest Result, Pass: Previous Frame, Pass:
+Resolution, and Graph Frame nodes. Select the referenced buffer in the node
+properties. Optional connected UV coordinates can offset sampling; otherwise
+the current pixel UV is used. Latest Result means the current result of an
+earlier pass and the previous-frame result of this or a later pass. Previous
+Frame is explicit history regardless of order. A referenced pass cannot be
+removed until the references in other stages have been removed.
+
+Export generates the native uniform declarations and ordered techniques for
+the entire project. The saved .hsgraph format uses version 2 for persistent
+projects and preserves each stage's node graph and descriptors; ordinary
+single-pass projects still use version 1. Incomplete projects remain saveable,
+but invalid native export is blocked. WebGL2 does not simulate persistent
+passes; the editor explicitly directs the user to native OBS for preview.
+The native Qt code editor remains separate.
+
+For a quick feedback loop, add a pass called accumulate, wire its Previous
+Frame node into a Math Add node (B = 0.01), then into Final Output. In Draw,
+wire a Latest Result node referring to accumulate into Final Output. Export
+the .effect to the plugin's data/shaders directory so the standard library
+include resolves. Select it in a hypershader Source to see accumulation.
+See [native graph contract](TWO-BUFFER-GRAPH.md).
+
+Verify the actual generated effect with
+`scripts/verify-persistent-builder-obs.sh /path/to/hypershader.so`. The test
+builds a two-stage graph with the real generator and checks temporal output
+pixels in an isolated native OBS source.
 
 ## Traceable node code
 

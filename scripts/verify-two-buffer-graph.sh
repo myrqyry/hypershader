@@ -97,6 +97,8 @@ run_case() {
             grep -E 'bad-.*effect|Invalid named pass graph|Shader load failed|Detail:' "$log" | tail -80
             return 1
         fi
+    elif [[ "$mode" == source-builder ]]; then
+        grep -q "Named pass graph enabled: 2 passes" "$log"
     elif [[ "$mode" == source-graph ]]; then
         grep -q "Named pass graph enabled: 3 passes" "$log"
     elif [[ "$mode" == source-graph-eight ]]; then

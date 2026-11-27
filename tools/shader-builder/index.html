@@ -99,6 +99,39 @@
                 <p class="preview-note">WebGL2 preview uses a test texture, not a live OBS source. OBS shader validation is separate.</p>
             </div>
 
+            <div class="panel-section pass-section">
+                <div class="panel-header"><h3>Render passes</h3></div>
+                <div class="pass-controls">
+                    <label for="passSelection">Editing</label>
+                    <select id="passSelection"><option value="">Draw (final)</option></select>
+                    <div class="pass-row">
+                        <input id="passName" type="text" placeholder="New pass name" maxlength="24" spellcheck="false">
+                        <button class="btn btn-secondary" id="btnAddPass">Add</button>
+                    </div>
+                    <div id="passSettings" hidden>
+                        <div class="pass-row">
+                            <label for="passDivisor">Resolution</label>
+                            <select id="passDivisor">
+                                <option value="1">Full</option><option value="2">1/2</option>
+                                <option value="4">1/4</option><option value="8">1/8</option>
+                            </select>
+                        </div>
+                        <div class="pass-row">
+                            <label for="passFormat">Storage</label>
+                            <select id="passFormat">
+                                <option value="0">Source format</option><option value="1">RGBA16F</option>
+                            </select>
+                        </div>
+                        <div class="pass-row">
+                            <button class="btn btn-secondary" id="btnPassUp">Earlier</button>
+                            <button class="btn btn-secondary" id="btnPassDown">Later</button>
+                            <button class="btn btn-secondary" id="btnRemovePass">Remove</button>
+                        </div>
+                    </div>
+                    <p id="passStatus" class="preview-note">Add up to 8 persistent passes. Draw stays last.</p>
+                </div>
+            </div>
+
             <!-- Properties Section -->
             <div class="panel-section properties-section">
                 <div class="panel-header">

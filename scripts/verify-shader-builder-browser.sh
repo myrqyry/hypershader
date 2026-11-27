@@ -11,7 +11,7 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
     if curl -sf "http://127.0.0.1:$port/index.html" >/dev/null; then break; fi
     sleep 0.15
 done
-for route in preview-smoke.html editor-smoke.html curated-smoke.html; do
+for route in preview-smoke.html editor-smoke.html curated-smoke.html persistent-smoke.html; do
     echo "BROWSER TEST: $route"
     html="$(timeout 20s google-chrome --headless=new --no-sandbox --disable-dev-shm-usage         --disable-background-networking --enable-unsafe-swiftshader         --use-gl=angle --use-angle=swiftshader --virtual-time-budget=4000         --dump-dom "http://127.0.0.1:$port/tests/$route" 2>/dev/null)"
     result="$(printf '%s\n' "$html" | grep -o '<output id="result">[^<]*</output>' | head -1)"

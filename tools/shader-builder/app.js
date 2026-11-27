@@ -8,6 +8,10 @@ class ShaderBuilderApp {
         this.catalog = new NodeCatalog(NODE_CATALOG);
         this.graph = new ShaderGraph();
         this.codegen = new ShaderCodeGenerator();
+        this.passes = [];
+        this.activePass = '';
+        this.finalPassGraph = {version: 1, nodes: [], edges: []};
+        this.switchingPass = false;
         this.recoveryDraftId = null;
         this.recoverySaveTimer = null;
         
@@ -46,6 +50,7 @@ class ShaderBuilderApp {
         this.setupEventListeners();
         this.renderNodePalette();
         this.setupGraphListeners();
+        this.refreshPassControls();
         
         // Initialize AI Pilot
         if (window.ShaderAIPilot) {
@@ -85,7 +90,7 @@ class ShaderBuilderApp {
         this.recoverySaveTimer = setTimeout(() => {
             const payload = JSON.stringify({
                 name: this.elements.shaderName.value,
-                ...this.graph.serialize()
+                ...this.serializeProject()
             });
             window.shaderBridge.saveRecoveredDraft(this.recoveryDraftId, payload);
             this.recoverySaveTimer = null;
@@ -123,6 +128,29 @@ class ShaderBuilderApp {
     }
 
     setupEventListeners() {
+        const byId = id => document.getElementById(id);
+        byId('btnNew').addEventListener('click', () => this.newGraph());
+        byId('btnLoad').addEventListener('click', () => this.loadGraph());
+        byId('btnSave').addEventListener('click', () => this.saveGraph());
+        byId('btnExport').addEventListener('click', () => this.exportShader());
+        byId('btnCopyCode').addEventListener('click', () => this.copyCode());
+        byId('fileInput').addEventListener('change', e => this.handleFileLoad(e));
+        byId('btnAddPass').addEventListener('click', () => this.addPass());
+        byId('btnRemovePass').addEventListener('click', () => this.removePass());
+        byId('btnPassUp').addEventListener('click', () => this.movePass(-1));
+        byId('btnPassDown').addEventListener('click', () => this.movePass(1));
+        byId('passSelection').addEventListener('change', e => this.selectPass(e.target.value));
+        byId('passDivisor').addEventListener('change', e => this.setPassDescriptor('divisor', Number(e.target.value)));
+        byId('passFormat').addEventListener('change', e => this.setPassDescriptor('format', Number(e.target.value)));
+        this.elements.canvasContainer.addEventListener('mousedown', e => this.onCanvasMouseDown(e));
+        document.addEventListener('mousemove', e => this.onCanvasMouseMove(e));
+        document.addEventListener('mouseup', e => this.onCanvasMouseUp(e));
+        this.elements.canvasContainer.addEventListener('wheel', e => this.onCanvasWheel(e), {passive:false});
+        byId('btnZoomIn').addEventListener('click', () => this.zoom(1.2));
+        byId('btnZoomOut').addEventListener('click', () => this.zoom(0.8));
+        byId('btnFitView').addEventListener('click', () => this.fitView());
+        this.elements.nodeSearch.addEventListener('input', e => this.filterNodes(e.target.value));
+        document.addEventListener('keydown', e => this.onKeyDown(e));
         const refreshPreview = document.getElementById('btnRefreshPreview');
         if (refreshPreview) refreshPreview.addEventListener('click', () => this.updatePreview());
         const curateButton = document.getElementById('btnCurate');
@@ -138,14 +166,14 @@ class ShaderBuilderApp {
     }
 
     curateGraph() {
-        if (this.graph.nodes.size && !confirm('Replace this graph with a new curated composition? Save your current graph first if needed.')) return;
+        if (this.graph.nodes.size && !confirm('Replace the selected graph with a new curated composition? Other passes are retained.')) return;
         try {
             const candidate = makeCuratedGraph(this.catalog);
             // Build a valid candidate before replacing any existing user work.
             this.codegen.generate(candidate.graph);
             this.codegen.buildPreviewShader(candidate.graph);
-            this.clearRecoveryDraft();
-            this.graph.deserialize(candidate.graph.serialize(), this.catalog);
+            if (!this.passes.length) this.clearRecoveryDraft();
+            this.replaceCanvasGraph(candidate.graph.serialize());
             this.elements.shaderName.value = candidate.name;
             this.updateCode();
             this.fitView();
@@ -165,6 +193,8 @@ class ShaderBuilderApp {
 
     setupGraphListeners() {
         this.graph.on('nodeAdded', (node) => {
+            if (!this.switchingPass && node.type.startsWith('input_pass_') && !node.values.passId)
+                node.values.passId = this.activePass || this.passes[0]?.id || '';
             this.renderNode(node);
             this.updateCode();
         });
@@ -209,6 +239,7 @@ class ShaderBuilderApp {
             });
 
             for (const node of category.nodes) {
+                if (node.persistentOnly && !this.passes.length) continue;
                 const nodeEl = document.createElement('div');
                 nodeEl.className = 'node-item';
                 nodeEl.draggable = true;
@@ -698,6 +729,24 @@ class ShaderBuilderApp {
         }
 
         this.elements.propertiesContent.innerHTML = html;
+        if (node.type.startsWith('input_pass_')) {
+            const label = document.createElement('label');
+            label.className = 'property-label';
+            label.htmlFor = 'nodePassReference';
+            label.textContent = 'Buffer';
+            const select = document.createElement('select');
+            select.id = 'nodePassReference';
+            select.add(new Option('Choose a pass', ''));
+            for (const pass of this.passes) select.add(new Option(pass.id, pass.id));
+            select.value = node.values.passId || '';
+            select.addEventListener('change', () => this.graph.setNodeValue(node.id, 'passId', select.value));
+            const note = document.createElement('p');
+            note.className = 'preview-note';
+            note.textContent = node.type === 'input_pass_current'
+                ? 'Latest: earlier stages use current-frame data; this and later stages use history.'
+                : node.type === 'input_pass_previous' ? 'Always the previous successful frame.' : 'Actual buffer width, height and aspect.';
+            this.elements.propertiesContent.append(label, select, note);
+        }
 
         // Bind events
         this.elements.propertiesContent.querySelectorAll('.property-input, .property-slider').forEach(el => {
@@ -750,6 +799,7 @@ class ShaderBuilderApp {
             // Copy values
             Object.assign(newNode.values, node.values);
             this.graph.selectNode(newNode.id);
+            this.updateCode();
         }
     }
 
@@ -786,13 +836,181 @@ class ShaderBuilderApp {
         });
     }
 
+    cloneGraph(data) { return JSON.parse(JSON.stringify(data)); }
+
+    stashCanvasGraph() {
+        const snapshot = this.cloneGraph(this.graph.serialize());
+        if (this.activePass) this.passes.find(p => p.id === this.activePass).graph = snapshot;
+        else this.finalPassGraph = snapshot;
+    }
+
+    replaceCanvasGraph(data) {
+        this.switchingPass = true;
+        try { this.graph.deserialize(this.cloneGraph(data), this.catalog); }
+        finally { this.switchingPass = false; }
+        this.updateSelection();
+    }
+
+    refreshPassControls() {
+        const select = document.getElementById('passSelection');
+        select.replaceChildren(new Option('Draw (final)', ''));
+        for (const [index, pass] of this.passes.entries())
+            select.add(new Option((index + 1) + ' · ' + pass.id, pass.id), select.options[index] || null);
+        select.value = this.activePass;
+        const index = this.passes.findIndex(p => p.id === this.activePass);
+        const pass = this.passes[index];
+        document.getElementById('passSettings').hidden = !pass;
+        document.getElementById('btnAddPass').disabled = this.passes.length >= 8;
+        document.getElementById('btnPassUp').disabled = index <= 0;
+        document.getElementById('btnPassDown').disabled = index < 0 || index === this.passes.length - 1;
+        if (pass) {
+            document.getElementById('passDivisor').value = String(pass.divisor);
+            document.getElementById('passFormat').value = String(pass.format);
+        }
+        document.getElementById('passStatus').textContent =
+            this.passes.length + '/8 persistent passes · Draw stays last';
+    }
+
+    selectPass(id) {
+        if (id === this.activePass || (id && !this.passes.some(p => p.id === id))) return;
+        this.stashCanvasGraph();
+        this.activePass = id;
+        this.replaceCanvasGraph(id ? this.passes.find(p => p.id === id).graph : this.finalPassGraph);
+        this.refreshPassControls();
+        this.updateCode();
+        this.fitView();
+    }
+
+    addPass() {
+        if (this.passes.length >= 8) return;
+        const input = document.getElementById('passName');
+        let id = input.value.trim();
+        if (!id) {
+            let index = 1;
+            while (this.passes.some(p => p.id === 'buffer' + index)) index++;
+            id = 'buffer' + index;
+        }
+        if (!ShaderCodeGenerator.validPassId(id) || this.passes.some(p => p.id === id)) {
+            this.showToast('Use a unique lowercase pass identifier (letters, digits, underscore; max 24).', 'error');
+            return;
+        }
+        const graph = new ShaderGraph();
+        const source = graph.addNode('input_texture', {x:80,y:120}, this.catalog);
+        const out = graph.addNode('output_color', {x:330,y:120}, this.catalog);
+        graph.connect(source.id, 'output', out.id, 'color');
+        this.passes.push({id, divisor:1, format:1, graph: graph.serialize()});
+        input.value = '';
+        this.renderNodePalette();
+        this.selectPass(id);
+    }
+
+    removePass() {
+        if (!this.activePass) return;
+        this.stashCanvasGraph();
+        const id = this.activePass;
+        const otherGraphs = [this.finalPassGraph, ...this.passes.filter(p => p.id !== id).map(p => p.graph)];
+        if (otherGraphs.some(g => g.nodes.some(n => n.type.startsWith('input_pass_') && n.values?.passId === id))) {
+            this.showToast('Remove references to ' + id + ' in other stages first.', 'error');
+            return;
+        }
+        // A user explicitly chooses Remove; the other stage graphs are unchanged.
+        if (!confirm('Remove pass ' + id + ' and its graph?')) return;
+        this.passes = this.passes.filter(p => p.id !== id);
+        this.activePass = '';
+        this.replaceCanvasGraph(this.finalPassGraph);
+        this.renderNodePalette();
+        this.refreshPassControls();
+        this.updateCode();
+        this.fitView();
+    }
+
+    movePass(delta) {
+        const index = this.passes.findIndex(p => p.id === this.activePass);
+        const next = index + delta;
+        if (index < 0 || next < 0 || next >= this.passes.length) return;
+        [this.passes[index], this.passes[next]] = [this.passes[next], this.passes[index]];
+        this.refreshPassControls();
+        this.updateCode();
+    }
+
+    setPassDescriptor(key, value) {
+        const pass = this.passes.find(p => p.id === this.activePass);
+        if (!pass || !(key === 'divisor' ? [1,2,4,8] : key === 'format' ? [0,1] : []).includes(value)) return;
+        pass[key] = value;
+        this.updateCode();
+    }
+
+    serializeProject() {
+        if (!this.passes.length) return this.graph.serialize();
+        this.stashCanvasGraph();
+        return this.cloneGraph({version:2, activePass:this.activePass, passes:this.passes, final:this.finalPassGraph});
+    }
+
+    loadProject(data) {
+        // Validate a candidate before replacing the active draft; incomplete
+        // graphs are allowed to be saved but cannot be exported.
+        const validGraph = g => {
+            if (!g || g.version !== 1 || !Array.isArray(g.nodes) || !Array.isArray(g.edges))
+                throw new Error('Invalid stage graph');
+            const ids = new Set();
+            for (const n of g.nodes) {
+                if (!n || !/^node_[0-9]+$/.test(n.id) || ids.has(n.id) || !this.catalog.findNode(n.type) ||
+                    !n.position || !Number.isFinite(n.position.x) || !Number.isFinite(n.position.y))
+                    throw new Error('Invalid stage node');
+                ids.add(n.id);
+            }
+            for (const e of g.edges) if (!e || !ids.has(e.from?.nodeId) || !ids.has(e.to?.nodeId))
+                throw new Error('Invalid stage edge');
+            return this.cloneGraph(g);
+        };
+        let passes = [], final, active = '';
+        if (data.version === 2) {
+            if (!Array.isArray(data.passes) || data.passes.length < 1 || data.passes.length > 8)
+                throw new Error('Invalid persistent stage count');
+            const ids = new Set();
+            passes = data.passes.map(p => {
+                if (!p || !ShaderCodeGenerator.validPassId(p.id) || ids.has(p.id) ||
+                    ![1,2,4,8].includes(p.divisor) || ![0,1].includes(p.format))
+                    throw new Error('Invalid or duplicate pass descriptor');
+                ids.add(p.id);
+                return {id:p.id, divisor:p.divisor, format:p.format, graph:validGraph(p.graph)};
+            });
+            final = validGraph(data.final);
+            active = ids.has(data.activePass) ? data.activePass : '';
+        } else {
+            final = validGraph(data);
+        }
+        this.passes = passes; this.finalPassGraph = final; this.activePass = active;
+        this.replaceCanvasGraph(active ? passes.find(p => p.id === active).graph : final);
+        this.renderNodePalette();
+        this.refreshPassControls();
+        this.updateCode();
+        this.fitView();
+    }
+
+    generateProjectCode() {
+        if (!this.passes.length) return this.codegen.generate(this.graph);
+        const materialize = snapshot => {
+            const g = new ShaderGraph();
+            g.deserialize(this.cloneGraph(snapshot), this.catalog);
+            return g;
+        };
+        return this.codegen.generatePersistent(this.passes.map(p => ({
+            ...p, graph:p.id === this.activePass ? this.graph : materialize(p.graph)
+        })), this.activePass ? materialize(this.finalPassGraph) : this.graph);
+    }
+
     // ============================================
     // Code Generation
     // ============================================
     updateCode() {
-        const code = this.codegen.generate(this.graph);
+        if (this.switchingPass) return;
+        let code, valid = true;
+        try { code = this.generateProjectCode(); }
+        catch (error) { code = '// ' + error.message; valid = false; }
         this.elements.codePreview.querySelector('code').textContent = code;
-        
+        document.getElementById('btnExport').disabled = !valid;
+        document.getElementById('btnCopyCode').disabled = !valid;
         this.updatePreview();
         this.scheduleRecoverySave();
     }
@@ -806,6 +1024,11 @@ class ShaderBuilderApp {
     updatePreview() {
         if (!this.previewRenderer) {
             this.showPreviewMessage(this.previewError || 'WebGL2 preview unavailable');
+            return;
+        }
+        if (this.passes.length) {
+            this.previewRenderer.clear();
+            this.showPreviewMessage('Persistent simulation preview requires native OBS. Export the complete graph to render it.');
             return;
         }
         if (!this.graph.getOutputNode()) {
@@ -824,7 +1047,7 @@ class ShaderBuilderApp {
     }
 
     copyCode() {
-        const code = this.codegen.generate(this.graph);
+        let code; try { code = this.generateProjectCode(); } catch (error) { this.showToast(error.message, "error"); return; }
         navigator.clipboard.writeText(code).then(() => {
             this.showToast('Code copied to clipboard!', 'success');
         });
@@ -834,11 +1057,14 @@ class ShaderBuilderApp {
     // File Operations
     // ============================================
     newGraph() {
-        if (this.graph.nodes.size > 0) {
+        if (this.graph.nodes.size > 0 || this.passes.length) {
             if (!confirm('Create new graph? Unsaved changes will be lost.')) return;
         }
         this.clearRecoveryDraft();
-        this.graph.clear();
+        this.passes = []; this.activePass = ''; this.finalPassGraph = {version:1,nodes:[],edges:[]};
+        this.replaceCanvasGraph(this.finalPassGraph);
+        this.renderNodePalette();
+        this.refreshPassControls();
         this.elements.shaderName.value = 'Untitled Shader';
         this.updateCode();
         this.fitView();
@@ -848,7 +1074,7 @@ class ShaderBuilderApp {
     saveGraph() {
         const data = {
             name: this.elements.shaderName.value,
-            ...this.graph.serialize()
+            ...this.serializeProject()
         };
         const json = JSON.stringify(data, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
@@ -875,8 +1101,8 @@ class ShaderBuilderApp {
         reader.onload = (evt) => {
             try {
                 const data = JSON.parse(evt.target.result);
+                this.loadProject(data);
                 this.clearRecoveryDraft();
-                this.graph.deserialize(data, this.catalog);
                 this.elements.shaderName.value = data.name || 'Loaded Shader';
                 this.updateCode();
                 this.fitView();
@@ -890,7 +1116,7 @@ class ShaderBuilderApp {
     }
 
     exportShader() {
-        const code = this.codegen.generate(this.graph);
+        let code; try { code = this.generateProjectCode(); } catch (error) { this.showToast(error.message, "error"); return; }
         const blob = new Blob([code], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         
@@ -909,7 +1135,7 @@ class ShaderBuilderApp {
     onKeyDown(e) {
         // Delete selected
         if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (document.activeElement.tagName === 'INPUT') return;
+            if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
             for (const nodeId of this.graph.selectedNodes) {
                 this.graph.removeNode(nodeId);
             }
@@ -1041,8 +1267,7 @@ function initQtWebChannel() {
                             const data = JSON.parse(payload);
                             window.app.showToast('Recovered shader draft available', 'info');
                             if (confirm('A recovered shader draft was found. Restore it?')) {
-                                window.app.graph.clear();
-                                window.app.graph.deserialize(data, window.app.catalog);
+                                window.app.loadProject(data);
                                 window.app.elements.shaderName.value = data.name || 'Recovered Shader';
                                 window.app.recoveryDraftId = draftId;
                                 window.app.updateCode();
@@ -1083,7 +1308,7 @@ function initQtWebChannel() {
  */
 ShaderBuilderApp.prototype.exportShaderNative = function() {
     if (window.shaderBridge) {
-        const code = this.codegen.generate(this.graph);
+        let code; try { code = this.generateProjectCode(); } catch (error) { this.showToast(error.message, "error"); return; }
         const name = this.elements.shaderName.value || 'custom_shader';
         
         // Use native bridge to save directly to OBS data directory

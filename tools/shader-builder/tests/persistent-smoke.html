@@ -1,0 +1,70 @@
+<!doctype html><html><body><output id="result">PENDING</output>
+<iframe src="../index.html" width="1250" height="850"></iframe>
+<script>
+const frame=document.querySelector('iframe');
+frame.onload=()=>setTimeout(()=>{
+ const result=document.getElementById('result');
+ try {
+  const w=frame.contentWindow, d=w.document, a=w.app;
+  const need=(ok,msg)=>{if(!ok)throw Error(msg)};
+  const el=id=>{const e=d.getElementById(id);need(e,'missing '+id);return e};
+  const set=(id,value)=>{const e=el(id);e.value=value;e.dispatchEvent(new w.Event('change',{bubbles:true}));};
+  const select=id=>set('passSelection',id);
+  el('passName').value='accumulate';el('btnAddPass').click();
+  need(el('passSelection').value==='accumulate','new pass not selected');
+  set('passDivisor','2');set('passFormat','1');
+  a.graph.clear();
+  const prior=a.graph.addNode('input_pass_previous',{x:0,y:0},a.catalog);
+  const add=a.graph.addNode('math_add',{x:150,y:0},a.catalog);
+  const out=a.graph.addNode('output_color',{x:300,y:0},a.catalog);
+  a.graph.selectNode(prior.id);
+  set('nodePassReference','accumulate');
+  a.graph.setNodeValue(add.id,'b',0.01);
+  a.graph.connect(prior.id,'output',add.id,'a');a.graph.connect(add.id,'result',out.id,'color');
+  el('passName').value='resolve';el('btnAddPass').click();
+  a.graph.clear();
+  const cur=a.graph.addNode('input_pass_current',{x:0,y:0},a.catalog);
+  const output=a.graph.addNode('output_color',{x:300,y:0},a.catalog);
+  a.graph.selectNode(cur.id);set('nodePassReference','accumulate');
+  a.graph.connect(cur.id,'output',output.id,'color');
+  select('');
+  a.graph.clear();
+  const last=a.graph.addNode('input_pass_current',{x:0,y:0},a.catalog);
+  const draw=a.graph.addNode('output_color',{x:300,y:0},a.catalog);
+  a.graph.selectNode(last.id);set('nodePassReference','resolve');
+  a.graph.connect(last.id,'output',draw.id,'color');
+  const code=a.generateProjectCode();
+  need(code.includes('hs_pass_accumulate_previous.Sample'),'missing prior sample');
+  need(code.includes('hs_pass_resolve.Sample'),'missing current sample');
+  need(code.includes('hs_pass_accumulate_divisor = 2'),'missing pass metadata');
+  need(!el('btnExport').disabled,'valid graph export disabled');
+  need(a.elements.previewOverlay.textContent.includes('OBS') && !a.previewRenderer.program,'preview must not fake persistence');
+  const snapshot=JSON.parse(JSON.stringify(a.serializeProject()));
+  select('resolve');el('btnPassUp').click();
+  need(a.generateProjectCode().includes('hs_pass_resolve_order = 0'),'reorder not reflected');
+  select('accumulate');el('btnRemovePass').click();
+  need(a.serializeProject().passes.length===2,'referenced pass was removed');
+  a.loadProject(snapshot);
+  need(a.generateProjectCode()===code,'project round-trip changed native code');
+  select('accumulate');
+  need(a.graph.nodes.size===3,'switch lost pass graph');
+  select('');
+  a.graph.removeNode(last.id);
+  need(el('btnExport').disabled,'incomplete graph must block export');
+  a.loadProject(snapshot);
+  need(!el('btnExport').disabled,'valid reload did not restore export');
+  const saved=JSON.stringify(a.serializeProject());
+  const broken=JSON.parse(saved);broken.passes[1].id=broken.passes[0].id;
+  let rejected=false;
+  try {a.loadProject(broken);}catch(e){rejected=true;}
+  need(rejected && JSON.stringify(a.serializeProject())===saved,'invalid load replaced the draft');
+  for(let i=0;i<6;i++){el('passName').value='extra'+i;el('btnAddPass').click();}
+  need(el('btnAddPass').disabled && a.passes.length===8,'max pass count not enforced');
+  a.loadProject(snapshot);
+  need(a.generateProjectCode()===code,'draft did not restore after max-count check');
+  const panel=el('panelRight');
+  need(panel.scrollHeight>=panel.clientHeight && w.getComputedStyle(panel).overflowY==='auto','pass controls must remain scrollable');
+  result.textContent='PASS: persistent pass selection, metadata, reorder, reference protection, serialization and export gating';
+ }catch(e){result.textContent='FAIL: '+(e.stack||e);}
+},1200);
+</script></body></html>
