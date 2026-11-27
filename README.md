@@ -370,8 +370,10 @@ structured Linux package. Close OBS before using it. For example:
 ```
 
 The installer stages CMake installations before copying, preserves nested
-resources and runtime libraries, and checks that the OBS 33 root module
-matches the legacy module. It does not build the plugin, remove old local
+resources and runtime libraries, copies the license when supplied, and checks
+that dual-layout modules match. A modern-only OBS 33 package installs only
+the root module; move aside a previous legacy installation before using it.
+It does not build the plugin, remove old local
 presets, or turn a development checkout into a redistributable package.
 
 ### Stage a public-alpha candidate

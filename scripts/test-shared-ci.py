@@ -4,6 +4,8 @@ from pathlib import Path
 import tempfile
 import unittest
 import shutil
+import subprocess
+import sys
 
 spec = importlib.util.spec_from_file_location("driver", Path(__file__).resolve().parents[1] / ".github/scripts/ci-driver.py")
 driver = importlib.util.module_from_spec(spec)
@@ -27,6 +29,14 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(module.read_bytes(), b"module fixture")
                 self.assertEqual((prefix / "LICENSE").read_bytes(), (driver.ROOT / "LICENSE").read_bytes())
                 self.assertTrue((prefix / "data/shaders/root/template.effect").is_file())
+                if version == "33.0.3" and sys.platform.startswith("linux"):
+                    dest = root / "installed"
+                    result = subprocess.run(["bash", str(driver.ROOT / "install.sh"), str(prefix), str(dest)], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((dest / "hypershader.so").read_bytes(), module.read_bytes())
+                    self.assertFalse((dest / "bin/64bit/hypershader.so").exists())
+                    self.assertEqual((dest / "LICENSE").read_bytes(), (prefix / "LICENSE").read_bytes())
+                    driver.verify_assets(dest / "data")
                 (data / "unexpected").write_text("unexpected")
                 with self.assertRaises(RuntimeError):
                     driver.prepare_payload(stage, root / "bad", "linux-x86_64", version)

@@ -62,6 +62,19 @@ class InstallerTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.destination.exists())
 
+    def test_modern_only_preserves_dependencies_and_rejects_legacy_upgrade(self):
+        (self.payload / "bin/64bit/hypershader.so").rename(self.payload / "hypershader.so")
+        self.assertEqual(self.install(self.payload).returncode, 0)
+        self.assert_payload()
+        self.assertFalse((self.destination / "bin/64bit/hypershader.so").exists())
+        old = self.destination / "bin/64bit/hypershader.so"
+        old.write_bytes(b"old")
+        (self.payload / "hypershader.so").write_bytes(b"new")
+        result = self.install(self.payload)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(old.read_bytes(), b"old")
+        self.assertEqual((self.destination / "hypershader.so").read_bytes(), b"module")
+
     def test_mismatched_modules_fail_before_install(self):
         (self.payload / "hypershader.so").write_bytes(b"stale")
         result = self.install(self.payload)

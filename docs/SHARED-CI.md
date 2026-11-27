@@ -34,3 +34,13 @@ Local: fresh Release-like build with installed OBS 32.2.0 SDK and
 optional backends disabled. All 37 native render contracts passed on
 isolated OpenGL; package-layout fixture tests passed. The private
 repository stays private. Hosted qualification is pending.
+
+## PR #1 follow-up
+
+Run 45914621730 was blocked before the planning job started by the
+GitHub Actions budget; there is no hosted build or artifact evidence.
+Codex correctly found that the Linux installer rejected the generated
+modern-only OBS33 package. The installer now accepts that layout without
+creating an older-ABI module copy, preserves dependencies and license,
+and refuses to overwrite an installation containing a legacy module.
+The package-to-installer regression uses the real adapter and installer.
