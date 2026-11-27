@@ -34,7 +34,7 @@ int main(int argc,char **argv) {
         if(!author.open(QIODevice::WriteOnly | QIODevice::Truncate))return 6;
         author.write("// @label \"Soft Portrait Lighting\"\n");
     }
-    const auto found=discoverHyperShaderFiles(shaders);
+    const auto found=discover_hypershader_files(shaders);
     bool loose=false,library=false,applied=false,quarantined=false,txt=false,
          namedSource=false,namedTransition=false,namedFilter=false;
     for(const auto &e:found) {
@@ -51,9 +51,9 @@ int main(int argc,char **argv) {
         quarantined|=filename=="unsafe.frag"&&e.category=="Quarantined";
         txt|=filename=="notes.txt";
     }
-    const auto empty=discoverHyperShaderFiles(QString());
-    const auto realSource=discoverHyperShaderFiles(QString::fromLocal8Bit(argv[1]));
-    const auto installed=discoverHyperShaderFiles(QString::fromLocal8Bit(argv[2]));
+    const auto empty=discover_hypershader_files(QString());
+    const auto realSource=discover_hypershader_files(QString::fromLocal8Bit(argv[1]));
+    const auto installed=discover_hypershader_files(QString::fromLocal8Bit(argv[2]));
     bool sourcePFrame=false,installedPFrame=false;
     for(const auto &e:realSource)
         sourcePFrame|=e.category=="Library" &&

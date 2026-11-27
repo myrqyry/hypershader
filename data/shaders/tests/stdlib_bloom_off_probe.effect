@@ -1,5 +1,5 @@
-// Native HyperShader import exercise for Karis-weighted bloom disabled bypass.
-// This must compile and render through the actual OBS HyperShader loader.
+// Native hypershader import exercise for Karis-weighted bloom disabled bypass.
+// This must compile and render through the actual OBS hypershader loader.
 #include "../../stdlib/hypershader_standard.glsl"
 #include "../../stdlib/postprocess_3d.glsl"
 

@@ -1,7 +1,7 @@
 # Persistent render graphs — native OBS effect runtime
 
 ## Available now
-Opt-in fixed three-stage sequence, executed by the production HyperShaderFX filter:
+Opt-in fixed three-stage sequence, executed by the production hypershader filter:
 1. Capture the unfiltered upstream image.
 2. Run technique BufferA, with its own two ping-pong history targets.
 3. Run technique BufferB, sampling the **current** BufferA and its own previous-frame state.
@@ -212,11 +212,11 @@ scientifically validated physical simulation.
 ## Native verification
 Run from repository root:
 
-    cmake --build build_x86_64 --target hyperShaderFX --parallel 4
+    cmake --build build_x86_64 --target hypershader --parallel 4
     scripts/verify-two-buffer-graph.sh
     scripts/verify-two-buffer-example.sh
 
-The graph test opens the actual HyperShaderFX module, renders moving
+The graph test opens the actual hypershader module, renders moving
 frames through libobs and Mesa OpenGL, and checks both independently
 evolving histories, per-instance isolation, and observable final
 output from a user parameter. The example test separately verifies

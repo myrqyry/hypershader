@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ensure native audio uniforms are owned by HyperShader, not inherited dialect aliases."""
+"""Ensure native audio uniforms are owned by hypershader, not inherited dialect aliases."""
 from pathlib import Path
 import re
 

@@ -1,5 +1,5 @@
 /**
- * Lightweight WebGL2 preview for the standalone HyperShaderFX graph editor.
+ * Lightweight WebGL2 preview for the standalone hypershader graph editor.
  * Only buildPreviewShader()'s explicit browser-supported subset runs here.
  * This is not OBS's .effect compiler or its GPU runtime.
  */

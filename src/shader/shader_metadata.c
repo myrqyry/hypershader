@@ -44,7 +44,7 @@ static char *parse_quoted_string_safe(const char *start, size_t max_len)
 		return NULL;
 
 	if (len > max_len) {
-		blog(LOG_WARNING, "[HyperShader] String too long (%zu > %zu), truncating", len, max_len);
+		blog(LOG_WARNING, "[hypershader] String too long (%zu > %zu), truncating", len, max_len);
 		len = max_len;
 	}
 
@@ -251,9 +251,9 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 	if (path[0] != '/' && path[0] != '\\') {
 		resolved_path = hs_resolve_data_file(path);
 		if (!resolved_path) {
-			blog(LOG_WARNING, "[HyperShader] ┌─ Metadata parse skipped");
-			blog(LOG_WARNING, "[HyperShader] ├─ Path : %s", path);
-			blog(LOG_WARNING, "[HyperShader] └─ Action: could not resolve data path");
+			blog(LOG_WARNING, "[hypershader] ┌─ Metadata parse skipped");
+			blog(LOG_WARNING, "[hypershader] ├─ Path : %s", path);
+			blog(LOG_WARNING, "[hypershader] └─ Action: could not resolve data path");
 			return;
 		}
 		path = resolved_path;
@@ -267,7 +267,7 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 
 	for (size_t i = 0; i < *guard_count; i++) {
 		if (include_guard[i] && strcmp(include_guard[i], canonical_path) == 0) {
-			blog(LOG_DEBUG, "[HyperShader] Skipping already included file: %s", canonical_path);
+			blog(LOG_DEBUG, "[hypershader] Skipping already included file: %s", canonical_path);
 			if (resolved_path)
 				bfree(resolved_path);
 			return;
@@ -278,20 +278,20 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 		include_guard[*guard_count] = bstrdup(canonical_path);
 		(*guard_count)++;
 	} else {
-		blog(LOG_WARNING, "[HyperShader] ┌─ Metadata parse skipped");
-		blog(LOG_WARNING, "[HyperShader] ├─ File : %s", canonical_path);
-		blog(LOG_WARNING, "[HyperShader] └─ Action: include guard limit reached");
+		blog(LOG_WARNING, "[hypershader] ┌─ Metadata parse skipped");
+		blog(LOG_WARNING, "[hypershader] ├─ File : %s", canonical_path);
+		blog(LOG_WARNING, "[hypershader] └─ Action: include guard limit reached");
 		if (resolved_path)
 			bfree(resolved_path);
 		return;
 	}
 
-	blog(LOG_DEBUG, "[HyperShader] Parsing metadata from: %s", canonical_path);
+	blog(LOG_DEBUG, "[hypershader] Parsing metadata from: %s", canonical_path);
 	FILE *f = fopen(canonical_path, "r");
 	if (!f) {
-		blog(LOG_WARNING, "[HyperShader] ┌─ Metadata parse failed");
-		blog(LOG_WARNING, "[HyperShader] ├─ File : %s", canonical_path);
-		blog(LOG_WARNING, "[HyperShader] └─ Action: file unreadable");
+		blog(LOG_WARNING, "[hypershader] ┌─ Metadata parse failed");
+		blog(LOG_WARNING, "[hypershader] ├─ File : %s", canonical_path);
+		blog(LOG_WARNING, "[hypershader] └─ Action: file unreadable");
 		if (resolved_path)
 			bfree(resolved_path);
 		return;
@@ -385,14 +385,14 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 			continue;
 
 		if (namelen > META_MAX_NAME_LEN) {
-			blog(LOG_WARNING, "[HyperShader] Uniform name too long (%zu > %d), skipping", namelen,
+			blog(LOG_WARNING, "[hypershader] Uniform name too long (%zu > %d), skipping", namelen,
 			     META_MAX_NAME_LEN);
 			continue;
 		}
 
 		char *name = bmalloc(namelen + 1);
 		if (!name) {
-			blog(LOG_ERROR, "[HyperShader] Failed to allocate uniform name");
+			blog(LOG_ERROR, "[hypershader] Failed to allocate uniform name");
 			continue;
 		}
 		strncpy(name, name_start, namelen);
@@ -531,7 +531,7 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 			}
 			c++;
 		}
-		blog(LOG_DEBUG, "[HyperShader] Parsed metadata: name='%s' label='%s' has_default=%d def='%s'", m.name,
+		blog(LOG_DEBUG, "[hypershader] Parsed metadata: name='%s' label='%s' has_default=%d def='%s'", m.name,
 		     m.label ? m.label : "(null)", m.has_default, m.default_val_str ? m.default_val_str : "(scalar)");
 
 		if (da->num + 1 > da->capacity) {
@@ -544,7 +544,7 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 		last_comment[0] = '\0';
 	}
 	fclose(f);
-	blog(LOG_DEBUG, "[HyperShader] Finished parsing %s: found %zu new entries", canonical_path,
+	blog(LOG_DEBUG, "[hypershader] Finished parsing %s: found %zu new entries", canonical_path,
 	     da->num - initial_count);
 	if (resolved_path)
 		bfree(resolved_path);

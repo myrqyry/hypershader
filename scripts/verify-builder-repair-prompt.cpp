@@ -7,7 +7,7 @@ int main() {
     const QString prompt = makeShaderRepairPrompt(code, error);
     assert(prompt.contains(code));
     assert(prompt.contains(error));
-    assert(prompt.contains("native HyperShaderFX"));
+    assert(prompt.contains("native hypershader"));
     assert(prompt.contains("complete corrected .effect"));
     assert(!prompt.contains("```"));
     assert(makeShaderRepairPrompt(QString(), error).isEmpty());

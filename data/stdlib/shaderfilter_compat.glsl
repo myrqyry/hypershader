@@ -1,13 +1,13 @@
 // ===================================================================
 // shaderfilter_compat.glsl
 // Compatibility layer for obs-shaderfilter (exeldro) shaders
-// Include this to use shaders written for obs-shaderfilter in HyperShader
+// Include this to use shaders written for obs-shaderfilter in hypershader
 // ===================================================================
 
 #ifndef SHADERFILTER_COMPAT_GLSL
 #define SHADERFILTER_COMPAT_GLSL
 
-// Build this compatibility adapter on the native HyperShader runtime.
+// Build this compatibility adapter on the native hypershader runtime.
 #include "hypershader_standard.glsl"
 
 // === TIME UNIFORMS ===

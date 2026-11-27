@@ -1,4 +1,4 @@
-// HyperShader Standard Library - 3D Particle Systems
+// hypershader Standard Library - 3D Particle Systems
 // Advanced particle simulation with 3D physics, forces, and rendering
 
 #ifndef _STDLIB_PARTICLES_3D_H_

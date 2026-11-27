@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Retro & Analog Video
+// hypershader Standard Library - Retro & Analog Video
 // Contains advanced functions for CRT, NTSC, and Scanline simulation.
 
 #ifndef _STDLIB_RETRO_H_

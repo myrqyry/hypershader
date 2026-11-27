@@ -1,6 +1,6 @@
 #pragma once
 /**
- * HyperShaderFX - Shader Builder Bridge
+ * hypershader - Shader Builder Bridge
  * JavaScript bridge for communication between web builder and C++ plugin
  */
 

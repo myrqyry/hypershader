@@ -67,7 +67,7 @@ def inspect_effect(path, probe, module, data, logs):
                str(probe), str(module), str(data), str(path), "audit"]
     env = dict(os.environ)
     env["MESA_SHADER_CACHE_DISABLE"] = "true"
-    env["LD_LIBRARY_PATH"] = str(Path.home()/".config/obs-studio/plugins/hyperShaderFX/bin/64bit") + \
+    env["LD_LIBRARY_PATH"] = str(Path.home()/".config/obs-studio/plugins/hypershader/bin/64bit") + \
                              ":" + env.get("LD_LIBRARY_PATH", "")
     begin = time.monotonic()
     try:
@@ -108,9 +108,9 @@ def inspect_effect(path, probe, module, data, logs):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument("--module", type=Path, default=ROOT/"build_x86_64/hyperShaderFX.so")
+    parser.add_argument("--module", type=Path, default=ROOT/"build_x86_64/hypershader.so")
     parser.add_argument("--data", type=Path, default=ROOT/"data")
-    parser.add_argument("--output", type=Path, default=Path("/tmp/hyperShader-library-quality.json"))
+    parser.add_argument("--output", type=Path, default=Path("/tmp/hypershader-library-quality.json"))
     parser.add_argument("--jobs", type=int, default=2)
     args=parser.parse_args()
     files=sorted((args.data/"shaders/root").glob("*.effect"))

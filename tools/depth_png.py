@@ -139,7 +139,7 @@ def _unpack_depth(raw: bytes, width: int, height: int, encoding: int) -> list[fl
 
 def embed(png: bytes, depth: list[float], width: int, height: int,
           *, encoding: str = "r16", far_plane: float = 1000.,
-          game: str = "HyperShaderFX", timestamp: int | None = None) -> bytes:
+          game: str = "hypershader", timestamp: int | None = None) -> bytes:
     """Add or replace a ShaderLab-compatible depth chunk without changing IDAT."""
     parts = chunks(png)
     count = _check_dims(width, height)

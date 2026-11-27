@@ -2,7 +2,7 @@
 # Real standalone OBS source + feedback-history reuse, isolated under Xvfb.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 work="$(mktemp -d /tmp/hyper-source-feedback-XXXXXX)"
 trap 'rm -rf "$work"' EXIT

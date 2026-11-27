@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Math Utilities
+// hypershader Standard Library - Math Utilities
 
 #ifndef _STDLIB_MATH_H_
 #define _STDLIB_MATH_H_

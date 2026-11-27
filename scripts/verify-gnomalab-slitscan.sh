@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 shader="$data/shaders/root/filter.gnomalab_slitscan.effect"
 test -f "$shader" || { echo 'FAIL: native Gn Slit-scan shader missing' >&2; exit 1; }
-work="$(mktemp -d /tmp/hsfx-isf-slit-XXXXXX)"
+work="$(mktemp -d /tmp/hs-isf-slit-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 g++ -std=c++17 -O2 -I"$(pkg-config --variable=includedir libobs)/obs" \
   "$repo/scripts/verify-creative-graph-shaders.cpp" -o "$work/probe" $(pkg-config --libs libobs)
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 export MESA_SHADER_CACHE_DISABLE=true
 mkdir -p "$work/home"
 (cd "$work" && HOME="$work/home" XDG_CONFIG_HOME="$work/home" \

@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Color Utilities
+// hypershader Standard Library - Color Utilities
 
 #ifndef _STDLIB_COLORS_H_
 #define _STDLIB_COLORS_H_

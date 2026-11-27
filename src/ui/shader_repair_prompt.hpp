@@ -11,7 +11,7 @@ inline QString makeShaderRepairPrompt(const QString &code, const QString &diagno
 	if (diagnostics.size() > 6000)
 		errors += QStringLiteral("\n[compiler diagnostics truncated]");
 	return QStringLiteral(
-		"Repair this native HyperShaderFX OBS effect using the compiler diagnostics below. "
+		"Repair this native hypershader OBS effect using the compiler diagnostics below. "
 		"Return the complete corrected .effect source, not a patch or explanation. "
 		"Preserve the intended visual effect, user controls and native techniques where possible. "
 		"Do not replace failed code with a placeholder or mock shader. "

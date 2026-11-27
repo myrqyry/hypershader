@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Volumetric Rendering
+// hypershader Standard Library - Volumetric Rendering
 // Advanced volumetric effects for clouds, smoke, fog, and atmospheric scattering
 
 #ifndef _STDLIB_VOLUMETRIC_H_

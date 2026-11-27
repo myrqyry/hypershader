@@ -200,7 +200,7 @@ ${_usage_host:-}"
           -DQT_VERSION=${QT_VERSION:-6}
           -DCMAKE_BUILD_TYPE=${config}
           -DCMAKE_INSTALL_PREFIX=/usr
-          -DHYPERSHADERFX_BUILD_OBS_FROM_SOURCE=ON
+          -DHYPERSHADER_BUILD_OBS_FROM_SOURCE=ON
         )
 
         local cmake_version

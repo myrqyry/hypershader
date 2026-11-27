@@ -8,10 +8,10 @@ change the existing nine-style Semantic Materials effect or its saved settings.
 
 1. Configure Sight semantic analysis on the original camera/image source.
    Optional analysis-only depth, subject matte and linked optical flow
-   producers must operate on the same source before HyperShader.
+   producers must operate on the same source before hypershader.
 2. Select **Sight: Baked PBR**, enable the shared Sight snapshot consumer,
    and set **Texture Input 0** to Image File. Select the bundled
-   `materials/classic_red_brick/atlas.png` in HyperShader's data directory,
+   `materials/classic_red_brick/atlas.png` in hypershader's data directory,
    or a packed atlas generated as below.
 3. Set category IDs (A, B, C in priority order, -1 disables a slot), tint
    (white retains baked color) and mix. All three categories share the same
@@ -74,7 +74,7 @@ per-frame synthesis or timing benchmark.
   with the actual baked PNG and controlled semantic, depth, matte and
   persistent coordinate textures. Dedicated probe passed all six checks,
   with zero GL errors on Mesa llvmpipe.
-- `scripts/verify-shipped-shaders.sh /path/to/hyperShaderFX.so /path/to/data`:
+- `scripts/verify-shipped-shaders.sh /path/to/hypershader.so /path/to/data`:
   37/37 actual native loader checks passed, including new filter, single
   texture input visibility and missing-Sight pass-through; zero GL_INVALID_ENUM.
   This is not a live-camera model inference qualification or proof of

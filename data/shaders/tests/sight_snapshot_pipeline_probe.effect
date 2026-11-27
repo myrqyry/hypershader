@@ -1,5 +1,5 @@
 // @label "Sight Snapshot Interop Probe"
-// Test-only: demonstrate actual Sight RGBA32F point texture in HyperShader.
+// Test-only: demonstrate actual Sight RGBA32F point texture in hypershader.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform texture2d hs_sight_points;

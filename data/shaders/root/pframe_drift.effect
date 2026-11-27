@@ -3,11 +3,11 @@
 // No decorative RGB glitch overlays or random static.
 //
 // This is NOT an MPEG/H.264 bitstream decoder and does not read real codec
-// motion vectors. It uses native HyperShader output-frame feedback to approximate
+// motion vectors. It uses native hypershader output-frame feedback to approximate
 // the characteristic accumulation of inter-frame prediction errors.
 // A keyframe replaces the damaged decoded picture with the actual live source.
 // Native self-contained OBS effect: no imports, macros or external shader
-// preprocessor dependencies. Built-in variables are managed by HyperShaderFX.
+// preprocessor dependencies. Built-in variables are managed by hypershader.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 uniform float3 hs_resolution;

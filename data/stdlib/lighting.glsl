@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Lighting Utilities
+// hypershader Standard Library - Lighting Utilities
 // PBR and toon lighting helper functions
 
 #ifndef _STDLIB_LIGHTING_H_

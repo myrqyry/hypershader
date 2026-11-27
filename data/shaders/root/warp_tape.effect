@@ -1,4 +1,4 @@
-// Warp Tape — a moving-column video time mosaic for HyperShaderFX.
+// Warp Tape — a moving-column video time mosaic for hypershader.
 // Independent single-pass implementation of the strip-tape mechanism.
 //
 // Each frame writes a narrow group of columns from the live OBS source while

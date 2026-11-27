@@ -39,7 +39,7 @@ static bool load(const char* lib,const char* data){
     return obs_open_module(&module,lib,data)==MODULE_SUCCESS&&obs_init_module(module);
 }
 int main(int argc,char**argv){
-    // Sight module/data, HyperShader module/data, image module/data,
+    // Sight module/data, hypershader module/data, image module/data,
     // gesture model, runtime, fixture and effect.
     if(argc!=11||!obs_startup("en-US",nullptr,nullptr))return 2;
     obs_video_info v{};v.graphics_module="libobs-opengl";v.fps_num=30;v.fps_den=1;

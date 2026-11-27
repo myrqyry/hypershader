@@ -2,20 +2,20 @@
 
 static void log_startup_banner(void)
 {
-	blog(LOG_INFO, "[HyperShaderFX] ╔════════════════════════════════════╗");
-	blog(LOG_INFO, "[HyperShaderFX] ║  HyperShaderFX loaded successfully  ║");
-	blog(LOG_INFO, "[HyperShaderFX] ╚════════════════════════════════════╝");
+	blog(LOG_INFO, "[hypershader] ╔════════════════════════════════════╗");
+	blog(LOG_INFO, "[hypershader] ║  hypershader loaded successfully  ║");
+	blog(LOG_INFO, "[hypershader] ╚════════════════════════════════════╝");
 }
 
 static void log_runtime_status(void)
 {
-	blog(LOG_INFO, "[HyperShaderFX] Runtime status:");
-	blog(LOG_INFO, "[HyperShaderFX]  ├─ Filters     : registered");
-	blog(LOG_INFO, "[HyperShaderFX]  ├─ Source types : registered");
+	blog(LOG_INFO, "[hypershader] Runtime status:");
+	blog(LOG_INFO, "[hypershader]  ├─ Filters     : registered");
+	blog(LOG_INFO, "[hypershader]  ├─ Source types : registered");
 #ifdef HAVE_SHADER_BUILDER_DOCK
-	blog(LOG_INFO, "[HyperShaderFX]  └─ Shader dock  : enabled");
+	blog(LOG_INFO, "[hypershader]  └─ Shader dock  : enabled");
 #else
-	blog(LOG_INFO, "[HyperShaderFX]  └─ Shader dock  : unavailable");
+	blog(LOG_INFO, "[hypershader]  └─ Shader dock  : unavailable");
 #endif
 }
 
@@ -45,7 +45,7 @@ uint32_t obs_module_ver(void)
 OBS_DECLARE_MODULE()
 #endif
 
-OBS_MODULE_USE_DEFAULT_LOCALE("hyperShaderFX", "en-US")
+OBS_MODULE_USE_DEFAULT_LOCALE("hypershader", "en-US")
 
 extern struct obs_source_info hypershader_filter_info;
 extern struct obs_source_info hypershader_source_info;
@@ -69,7 +69,7 @@ bool obs_module_load(void)
 #endif
 
 	if (!hs_channel_image_runtime_init())
-		blog(LOG_WARNING, "[HyperShaderFX] Image-file channels are unavailable on this OBS runtime");
+		blog(LOG_WARNING, "[hypershader] Image-file channels are unavailable on this OBS runtime");
 
 	hyper_ui_init();
 	obs_register_source(&hypershader_filter_info);
@@ -79,7 +79,7 @@ bool obs_module_load(void)
 
 #ifdef HAVE_SHADER_BUILDER_DOCK
 	register_shader_builder_dock();
-	blog(LOG_INFO, "[HyperShaderFX] └─ Dock bridge    : online");
+	blog(LOG_INFO, "[hypershader] └─ Dock bridge    : online");
 #endif
 
 	return true;

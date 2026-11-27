@@ -9,7 +9,7 @@ uniform texture2d hs_buffer_a_previous;
 uniform texture2d hs_buffer_b_previous;
 uniform float3 hs_resolution;
 uniform float hs_time;
-uniform int hs_graph_frame; // Bound by HyperShaderFX; resets with graph history.
+uniform int hs_graph_frame; // Bound by hypershader; resets with graph history.
 
 uniform float feed_rate;      // @min 0.015 @max 0.08 @step 0.001 @default 0.037 @label "Feed Rate" @group "Reaction"
 uniform float kill_rate;      // @min 0.03 @max 0.08 @step 0.001 @default 0.060 @label "Kill Rate" @group "Reaction"

@@ -1,11 +1,11 @@
-// --- HyperShader Native Standard Library ---
-// Foundation for first-party HyperShader effects.
+// --- hypershader Native Standard Library ---
+// Foundation for first-party hypershader effects.
 // External-format adapters may depend on this file; native effects never depend on them.
 
 #ifndef HYPERSHADER_STANDARD_H
 #define HYPERSHADER_STANDARD_H
 
-// GLSL-style authoring conveniences supported by HyperShader's OBS effect layer.
+// GLSL-style authoring conveniences supported by hypershader's OBS effect layer.
 #define vec2 float2
 #define vec3 float3
 #define vec4 float4
@@ -19,7 +19,7 @@
 #define texture(t, uv) t.Sample(textureSampler, uv)
 #define textureLod(t, uv, lod) t.SampleLevel(textureSampler, uv, lod)
 
-// Native HyperShader runtime contract.
+// Native hypershader runtime contract.
 uniform float4x4 ViewProj;
 uniform texture2d image;
 

@@ -19,7 +19,7 @@ static inline bool safe_snprintf(char *dst, size_t size, const char *fmt, ...)
 		return false;
 	}
 	if ((size_t)ret >= size) {
-		blog(LOG_WARNING, "[HyperShader] String truncated (needed %d, had %zu)", ret, size);
+		blog(LOG_WARNING, "[hypershader] String truncated (needed %d, had %zu)", ret, size);
 		return false;
 	}
 	return true;
@@ -32,7 +32,7 @@ static inline bool safe_strncat(char *dst, const char *src, size_t dst_size)
 	size_t src_len = strlen(src);
 
 	if (dst_len + src_len >= dst_size) {
-		blog(LOG_WARNING, "[HyperShader] Concat truncated");
+		blog(LOG_WARNING, "[hypershader] Concat truncated");
 		return false;
 	}
 

@@ -1,4 +1,4 @@
-// Real libobs/OpenGL regression for HyperShaderFX's output-feedback Warp Tape.
+// Real libobs/OpenGL regression for hypershader's output-feedback Warp Tape.
 // Tests column history, hold, erase and reverse in a GPU ping-pong loop.
 #include <obs.h>
 #include <graphics/graphics.h>

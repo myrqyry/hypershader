@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Edge Detection & Enhancement
+// hypershader Standard Library - Edge Detection & Enhancement
 // Convolution-based edge detection algorithms
 
 #ifndef _STDLIB_EDGES_H_

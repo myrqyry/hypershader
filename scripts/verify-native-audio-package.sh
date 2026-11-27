@@ -8,14 +8,14 @@ work="$(mktemp -d /tmp/hs-native-audio-package-XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 cmake --install "$build" --prefix "$work/stage" > "$work/install.log"
 stage="$work/stage"
-test -s "$stage/hyperShaderFX.so"
-test -s "$stage/bin/64bit/hyperShaderFX.so"
-cmp "$stage/hyperShaderFX.so" "$stage/bin/64bit/hyperShaderFX.so"
+test -s "$stage/hypershader.so"
+test -s "$stage/bin/64bit/hypershader.so"
+cmp "$stage/hypershader.so" "$stage/bin/64bit/hypershader.so"
 if test -f "$stage/bin/64bit/libonnxruntime.so.1.17.1"; then
-    readelf -d "$stage/hyperShaderFX.so" | grep -F '$ORIGIN/bin/64bit'
-    ldd "$stage/hyperShaderFX.so" | grep -F "=> $stage/bin/64bit/libonnxruntime.so.1.17.1"
+    readelf -d "$stage/hypershader.so" | grep -F '$ORIGIN/bin/64bit'
+    ldd "$stage/hypershader.so" | grep -F "=> $stage/bin/64bit/libonnxruntime.so.1.17.1"
 fi
-for path in "$stage/hyperShaderFX.so" "$stage/bin/64bit/hyperShaderFX.so"; do
+for path in "$stage/hypershader.so" "$stage/bin/64bit/hypershader.so"; do
     HYPERSHADER_MODULE="$path" HYPERSHADER_DATA="$stage/data" \
         bash "$repo/scripts/verify-original-instruments-plugin.sh"
 done

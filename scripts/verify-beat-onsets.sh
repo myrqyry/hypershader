@@ -3,7 +3,7 @@
 # Proves the beat uniforms reach a shader on transients and fall back to zero in silence.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 [ -f "$module" ] || { echo "missing module: $module" >&2; exit 1; }
 

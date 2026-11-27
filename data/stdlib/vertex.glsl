@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Vertex Effects
+// hypershader Standard Library - Vertex Effects
 // Vertex manipulation and distortion techniques
 
 #ifndef _STDLIB_VERTEX_H_

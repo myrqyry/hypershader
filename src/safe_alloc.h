@@ -22,13 +22,13 @@
 static inline void *safe_bmalloc(size_t size, const char *caller)
 {
 	if (size == 0) {
-		blog(LOG_WARNING, "[HyperShader] %s: attempted zero-size allocation", caller ? caller : "unknown");
+		blog(LOG_WARNING, "[hypershader] %s: attempted zero-size allocation", caller ? caller : "unknown");
 		return NULL;
 	}
 
 	void *ptr = bmalloc(size);
 	if (!ptr) {
-		blog(LOG_ERROR, "[HyperShader] %s: memory allocation failed (%zu bytes)", caller ? caller : "unknown",
+		blog(LOG_ERROR, "[hypershader] %s: memory allocation failed (%zu bytes)", caller ? caller : "unknown",
 		     size);
 	}
 	return ptr;
@@ -43,13 +43,13 @@ static inline void *safe_bmalloc(size_t size, const char *caller)
 static inline void *safe_bzalloc(size_t size, const char *caller)
 {
 	if (size == 0) {
-		blog(LOG_WARNING, "[HyperShader] %s: attempted zero-size allocation", caller ? caller : "unknown");
+		blog(LOG_WARNING, "[hypershader] %s: attempted zero-size allocation", caller ? caller : "unknown");
 		return NULL;
 	}
 
 	void *ptr = bzalloc(size);
 	if (!ptr) {
-		blog(LOG_ERROR, "[HyperShader] %s: memory allocation failed (%zu bytes)", caller ? caller : "unknown",
+		blog(LOG_ERROR, "[hypershader] %s: memory allocation failed (%zu bytes)", caller ? caller : "unknown",
 		     size);
 	}
 	return ptr;
@@ -65,7 +65,7 @@ static inline void *safe_bzalloc(size_t size, const char *caller)
 static inline char *safe_strdup_n(const char *src, size_t len, const char *caller)
 {
 	if (!src) {
-		blog(LOG_WARNING, "[HyperShader] %s: NULL source in string duplication", caller ? caller : "unknown");
+		blog(LOG_WARNING, "[hypershader] %s: NULL source in string duplication", caller ? caller : "unknown");
 		return NULL;
 	}
 
@@ -83,7 +83,7 @@ static inline char *safe_strdup_n(const char *src, size_t len, const char *calle
 
 	char *dest = bmalloc(copy_len + 1);
 	if (!dest) {
-		blog(LOG_ERROR, "[HyperShader] %s: failed to allocate string (%zu bytes)", caller ? caller : "unknown",
+		blog(LOG_ERROR, "[hypershader] %s: failed to allocate string (%zu bytes)", caller ? caller : "unknown",
 		     copy_len + 1);
 		return NULL;
 	}
@@ -102,13 +102,13 @@ static inline char *safe_strdup_n(const char *src, size_t len, const char *calle
 static inline char *safe_bstrdup(const char *src, const char *caller)
 {
 	if (!src) {
-		blog(LOG_WARNING, "[HyperShader] %s: NULL source in string duplication", caller ? caller : "unknown");
+		blog(LOG_WARNING, "[hypershader] %s: NULL source in string duplication", caller ? caller : "unknown");
 		return NULL;
 	}
 
 	char *dest = bstrdup(src);
 	if (!dest) {
-		blog(LOG_ERROR, "[HyperShader] %s: failed to duplicate string", caller ? caller : "unknown");
+		blog(LOG_ERROR, "[hypershader] %s: failed to duplicate string", caller ? caller : "unknown");
 	}
 	return dest;
 }

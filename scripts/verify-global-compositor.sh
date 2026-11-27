@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-module="${1:-$repo/build_x86_64/hyperShaderFX.so}"
+module="${1:-$repo/build_x86_64/hypershader.so}"
 data="${2:-$repo/data}"
 work="$(mktemp -d /tmp/hyper-compose-test-XXXXXXXX)"
 trap 'rm -rf "$work"' EXIT
@@ -9,7 +9,7 @@ inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -w -I"$inc" "$repo/scripts/verify-global-compositor.cpp" \
  -o "$work/probe" $(pkg-config --libs libobs)
 mkdir -p "$work/home"
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 export MESA_SHADER_CACHE_DISABLE=true
 for shader in playground filter.ink_currents filter.afterimage_press; do
   mkdir -p "$work/$shader"

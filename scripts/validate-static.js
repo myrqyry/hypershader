@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Static validation script for hyperShaderFX.
+ * Static validation script for hypershader.
  * Run: node scripts/validate-static.js
  *
  * Checks:
@@ -174,7 +174,7 @@ function checkUpdateProperties() {
 }
 
 /* Run all checks */
-console.log('=== hyperShaderFX Static Validation ===\n');
+console.log('=== hypershader Static Validation ===\n');
 checkCmakeSources();
 checkDebugMarkers();
 checkUniqueSourceIds();

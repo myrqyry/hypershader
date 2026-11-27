@@ -1,4 +1,4 @@
-// HyperShader Standard Library - 3D Post-Processing Effects
+// hypershader Standard Library - 3D Post-Processing Effects
 // Advanced post-processing for 3D rendering: bloom, DOF, motion blur, etc.
 
 #ifndef _STDLIB_POSTPROCESS_3D_H_
@@ -18,7 +18,7 @@ float3 extractBrightAreas(float3 color, float threshold, float softness) {
 
 // Karis weighting keeps isolated hot pixels from dominating the wide bloom
 // footprint. Alpha-Piscium uses the same mechanism in its real mip-pyramid
-// bloom; this helper is the portable single-pass form for HyperShader shaders.
+// bloom; this helper is the portable single-pass form for hypershader shaders.
 // These helpers sample the native global image: include hypershader_standard.glsl first.
 float bloomKarisWeight(float3 color) {
     float luma = dot(max(color, 0.0), float3(0.2126, 0.7152, 0.0722));
@@ -32,7 +32,7 @@ float4 bloomWeightedBrightTap(float2 uv, float threshold,
     return float4(bright * weight, weight);
 }
 
-// Uses HyperShader's native global image/textureSampler for OBS compatibility.
+// Uses hypershader's native global image/textureSampler for OBS compatibility.
 // Texture arguments cannot be sampled reliably from user-defined functions
 // across the supported OBS graphics backends.
 // 13-tap wide gather derived from the downsample footprint used by modern

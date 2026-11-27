@@ -1,4 +1,4 @@
-// @label "HyperShader Template"
+// @label "hypershader Template"
 // @min 0.0 @max 1.0 @default 0.4 @label "Speed"
 uniform float speed;
 

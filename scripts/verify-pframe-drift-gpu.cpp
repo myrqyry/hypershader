@@ -1,4 +1,4 @@
-// Isolated libobs/OpenGL regression for HyperShader P-Frame Drift feedback.
+// Isolated libobs/OpenGL regression for hypershader P-Frame Drift feedback.
 #include <obs.h>
 #include <graphics/graphics.h>
 #include <util/platform.h>

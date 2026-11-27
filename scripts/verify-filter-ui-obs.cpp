@@ -11,7 +11,7 @@
 #include <vector>
 #include <utility>
 #include <functional>
-// Black-box libobs validation of the real HyperShader filter properties
+// Black-box libobs validation of the real hypershader filter properties
 // and the preset change callback. No frontend UI or live camera required.
 int main(int argc,char** argv){
  if(argc!=3){std::cerr<<"usage: plugin data\n";return 2;}
@@ -283,7 +283,7 @@ int main(int argc,char** argv){
  if(type)obs_properties_destroy(type);
  auto* filter=obs_source_create("hypershader_filter","UI probe",nullptr,nullptr);
  if(!filter){
-  std::cerr<<"FAIL: could not create real HyperShader filter instance\n";
+  std::cerr<<"FAIL: could not create real hypershader filter instance\n";
   passes=false;
  }else{
   obs_properties_t* instance=obs_source_properties(filter);

@@ -1,20 +1,20 @@
 # Reactive Sprite
 
-Native HyperShaderFX source and filter effects, independently implemented after
+Native hypershader source and filter effects, independently implemented after
 reviewing OBS Image Reaction's two-state interaction model.
 
 ## Setup
 
-- Add a HyperShaderFX **source**, choose Source / Reactive Sprite, set the
+- Add a hypershader **source**, choose Source / Reactive Sprite, set the
   canvas size, then set Channel 0 to the idle image. Optional channels 1, 2,
   and 3 are active, strong, and accent images. Missing optional textures
   fall back to the previous available state.
-- Or add a HyperShaderFX **filter** to an existing video/image source and
+- Or add a hypershader **filter** to an existing video/image source and
   choose Filter / Reactive Sprite. The original source is the idle image;
   optional channels 0, 1 and 2 provide the other three states.
 - Enable Sound and select the desired OBS audio source (for example, a
   microphone). Choose the reaction driver: voice/level, peak, kick, bass,
-  mid or high. Threshold is in HyperShader's empirical audio signal units,
+  mid or high. Threshold is in hypershader's empirical audio signal units,
   not dB. Adjust sensitivity and threshold to the selected source.
 - Crossfade Width 0 selects binary target states; a positive width blends
   across a range of audio levels. Strong/Accent thresholds are ordered above activation.

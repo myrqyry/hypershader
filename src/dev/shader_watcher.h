@@ -97,10 +97,10 @@ static inline void shader_watcher_set_enabled(shader_watcher_t *watcher, bool en
     watcher->enabled = enabled;
     
     if (enabled) {
-        blog(LOG_INFO, "[HyperShader] Shader hot-reload enabled for: %s", 
+        blog(LOG_INFO, "[hypershader] Shader hot-reload enabled for: %s",
              watcher->watched_path ? watcher->watched_path : "(none)");
     } else {
-        blog(LOG_DEBUG, "[HyperShader] Shader hot-reload disabled");
+        blog(LOG_DEBUG, "[hypershader] Shader hot-reload disabled");
     }
 }
 
@@ -135,7 +135,7 @@ static inline bool shader_watcher_check(shader_watcher_t *watcher)
     
     /* Check if modified */
     if (st.st_mtime > watcher->last_modified) {
-        blog(LOG_INFO, "[HyperShader] Shader file modified, scheduling reload: %s", 
+        blog(LOG_INFO, "[hypershader] Shader file modified, scheduling reload: %s",
              watcher->watched_path);
         watcher->needs_reload = true;
         return true;
@@ -162,7 +162,7 @@ static inline void shader_watcher_acknowledge(shader_watcher_t *watcher)
     }
     
     watcher->needs_reload = false;
-    blog(LOG_DEBUG, "[HyperShader] Shader reload acknowledged");
+    blog(LOG_DEBUG, "[hypershader] Shader reload acknowledged");
 }
 
 /**

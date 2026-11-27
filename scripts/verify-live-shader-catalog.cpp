@@ -99,7 +99,7 @@ int main(int argc,char **argv) {
     const auto folder=QString::fromStdString((fs::path(argv[2])/"shaders").string());
     ShaderCatalogWatch watch(folder,[&]{
         ++watchEvents;
-        refreshHyperShaderProperties();
+        refresh_hypershader_properties();
     });
     auto verifyChange=[&](const char *name,const char *oldLabel,const char *newLabel) {
         int expected=watchEvents+1, expectedSignal=signalsReceived+1;
@@ -114,7 +114,7 @@ int main(int argc,char **argv) {
             selectedPresent |= obs_property_list_item_int(choices,i)==selectedId;
         obs_properties_destroy(props);
         bool oldFound=false,newFound=false;
-        for (const auto &entry:discoverHyperShaderFiles(folder)) {
+        for (const auto &entry:discover_hypershader_files(folder)) {
             auto label=shaderCatalogDisplayLabel(entry.path,entry.category);
             if(oldLabel && label.contains(oldLabel)) oldFound=true;
             if(newLabel && label.contains(newLabel)) newFound=true;
@@ -149,7 +149,7 @@ int main(int argc,char **argv) {
     bool notified=waitFor([&]{return watchEvents>=next;});
     p=obs_source_properties(source);
     good &= check(notified && !has(p,"preset","Spectral Garden") &&
-                  discoverHyperShaderFiles(folder).isEmpty(),"watch_folder_removed");
+                  discover_hypershader_files(folder).isEmpty(),"watch_folder_removed");
     obs_properties_destroy(p);
     fs::rename(moved,shaderRoot);
     good &= verifyChange("watch_folder_restored",nullptr,"Spectral Garden");

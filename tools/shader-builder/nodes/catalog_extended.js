@@ -1,5 +1,5 @@
 /**
- * HyperShaderFX Visual Builder - Extended Node Catalog
+ * hypershader Visual Builder - Extended Node Catalog
  * Additional stdlib modules: Animation, Blur, Edges, Grading, Oscillators, 
  * Transitions, Retro, Mapping, Lighting
  */

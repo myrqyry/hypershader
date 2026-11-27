@@ -1,7 +1,7 @@
 // @label "Audio Spectrum Orbit"
 // @description "Transparent native 8-band spectrum orbiter. Additional spokes interpolate the eight measured bands; they are not separate FFT bins."
-// Original HyperShaderFX artwork. Inspired by the modulation separation in CaYatur/SoundVisualizer (MIT), not a source port.
-// OBS-native source: audio_band0..7 and audio_level are populated by HyperShaderFX's audio worker.
+// Original hypershader artwork. Inspired by the modulation separation in CaYatur/SoundVisualizer (MIT), not a source port.
+// OBS-native source: audio_band0..7 and audio_level are populated by hypershader's audio worker.
 #include "../../stdlib/hypershader_standard.glsl"
 
 // All controls are independent of FFT configuration and work in native source mode.

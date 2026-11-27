@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Screen-Space Effects
+// hypershader Standard Library - Screen-Space Effects
 // Depth-based and screen-coordinate effects
 
 #ifndef _STDLIB_SCREENSPACE_H_

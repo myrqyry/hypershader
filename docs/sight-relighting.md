@@ -1,6 +1,6 @@
 # Sight: Depth Relighting
 
-Native HyperShaderFX filter using the existing source-local Sight depth bridge.
+Native hypershader filter using the existing source-local Sight depth bridge.
 No second inference model, per-frame file IO, or extra feedback texture.
 
 ## Setup
@@ -8,11 +8,11 @@ No second inference model, per-frame file IO, or extra feedback texture.
 1. Add **Sight: Depth Camera (Depth Anything)** to the camera or image.
    Select a compatible ONNX depth model and set Visualization to
    **Original source (share depth)**.
-2. After the depth analysis filter in actual render order, add HyperShaderFX.
+2. After the depth analysis filter in actual render order, add hypershader.
    Choose **Sight: Depth Relighting** (`root/filter.sight_relight.effect`).
    Enable **Use Sight shared snapshots (tracking, matte, text, flow, depth)**.
    Do not put an unrelated image treatment between the analysis filters
-   and HyperShaderFX; it breaks the alignment contract.
+   and hypershader; it breaks the alignment contract.
 3. Move Light X/Y (0–1 is inside the frame, extended to -1–2), select
    directional or point light, and adjust elevation, intensity and color.
    Point lights also have a radius. Lower ambient for dramatic lighting;

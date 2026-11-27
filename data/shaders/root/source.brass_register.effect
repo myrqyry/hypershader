@@ -1,6 +1,6 @@
 // @label "Brass Register"
 // @description "An eight-reed mechanical score. FFT bands bend individual reeds; kick energy excites brass bells and fine engraving."
-// Original native HyperShaderFX instrument, authored for this collection.
+// Original native hypershader instrument, authored for this collection.
 // One reed per measured band; no synthetic additional frequency channels.
 #include "../../stdlib/hypershader_standard.glsl"
 

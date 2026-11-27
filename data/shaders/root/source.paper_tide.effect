@@ -1,6 +1,6 @@
 // @label "Paper Tide"
 // @description "Layered ink-water coastlines. Eight real FFT band values modulate separate handmade contours; beat phase shifts the paper grain."
-// Original native HyperShaderFX instrument, authored for this collection.
+// Original native hypershader instrument, authored for this collection.
 #include "../../stdlib/hypershader_standard.glsl"
 uniform float swell; // @min 0 @max 0.25 @step 0.005 @default 0.10 @label "Wave Height" @group "Shape"
 uniform float detail; // @min 0.5 @max 5 @step 0.05 @default 2.2 @label "Contour Detail" @group "Shape"

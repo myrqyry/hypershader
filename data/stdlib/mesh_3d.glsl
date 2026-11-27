@@ -1,4 +1,4 @@
-// HyperShader Standard Library - 3D Mesh Rendering
+// hypershader Standard Library - 3D Mesh Rendering
 // Advanced mesh loading, processing, and rendering beyond SDFs
 
 #ifndef _STDLIB_MESH_3D_H_

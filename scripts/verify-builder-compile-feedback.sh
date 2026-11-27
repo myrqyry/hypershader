@@ -5,10 +5,10 @@ work="$(mktemp -d /tmp/hyper-builder-feedback-XXXXXXXX)"
 trap 'rm -rf "$work"' EXIT
 inc="$(pkg-config --variable=includedir libobs)/obs"
 g++ -std=c++17 -O2 -Wall -Wextra -I"$inc" "$root/scripts/verify-builder-compile-feedback.cpp" -o "$work/test" $(pkg-config --libs libobs)
-export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hyperShaderFX/bin/64bit:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$HOME/.config/obs-studio/plugins/hypershader/bin/64bit:${LD_LIBRARY_PATH:-}"
 mkdir -p "$work/home"
 (cd "$work" && HOME="$work/home" XDG_CONFIG_HOME="$work/home" \
-  xvfb-run -a timeout 25 "$work/test" "$root/build_x86_64/hyperShaderFX.so" \
+  xvfb-run -a timeout 25 "$work/test" "$root/build_x86_64/hypershader.so" \
   "$root/data" "$root/data/shaders/tests/stdlib_wrapper_probe.effect") > "$work/log" 2>&1 || {
     grep -E 'COMPILE_FEEDBACK|Shader load failed|Timed out|BUILDER_NATIVE|Loaded shader:|Failed|Preprocess|Preprocessing|Compiled preprocessed|Shader compile|ERROR|warn|Detail' "$work/log" | tail -60 || true
     exit 1

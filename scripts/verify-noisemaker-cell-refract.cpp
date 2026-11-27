@@ -1,4 +1,4 @@
-// Real HyperShaderFX async filter test: native shader loading, property
+// Real hypershader async filter test: native shader loading, property
 // controls, bright moving frames, halo generation and shader bypass.
 // No plugin mocks or fabricated image results.
 #include <obs.h>

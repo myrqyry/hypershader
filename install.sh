@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install an existing Linux build or structured HyperShaderFX package.
+# Install an existing Linux build or structured hypershader package.
 set -euo pipefail
 
-PLUGIN_NAME=hyperShaderFX
+PLUGIN_NAME=hypershader
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 destination="${2:-${XDG_CONFIG_HOME:-$HOME/.config}/obs-studio/plugins/$PLUGIN_NAME}"
 
@@ -13,7 +13,7 @@ fi
 
 if (( $# )); then
     source_dir="$1"
-elif [[ -f "$repo/bin/64bit/$PLUGIN_NAME.so" && -d "$repo/data" ]]; then
+elif [[ ( -f "$repo/bin/64bit/$PLUGIN_NAME.so" || -f "$repo/$PLUGIN_NAME.so" ) && -d "$repo/data" ]]; then
     source_dir="$repo"
 else
     source_dir=""
@@ -43,11 +43,11 @@ fi
 
 legacy="$payload/bin/64bit/$PLUGIN_NAME.so"
 modern="$payload/$PLUGIN_NAME.so"
-if [[ ! -s "$legacy" || ! -d "$payload/data/shaders/root" || ! -d "$payload/data/stdlib" || ! -d "$payload/data/locale" ]]; then
-    echo "Incomplete HyperShaderFX package: module, shader library, stdlib and locale are required." >&2
+if [[ ( ! -s "$legacy" && ! -s "$modern" ) || ! -d "$payload/data/shaders/root" || ! -d "$payload/data/stdlib" || ! -d "$payload/data/locale" ]]; then
+    echo "Incomplete hypershader package: module, shader library, stdlib and locale are required." >&2
     exit 1
 fi
-if [[ -e "$modern" ]] && ! cmp -s "$modern" "$legacy"; then
+if [[ ( -e "$modern" || -L "$modern" ) && ( -e "$legacy" || -L "$legacy" ) ]] && ! cmp -s "$modern" "$legacy"; then
     echo "Package contains mismatched OBS 33 and legacy modules; refusing installation." >&2
     exit 1
 fi
@@ -56,10 +56,28 @@ if [[ "$(realpath -m "$payload")" == "$(realpath -m "$destination")" ]]; then
     exit 1
 fi
 
+# A modern-only package targets OBS 33, not the older SDK ABI. Never
+# silently retain a stale legacy module alongside it or manufacture one.
+if [[ ! -s "$legacy" && ( -e "$destination/bin/64bit/$PLUGIN_NAME.so" || -L "$destination/bin/64bit/$PLUGIN_NAME.so" ) ]]; then
+    echo "Move aside the previous legacy installation before installing an OBS 33-only package." >&2
+    exit 1
+fi
+
 # Caller must close OBS before replacing a loaded plugin.
 mkdir -p "$destination"
-cp -a "$payload/bin" "$payload/data" "$destination/"
-# OBS 33 loads the root copy; older OBS versions use bin/64bit.
-cp -L "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
-cmp "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
-echo "Installed HyperShaderFX into $destination"
+if [[ -d "$payload/bin" ]]; then
+    cp -a "$payload/bin" "$destination/"
+fi
+cp -a "$payload/data" "$destination/"
+if [[ -f "$payload/LICENSE" ]]; then
+    cp -a "$payload/LICENSE" "$destination/"
+fi
+if [[ -s "$legacy" ]]; then
+    # Older compatible builds retain their original dual-layout behavior.
+    cp -L "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
+    cmp "$destination/bin/64bit/$PLUGIN_NAME.so" "$destination/$PLUGIN_NAME.so"
+else
+    cp -L "$modern" "$destination/$PLUGIN_NAME.so"
+    cmp "$modern" "$destination/$PLUGIN_NAME.so"
+fi
+echo "Installed hypershader into $destination"

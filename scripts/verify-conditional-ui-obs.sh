@@ -6,7 +6,7 @@ trap 'rm -rf "$work"' EXIT
 g++ -std=c++17 -O2 -I"$(pkg-config --variable=includedir libobs)/obs" \
   "$repo/scripts/verify-conditional-ui-obs.cpp" -o "$work/probe" $(pkg-config --libs libobs)
 (cd "$work" && HOME="$work" XDG_CONFIG_HOME="$work" LIBGL_ALWAYS_SOFTWARE=1 \
-  xvfb-run -a timeout 35 "$work/probe" "$repo/build_x86_64/hyperShaderFX.so" "$repo/data" \
+  xvfb-run -a timeout 35 "$work/probe" "$repo/build_x86_64/hypershader.so" "$repo/data" \
   "$repo/data/shaders/tests/conditional_controls_probe.effect") >"$work/log" 2>&1 || {
   tail -60 "$work/log";exit 1;
 }

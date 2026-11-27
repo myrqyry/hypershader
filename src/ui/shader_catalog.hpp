@@ -13,7 +13,7 @@
 #include <QStringList>
 #include <algorithm>
 
-struct HyperShaderCatalogEntry {
+struct hypershader_catalog_entry {
     QString path;
     QString category;
 };
@@ -41,7 +41,7 @@ inline QString shaderCatalogDisplayLabel(const QString &shaderPath, const QStrin
     return QFileInfo(shaderPath).completeBaseName();
 }
 
-inline bool shaderCatalogMatches(const HyperShaderCatalogEntry &entry,
+inline bool shaderCatalogMatches(const hypershader_catalog_entry &entry,
                                  const QString &query, const QString &category)
 {
     if (!category.isEmpty() && entry.category != category)
@@ -55,9 +55,9 @@ inline bool shaderCatalogMatches(const HyperShaderCatalogEntry &entry,
            entry.path.contains(needle, Qt::CaseInsensitive);
 }
 
-inline QList<HyperShaderCatalogEntry> discoverHyperShaderFiles(const QString &shaderFolder)
+inline QList<hypershader_catalog_entry> discover_hypershader_files(const QString &shaderFolder)
 {
-    QList<HyperShaderCatalogEntry> entries;
+    QList<hypershader_catalog_entry> entries;
     if (shaderFolder.isEmpty())
         return entries;
     const QDir base(shaderFolder);
@@ -101,7 +101,7 @@ inline QList<HyperShaderCatalogEntry> discoverHyperShaderFiles(const QString &sh
     addDirectory(QDir(base.filePath("../quarantined_shaders/root")), QStringLiteral("Quarantined"));
 
     std::sort(entries.begin(), entries.end(),
-              [](const HyperShaderCatalogEntry &a, const HyperShaderCatalogEntry &b) {
+              [](const hypershader_catalog_entry &a, const hypershader_catalog_entry &b) {
                   const int categoryOrder = QString::compare(a.category, b.category, Qt::CaseInsensitive);
                   return categoryOrder < 0 ||
                          (categoryOrder == 0 && QString::compare(QFileInfo(a.path).fileName(),

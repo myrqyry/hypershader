@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Glitch & Digital Effects
+// hypershader Standard Library - Glitch & Digital Effects
 // Digital artifact simulation and corruption effects
 
 #ifndef _STDLIB_GLITCH_H_

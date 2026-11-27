@@ -97,7 +97,7 @@
       "cacheVariables": {
         "ENABLE_FRONTEND_API": true,
         "ENABLE_QT": true,
-        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.config/obs-studio/plugins/hyperShaderFX",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.config/obs-studio/plugins/hypershader",
         "OBS_PLUGIN_DESTINATION": "bin/64bit",
         "OBS_DATA_DESTINATION": "data"
       }

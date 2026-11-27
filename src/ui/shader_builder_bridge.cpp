@@ -1,5 +1,5 @@
 /**
- * HyperShaderFX - Shader Builder Bridge Implementation
+ * hypershader - Shader Builder Bridge Implementation
  * JavaScript bridge for communication between web builder and C++ plugin
  */
 
@@ -47,11 +47,11 @@ void ShaderBuilderBridge::exportShader(const QString &shaderCode, const QString 
 
 void ShaderBuilderBridge::reloadShader(const QString &filePath)
 {
-    blog(LOG_INFO, "[HyperShaderFX] Reload requested for: %s", filePath.toUtf8().constData());
+    blog(LOG_INFO, "[hypershader] Reload requested for: %s", filePath.toUtf8().constData());
     if (m_dock)
         m_dock->onLiveReloadRequested(filePath);
     else
-        blog(LOG_WARNING, "[HyperShaderFX] Reload declined: builder dock unavailable.");
+        blog(LOG_WARNING, "[hypershader] Reload declined: builder dock unavailable.");
 }
 
 QStringList ShaderBuilderBridge::getShaderList()

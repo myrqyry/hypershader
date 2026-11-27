@@ -218,12 +218,12 @@ void properties_add_shader_params(obs_properties_t *props, struct hypershader_da
      * ═══════════════════════════════════════════════════════════════ */
 
 	if (!props) {
-		blog(LOG_ERROR, "[HyperShader] FATAL: Properties window pointer is NULL!");
+		blog(LOG_ERROR, "[hypershader] FATAL: Properties window pointer is NULL!");
 		return;
 	}
 
 	if (!s) {
-		blog(LOG_ERROR, "[HyperShader] FATAL: Shader data pointer is NULL!");
+		blog(LOG_ERROR, "[hypershader] FATAL: Shader data pointer is NULL!");
 		return;
 	}
 
@@ -233,7 +233,7 @@ void properties_add_shader_params(obs_properties_t *props, struct hypershader_da
 	 * This avoids obs_enter_graphics() during property construction,
 	 * which can cause reentrancy/deadlock issues. */
 	if (!s->param_views || s->param_view_count == 0) {
-		blog(LOG_DEBUG, "[HyperShader] No cached shader params, skipping parameter UI");
+		blog(LOG_DEBUG, "[hypershader] No cached shader params, skipping parameter UI");
 		pthread_mutex_unlock(&s->mutex);
 		return;
 	}
@@ -242,16 +242,16 @@ void properties_add_shader_params(obs_properties_t *props, struct hypershader_da
 	if (meta_rc) {
 		metadata_rc_retain(meta_rc);
 	} else {
-		blog(LOG_WARNING, "[HyperShader] Shader metadata not initialized");
+		blog(LOG_WARNING, "[hypershader] Shader metadata not initialized");
 		pthread_mutex_unlock(&s->mutex);
 		return;
 	}
 
-	blog(LOG_DEBUG, "[HyperShader] Building UI for %zu cached shader parameters", s->param_view_count);
+	blog(LOG_DEBUG, "[hypershader] Building UI for %zu cached shader parameters", s->param_view_count);
 
 	obs_properties_t *shader_props = obs_properties_create();
 	if (!shader_props) {
-		blog(LOG_ERROR, "[HyperShader] Failed to create properties group!");
+		blog(LOG_ERROR, "[hypershader] Failed to create properties group!");
 		metadata_rc_release(&meta_rc);
 		pthread_mutex_unlock(&s->mutex);
 		return;
@@ -400,14 +400,14 @@ void properties_add_shader_params(obs_properties_t *props, struct hypershader_da
 			break;
 
 		default:
-			blog(LOG_DEBUG, "[HyperShader] Unsupported parameter type %d for '%s'", type, name);
+			blog(LOG_DEBUG, "[hypershader] Unsupported parameter type %d for '%s'", type, name);
 			break;
 		}
 
 		if (visibility && meta && meta->visible_if) {
 			struct hs_ui_visibility_rule rule = {0};
 			if (!hs_visibility_parse(meta->visible_if, &rule.condition)) {
-				blog(LOG_WARNING, "[HyperShader] Invalid @show_if condition for %s", name);
+				blog(LOG_WARNING, "[hypershader] Invalid @show_if condition for %s", name);
 			}
 			/* Missing/invalid controller means hidden, never a guessed value. */
 			rule.target = obs_properties_get(target_props, prop_name);
@@ -440,11 +440,11 @@ void properties_add_shader_params(obs_properties_t *props, struct hypershader_da
 	}
 
 	if (obs_properties_first(shader_props)) {
-		blog(LOG_DEBUG, "[HyperShader] Added 'Shader Parameters' group");
+		blog(LOG_DEBUG, "[hypershader] Added 'Shader Parameters' group");
 		obs_properties_add_group(props, "shader_params_group", obs_module_text("ShaderParameters"),
 					 OBS_GROUP_NORMAL, shader_props);
 	} else {
-		blog(LOG_DEBUG, "[HyperShader] No shader parameters found");
+		blog(LOG_DEBUG, "[hypershader] No shader parameters found");
 		obs_properties_destroy(shader_props);
 	}
 
@@ -458,7 +458,7 @@ void properties_add_header(obs_properties_t *props)
 						OBS_PATH_FILE, "Effect Files (*.effect);;All Files (*.*)",
 						NULL);
 	obs_property_set_long_description(pfile,
-		"Custom shader files must be in HyperShaderFX's data folder. "
+		"Custom shader files must be in hypershader's data folder. "
 		"Absolute paths outside that folder are blocked by the shader loader.");
 	obs_property_set_modified_callback2(pfile, shader_file_changed, NULL);
 }
@@ -843,7 +843,7 @@ void properties_add_sight_settings(obs_properties_t *props, struct hypershader_d
 	obs_property_set_long_description(sight_enable,
 		"Opt in to Face/Body/Hand Motion data published by Latent Lab Sight in the same OBS process. "
 		"Requires Sight's producer filter on the chosen channel. Add one enabled Subject Cutout in Original source diagnostic view and/or Spatial Motion in Original source mode on this source. No second MediaPipe inference. "
-		"Text Obfuscation Original source and Depth Camera Original source (share depth) can also share data. Keep analysis-only Sight filters consecutively upstream of HyperShader; transformed or unknown filters block deeper data. One enabled producer of each type. Flow expires after 500 ms, depth after 1500 ms, text after 2000 ms, other snapshots after 750 ms. Changing this setting does not modify Sight.");
+		"Text Obfuscation Original source and Depth Camera Original source (share depth) can also share data. Keep analysis-only Sight filters consecutively upstream of hypershader; transformed or unknown filters block deeper data. One enabled producer of each type. Flow expires after 500 ms, depth after 1500 ms, text after 2000 ms, other snapshots after 750 ms. Changing this setting does not modify Sight.");
 	obs_data_t *sight_settings = s && s->context ? obs_source_get_settings(s->context) : NULL;
 	const char *saved_channel = sight_settings ? obs_data_get_string(sight_settings, "sight_tracking_channel") : "face";
 	obs_property_t *sight_channel = obs_properties_add_list(props, "sight_tracking_channel",
@@ -939,7 +939,7 @@ static int compare_verified_examples(const void *lhs, const void *rhs)
 
 static char *get_user_presets_dir(void)
 {
-	obs_module_t *module = obs_get_module("hyperShaderFX");
+	obs_module_t *module = obs_get_module("hypershader");
 	if (!module) {
 		/* Fallback for local testing or if module not found by name */
 		const char *xdg = getenv("XDG_CONFIG_HOME");
@@ -948,9 +948,9 @@ static char *get_user_presets_dir(void)
 			const char *home = getenv("HOME");
 			if (!home)
 				return NULL;
-			snprintf(buf, sizeof(buf), "%s/.config/obs-studio/plugins/hyperShaderFX/presets", home);
+			snprintf(buf, sizeof(buf), "%s/.config/obs-studio/plugins/hypershader/presets", home);
 		} else {
-			snprintf(buf, sizeof(buf), "%s/obs-studio/plugins/hyperShaderFX/presets", xdg);
+			snprintf(buf, sizeof(buf), "%s/obs-studio/plugins/hypershader/presets", xdg);
 		}
 		return bstrdup(buf);
 	}
@@ -1131,7 +1131,7 @@ static bool save_current_shader_as_preset(struct hypershader_data *s, const char
 	if (!s)
 		return false;
 	if (!s->shader_path || !s->shader_path[0]) {
-		blog(LOG_WARNING, "[HyperShader] Cannot save: current shader has no backing file path");
+		blog(LOG_WARNING, "[hypershader] Cannot save: current shader has no backing file path");
 		return false;
 	}
 
@@ -1163,18 +1163,18 @@ static bool save_current_shader_as_preset(struct hypershader_data *s, const char
 	/* copy file with comprehensive error handling */
 	FILE *fin = fopen(s->shader_path, "rb");
 	if (!fin) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Save failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ Source : %s", s->shader_path);
-		blog(LOG_ERROR, "[HyperShader] └─ Detail : %s", strerror(errno));
+		blog(LOG_ERROR, "[hypershader] ┌─ Save failed");
+		blog(LOG_ERROR, "[hypershader] ├─ Source : %s", s->shader_path);
+		blog(LOG_ERROR, "[hypershader] └─ Detail : %s", strerror(errno));
 		bfree(dir);
 		return false;
 	}
 
 	FILE *fout = fopen(dst, "wb");
 	if (!fout) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Save failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ Target : %s", dst);
-		blog(LOG_ERROR, "[HyperShader] └─ Detail : %s", strerror(errno));
+		blog(LOG_ERROR, "[hypershader] ┌─ Save failed");
+		blog(LOG_ERROR, "[hypershader] ├─ Target : %s", dst);
+		blog(LOG_ERROR, "[hypershader] └─ Detail : %s", strerror(errno));
 		fclose(fin);
 		bfree(dir);
 		return false;
@@ -1187,7 +1187,7 @@ static bool save_current_shader_as_preset(struct hypershader_data *s, const char
 	while ((r = fread(buf, 1, sizeof(buf), fin)) > 0) {
 		size_t written = fwrite(buf, 1, r, fout);
 		if (written != r) {
-			blog(LOG_ERROR, "[HyperShader] Write failed: expected %zu, wrote %zu (%s)", r, written,
+			blog(LOG_ERROR, "[hypershader] Write failed: expected %zu, wrote %zu (%s)", r, written,
 			     strerror(errno));
 			success = false;
 			break;
@@ -1195,13 +1195,13 @@ static bool save_current_shader_as_preset(struct hypershader_data *s, const char
 	}
 
 	if (ferror(fin)) {
-		blog(LOG_ERROR, "[HyperShader] Read error: %s", strerror(errno));
+		blog(LOG_ERROR, "[hypershader] Read error: %s", strerror(errno));
 		success = false;
 	}
 
 	fclose(fin);
 	if (fclose(fout) != 0) {
-		blog(LOG_ERROR, "[HyperShader] Failed to close destination: %s", strerror(errno));
+		blog(LOG_ERROR, "[hypershader] Failed to close destination: %s", strerror(errno));
 		success = false;
 	}
 
@@ -1212,7 +1212,7 @@ static bool save_current_shader_as_preset(struct hypershader_data *s, const char
 
 	bfree(dir);
 	load_user_presets();
-	blog(LOG_INFO, "[HyperShader] Saved current shader as preset: %s", dst);
+	blog(LOG_INFO, "[hypershader] Saved current shader as preset: %s", dst);
 	return true;
 }
 
@@ -1279,7 +1279,7 @@ static void deferred_properties_refresh(void *param)
 {
 	obs_source_t *source = param;
 	if (source) {
-		blog(LOG_INFO, "[HyperShader] Deferred property refresh executing");
+		blog(LOG_INFO, "[hypershader] Deferred property refresh executing");
 		obs_source_update_properties(source);
 	}
 }
@@ -1458,19 +1458,19 @@ static bool preset_changed2(void *priv, obs_properties_t *props, obs_property_t 
 
 	/* Guard against re-entrant calls during property construction */
 	if (s && atomic_load_explicit(&s->properties_building, memory_order_seq_cst)) {
-		blog(LOG_DEBUG, "[HyperShader] preset_changed2: blocked during property construction");
+		blog(LOG_DEBUG, "[hypershader] preset_changed2: blocked during property construction");
 		return false;
 	}
 
 	/* Path 1: settings is NULL - called from filter_properties context */
 	if (!settings) {
 		if (!s || !s->context) {
-			blog(LOG_WARNING, "[HyperShader] preset_changed2: no settings and no valid context");
+			blog(LOG_WARNING, "[hypershader] preset_changed2: no settings and no valid context");
 			return false;
 		}
 		settings = obs_source_get_settings(s->context);
 		if (!settings) {
-			blog(LOG_WARNING, "[HyperShader] preset_changed2: failed to get settings from context");
+			blog(LOG_WARNING, "[hypershader] preset_changed2: failed to get settings from context");
 			return false;
 		}
 
@@ -1530,7 +1530,7 @@ static bool preset_changed2(void *priv, obs_properties_t *props, obs_property_t 
            The correct approach: set needs_properties_refresh flag!
            video_render will detect this and call obs_source_update_properties safely. */
 		if (shader_changed) {
-			blog(LOG_INFO, "[HyperShader] Shader changed, scheduling property refresh");
+			blog(LOG_INFO, "[hypershader] Shader changed, scheduling property refresh");
 			atomic_store_explicit(&s->needs_properties_refresh, true, memory_order_seq_cst);
 		}
 	}
@@ -1661,7 +1661,7 @@ static void sync_ui_visibility(struct hypershader_data *s, obs_properties_t *pro
 static const char *get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return "Hypershader";
+	return "hypershader";
 }
 
 /* Refresh button callback — request properties rebuild so lists get repopulated */
@@ -1670,7 +1670,7 @@ bool refresh_sources_clicked(obs_properties_t *props, obs_property_t *property, 
 	(void)props;
 	(void)property;
 	(void)data;
-	blog(LOG_INFO, "[HyperShader] Global refresh sources clicked");
+	blog(LOG_INFO, "[hypershader] Global refresh sources clicked");
 	/* Returning true causes properties to be refreshed */
 	return true;
 }
@@ -1682,7 +1682,7 @@ bool shader_file_changed(void *priv, obs_properties_t *props, obs_property_t *p,
 	(void)props;
 	(void)p;
 	(void)settings;
-	blog(LOG_INFO, "[HyperShader] Shader file changed in UI - triggering property refresh");
+	blog(LOG_INFO, "[hypershader] Shader file changed in UI - triggering property refresh");
 	return true; /* Rebuild properties to show new params */
 }
 /* Manual refresh button */
@@ -1691,7 +1691,7 @@ bool refresh_properties_clicked(obs_properties_t *props, obs_property_t *propert
 	(void)props;
 	(void)property;
 	(void)data;
-	blog(LOG_INFO, "[HyperShader] Manual property refresh clicked");
+	blog(LOG_INFO, "[hypershader] Manual property refresh clicked");
 	return true;
 }
 
@@ -1704,7 +1704,7 @@ bool analyze_image_clicked(obs_properties_t *props, obs_property_t *property, vo
 		pthread_mutex_lock(&s->mp_mutex);
 		s->mp_analyze_trigger = true;
 		pthread_mutex_unlock(&s->mp_mutex);
-		blog(LOG_INFO, "[HyperShader] Reference Analysis Triggered");
+		blog(LOG_INFO, "[hypershader] Reference Analysis Triggered");
 	}
 	return false; /* No UI refresh needed */
 }
@@ -1791,7 +1791,7 @@ static bool copy_file_to_tmp(const char *src_path, char *dst_buf, size_t dst_siz
 	struct dstr temp_tmpl = {0};
 	dstr_printf(&temp_tmpl, "%s/hypershader_XXXXXX", temp_dir);
 	if (temp_tmpl.len >= dst_size) {
-		blog(LOG_ERROR, "[HyperShader] Temporary file path exceeds buffer size.");
+		blog(LOG_ERROR, "[hypershader] Temporary file path exceeds buffer size.");
 		dstr_free(&temp_tmpl);
 		return false;
 	}
@@ -1865,13 +1865,13 @@ bool channel_preview_clicked(obs_properties_t *props, obs_property_t *property, 
 				snprintf(buf, sizeof(buf), "Source '%s' (%ux%u)", obs_source_get_name(src), sw, sh);
 				if (pinfo)
 					obs_property_set_long_description(pinfo, buf);
-				blog(LOG_INFO, "[HyperShader] Channel %d preview: %s", ch, buf);
+				blog(LOG_INFO, "[hypershader] Channel %d preview: %s", ch, buf);
 				obs_source_release(src);
 				return false;
 			} else {
 				if (pinfo)
 					obs_property_set_long_description(pinfo, "Source not found");
-				blog(LOG_WARNING, "[HyperShader] Channel %d preview: source '%s' not found", ch,
+				blog(LOG_WARNING, "[hypershader] Channel %d preview: source '%s' not found", ch,
 				     s->channel_source_names[ch]);
 				return false;
 			}
@@ -1885,11 +1885,11 @@ bool channel_preview_clicked(obs_properties_t *props, obs_property_t *property, 
 				snprintf(buf, sizeof(buf), "Saved preview to: %s", dst);
 				if (pinfo)
 					obs_property_set_long_description(pinfo, buf);
-				blog(LOG_INFO, "[HyperShader] Channel %d preview saved: %s", ch, dst);
+				blog(LOG_INFO, "[hypershader] Channel %d preview saved: %s", ch, dst);
 			} else {
 				if (pinfo)
 					obs_property_set_long_description(pinfo, "Failed to save preview");
-				blog(LOG_WARNING, "[HyperShader] Channel %d preview failed to save file: %s", ch,
+				blog(LOG_WARNING, "[hypershader] Channel %d preview failed to save file: %s", ch,
 				     s->channel_files[ch] ? s->channel_files[ch] : "(null)");
 			}
 			return false;
@@ -1920,7 +1920,7 @@ bool confirm_add_shader_file_clicked(obs_properties_t *props, obs_property_t *pr
 
 	const char *path = obs_data_get_string(settings, "add_shader_file");
 	if (!path || !path[0]) {
-		blog(LOG_WARNING, "[HyperShader] No shader file specified to import");
+		blog(LOG_WARNING, "[hypershader] No shader file specified to import");
 		obs_data_release(settings);
 		return false;
 	}
@@ -1930,7 +1930,7 @@ bool confirm_add_shader_file_clicked(obs_properties_t *props, obs_property_t *pr
 	obs_data_set_int(settings, "preset", hyper_ui_custom_preset_index()); /* Custom */
 
 	obs_source_update(s->context, settings);
-	blog(LOG_INFO, "[HyperShader] Imported shader: %s", path);
+	blog(LOG_INFO, "[hypershader] Imported shader: %s", path);
 
 	obs_data_release(settings);
 	return true; /* Refresh to update UI */
@@ -1950,7 +1950,7 @@ bool create_from_raw_clicked(obs_properties_t *props, obs_property_t *property, 
 
 	const char *code = obs_data_get_string(settings, "raw_shader_code");
 	if (!code || !code[0]) {
-		blog(LOG_WARNING, "[HyperShader] No raw shader code provided");
+		blog(LOG_WARNING, "[hypershader] No raw shader code provided");
 		obs_data_release(settings);
 		return false;
 	}
@@ -1966,8 +1966,8 @@ bool create_from_raw_clicked(obs_properties_t *props, obs_property_t *property, 
 
 	char *presets_dir = shaders_dir_from_known();
 	if (!presets_dir) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Raw save failed");
-		blog(LOG_ERROR, "[HyperShader] └─ Action: shader folder unavailable");
+		blog(LOG_ERROR, "[hypershader] ┌─ Raw save failed");
+		blog(LOG_ERROR, "[hypershader] └─ Action: shader folder unavailable");
 		obs_data_release(settings);
 		return false;
 	}
@@ -1977,7 +1977,7 @@ bool create_from_raw_clicked(obs_properties_t *props, obs_property_t *property, 
 
 	/* Write to file */
 	if (os_quick_write_utf8_file(full_path.array, code, strlen(code), false)) {
-		blog(LOG_INFO, "[HyperShader] Saved raw shader to: %s", full_path.array);
+		blog(LOG_INFO, "[hypershader] Saved raw shader to: %s", full_path.array);
 		scan_shaders_dir();
 
 		/* Load it */
@@ -1991,9 +1991,9 @@ bool create_from_raw_clicked(obs_properties_t *props, obs_property_t *property, 
 		/* Clear name field to prevent accidental overwrite next time */
 		obs_data_set_string(settings, "save_preset_name", "");
 	} else {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Raw save failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ Target : %s", full_path.array);
-		blog(LOG_ERROR, "[HyperShader] └─ Action: check disk permissions");
+		blog(LOG_ERROR, "[hypershader] ┌─ Raw save failed");
+		blog(LOG_ERROR, "[hypershader] ├─ Target : %s", full_path.array);
+		blog(LOG_ERROR, "[hypershader] └─ Action: check disk permissions");
 	}
 
 	dstr_free(&full_path);
@@ -2012,7 +2012,7 @@ bool open_shader_dock_clicked(obs_properties_t *props, obs_property_t *property,
 	return true;
 #else
 	blog(LOG_WARNING,
-	     "[HyperShader] Shader Builder dock is not built. Reconfigure with ENABLE_QT=ON and ENABLE_FRONTEND_API=ON.");
+	     "[hypershader] Shader Builder dock is not built. Reconfigure with ENABLE_QT=ON and ENABLE_FRONTEND_API=ON.");
 	return false;
 #endif
 }
@@ -2057,7 +2057,7 @@ static void write_isf_header(FILE *f, const shader_meta_t *meta)
 {
 	fprintf(f, "/*\n");
 	fprintf(f, "{\n");
-	fprintf(f, "  \"DESCRIPTION\": \"Exported from HyperShader\",\n");
+	fprintf(f, "  \"DESCRIPTION\": \"Exported from hypershader\",\n");
 	fprintf(f, "  \"ISFVSN\": \"2\",\n");
 	fprintf(f, "  \"INPUTS\": [\n");
 
@@ -2101,13 +2101,13 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 	}
 
 	char *path = s->shader_path;
-	blog(LOG_INFO, "[HyperShader] Exporting shader: %s (Format: %d)", path, format);
+	blog(LOG_INFO, "[hypershader] Exporting shader: %s (Format: %d)", path, format);
 
 	FILE *f = fopen(path, "r");
 	if (!f) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Export failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ Source : %s", path);
-		blog(LOG_ERROR, "[HyperShader] └─ Action: source file missing or unreadable");
+		blog(LOG_ERROR, "[hypershader] ┌─ Export failed");
+		blog(LOG_ERROR, "[hypershader] ├─ Source : %s", path);
+		blog(LOG_ERROR, "[hypershader] └─ Action: source file missing or unreadable");
 		return false;
 	}
 
@@ -2142,7 +2142,7 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 	if (!os_mkdirs(export_path)) {
 		/* If creation fails and the directory does not already exist,
            bail out cleanly to avoid confusing errors further down. */
-		blog(LOG_ERROR, "[HyperShader] Failed to create export directory: %s", export_path);
+		blog(LOG_ERROR, "[hypershader] Failed to create export directory: %s", export_path);
 		bfree(buf);
 		bfree(shaders_dir);
 		return false;
@@ -2166,9 +2166,9 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 
 	FILE *f_out = fopen(full_export_path, "w");
 	if (!f_out) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Export failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ Target : %s", full_export_path);
-		blog(LOG_ERROR, "[HyperShader] └─ Action: check export directory permissions");
+		blog(LOG_ERROR, "[hypershader] ┌─ Export failed");
+		blog(LOG_ERROR, "[hypershader] ├─ Target : %s", full_export_path);
+		blog(LOG_ERROR, "[hypershader] └─ Action: check export directory permissions");
 		bfree(buf);
 		return false;
 	}
@@ -2176,13 +2176,13 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 	/* Process based on format */
 	if (format == 0) {
 		/* OBS Effect - Identity export with header */
-		fprintf(f_out, "// --- HYPERSHADER EXPORT (OBS Effect) ---\n");
+		fprintf(f_out, "// --- hypershader EXPORT (OBS Effect) ---\n");
 		fprintf(f_out, "// Date: %s", asctime(t));
 		fprintf(f_out, "// Original: %s\n\n", path);
 		fprintf(f_out, "%s", buf);
 	} else if (format == 1) {
 		/* Shadertoy GLSL - Clean up OBS specifics */
-		fprintf(f_out, "// --- HYPERSHADER EXPORT (GLSL) ---\n");
+		fprintf(f_out, "// --- hypershader EXPORT (GLSL) ---\n");
 		fprintf(f_out, "// Date: %s", asctime(t));
 
 		/* Clean the buffer */
@@ -2197,7 +2197,7 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 			write_isf_header(f_out, &s->metadata_rc->meta);
 		pthread_mutex_unlock(&s->mutex);
 
-		fprintf(f_out, "// --- HYPERSHADER EXPORT (ISF) ---\n");
+		fprintf(f_out, "// --- hypershader EXPORT (ISF) ---\n");
 
 		/* Clean the buffer */
 		str_strip_lines_starting_with(buf, "#include");
@@ -2216,7 +2216,7 @@ bool export_shader_clicked(obs_properties_t *props, obs_property_t *property, vo
 	fclose(f_out);
 	bfree(buf);
 
-	blog(LOG_INFO, "[HyperShader] Shader exported successfully to: %s", full_export_path);
+	blog(LOG_INFO, "[hypershader] Shader exported successfully to: %s", full_export_path);
 	/* No need to scan_examples_dir for exports folder */
 	return true;
 }
@@ -2372,16 +2372,16 @@ bool load_shadertoy_clicked(obs_properties_t *props, obs_property_t *property, v
 
 	const char *path = obs_data_get_string(settings, "shadertoy_import_file");
 	if (!path || !path[0]) {
-		blog(LOG_WARNING, "[HyperShader] No import file specified");
+		blog(LOG_WARNING, "[hypershader] No import file specified");
 		obs_data_release(settings);
 		return false;
 	}
 
 	FILE *f = fopen(path, "rb");
 	if (!f) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Import failed");
-		blog(LOG_ERROR, "[HyperShader] ├─ File : %s", path);
-		blog(LOG_ERROR, "[HyperShader] └─ Action: unable to open file");
+		blog(LOG_ERROR, "[hypershader] ┌─ Import failed");
+		blog(LOG_ERROR, "[hypershader] ├─ File : %s", path);
+		blog(LOG_ERROR, "[hypershader] └─ Action: unable to open file");
 		obs_data_release(settings);
 		return false;
 	}
@@ -2393,7 +2393,7 @@ bool load_shadertoy_clicked(obs_properties_t *props, obs_property_t *property, v
 		size_t r = fread(buf, 1, (size_t)sz, f);
 		buf[r] = '\0';
 		int parsed = parse_shadertoy_inputs(buf, s);
-		blog(LOG_INFO, "[HyperShader] Parsed %d inputs from %s", parsed, path);
+		blog(LOG_INFO, "[hypershader] Parsed %d inputs from %s", parsed, path);
 
 		/* parse_shadertoy_inputs now writes directly to s->channel_type and s->channel_file,
          * so we just need to mirror these to settings for persistence */
@@ -2457,8 +2457,8 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 
 	const char *url = obs_data_get_string(settings, "shadertoy_import_url");
 	if (!url || !url[0]) {
-		blog(LOG_WARNING, "[HyperShader] ┌─ URL import ignored");
-		blog(LOG_WARNING, "[HyperShader] └─ Action: URL is empty");
+		blog(LOG_WARNING, "[hypershader] ┌─ URL import ignored");
+		blog(LOG_WARNING, "[hypershader] └─ Action: URL is empty");
 		obs_data_release(settings);
 		return false;
 	}
@@ -2466,7 +2466,7 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 	/* libcurl must be available and linked; otherwise this symbol is not compiled */
 	CURL *curl = curl_easy_init();
 	if (!curl) {
-		blog(LOG_ERROR, "[HyperShader] libcurl not initialized");
+		blog(LOG_ERROR, "[hypershader] libcurl not initialized");
 		obs_data_release(settings);
 		return false;
 	}
@@ -2479,8 +2479,8 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
 	CURLcode res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ URL import failed");
-		blog(LOG_ERROR, "[HyperShader] └─ Detail: %s", curl_easy_strerror(res));
+		blog(LOG_ERROR, "[hypershader] ┌─ URL import failed");
+		blog(LOG_ERROR, "[hypershader] └─ Detail: %s", curl_easy_strerror(res));
 		if (buf.data)
 			bfree(buf.data);
 		curl_easy_cleanup(curl);
@@ -2493,9 +2493,9 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 	if (buf.data) {
 		parsed = parse_shadertoy_inputs(buf.data, s);
 		if (parsed > 0) {
-			blog(LOG_INFO, "[HyperShader] Parsed %d inputs directly from URL content", parsed);
+			blog(LOG_INFO, "[hypershader] Parsed %d inputs directly from URL content", parsed);
 		} else {
-			blog(LOG_INFO, "[HyperShader] No inputs found by direct JSON parse. Trying HTML patterns.");
+			blog(LOG_INFO, "[hypershader] No inputs found by direct JSON parse. Trying HTML patterns.");
 
 			// Fallback: If no inputs were parsed, try to extract JSON fragments from HTML
 			// (Shadertoy pages often embed shader JSON inside HTML)
@@ -2562,7 +2562,7 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 					int p_res = parse_shadertoy_inputs(json_fragment, s);
 					bfree(json_fragment);
 					if (p_res > 0) {
-						blog(LOG_INFO, "[HyperShader] Parsed %d inputs from HTML pattern '%s'",
+						blog(LOG_INFO, "[hypershader] Parsed %d inputs from HTML pattern '%s'",
 						     p_res, patterns[p_idx]);
 						parsed = p_res;
 						break;
@@ -2573,7 +2573,7 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 
 		if (parsed <= 0) {
 			blog(LOG_WARNING,
-			     "[HyperShader] No inputs parsed from URL %s; the page may not expose JSON inputs directly",
+			     "[hypershader] No inputs parsed from URL %s; the page may not expose JSON inputs directly",
 			     url);
 		}
 
@@ -2613,15 +2613,15 @@ bool load_shadertoy_json_clicked(obs_properties_t *props, obs_property_t *proper
 
 	const char *json = obs_data_get_string(settings, "shadertoy_import_json");
 	if (!json || !json[0]) {
-		blog(LOG_WARNING, "[HyperShader] ┌─ Paste import ignored");
-		blog(LOG_WARNING, "[HyperShader] └─ Action: JSON payload is empty");
+		blog(LOG_WARNING, "[hypershader] ┌─ Paste import ignored");
+		blog(LOG_WARNING, "[hypershader] └─ Action: JSON payload is empty");
 		obs_data_release(settings);
 		return false;
 	}
 
 	/* Parse provided JSON directly */
 	int parsed = parse_shadertoy_inputs(json, s);
-	blog(LOG_INFO, "[HyperShader] Parsed %d inputs from pasted JSON", parsed);
+	blog(LOG_INFO, "[hypershader] Parsed %d inputs from pasted JSON", parsed);
 
 	/* parse_shadertoy_inputs now writes directly to channels */
 	for (int i = 0; i < CHANNEL_COUNT; i++) {
@@ -2645,7 +2645,7 @@ bool load_shadertoy_url_clicked(obs_properties_t *props, obs_property_t *propert
 	(void)props;
 	(void)property;
 	(void)data;
-	blog(LOG_WARNING, "[HyperShader] URL import not available (libcurl missing at build)");
+	blog(LOG_WARNING, "[hypershader] URL import not available (libcurl missing at build)");
 	return false;
 }
 #endif
@@ -2659,15 +2659,15 @@ bool preview_sound_clicked(obs_properties_t *props, obs_property_t *property, vo
 		return false;
 
 	if (s->sound_preview_running) {
-		blog(LOG_INFO, "[HyperShader] Sound preview already running");
+		blog(LOG_INFO, "[hypershader] Sound preview already running");
 		return false;
 	}
 
 	s->sound_preview_running = true; /* set BEFORE create so filter_destroy always joins */
 	if (pthread_create(&s->sound_preview_thread, NULL, sound_preview_thread_fn, s) != 0) {
 		s->sound_preview_running = false;
-		blog(LOG_ERROR, "[HyperShader] ┌─ Preview failed");
-		blog(LOG_ERROR, "[HyperShader] └─ Action: unable to start sound preview thread");
+		blog(LOG_ERROR, "[hypershader] ┌─ Preview failed");
+		blog(LOG_ERROR, "[hypershader] └─ Action: unable to start sound preview thread");
 		return false;
 	}
 
@@ -2727,7 +2727,7 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 	/* Internal/not user-facing: legacy key used only by deprecated example callbacks. */
 	const char *sel = obs_data_get_string(settings, "example_list");
 	if (!sel || !sel[0]) {
-		blog(LOG_WARNING, "[HyperShader] No example selected");
+		blog(LOG_WARNING, "[hypershader] No example selected");
 		obs_data_release(settings);
 		return false;
 	}
@@ -2743,7 +2743,7 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 	}
 	pthread_mutex_unlock(&global_metadata_mutex);
 	if (!file) {
-		blog(LOG_WARNING, "[HyperShader] Selected example not found");
+		blog(LOG_WARNING, "[hypershader] Selected example not found");
 		obs_data_release(settings);
 		return false;
 	}
@@ -2751,8 +2751,8 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 	/* Resolve file path using obs_module_file so installed data is found */
 	char *path = obs_module_file(file);
 	if (!path) {
-		blog(LOG_ERROR, "[HyperShader] ┌─ Example load failed");
-		blog(LOG_ERROR, "[HyperShader] └─ File : %s", file);
+		blog(LOG_ERROR, "[hypershader] ┌─ Example load failed");
+		blog(LOG_ERROR, "[hypershader] └─ File : %s", file);
 		bfree(file);
 		obs_data_release(settings);
 		return false;
@@ -2760,7 +2760,7 @@ bool load_example_clicked(obs_properties_t *props, obs_property_t *property, voi
 
 	obs_data_set_string(settings, "shader_file", path);
 	// obs_source_update(s->context, settings); // Removed to prevent re-entrant deadlock
-	blog(LOG_INFO, "[HyperShader] Loaded example shader: %s", file);
+	blog(LOG_INFO, "[hypershader] Loaded example shader: %s", file);
 	bfree(file);
 
 	bfree(path);
@@ -2776,7 +2776,7 @@ bool reset_time_clicked(obs_properties_t *props, obs_property_t *property, void 
 	if (s)
 		s->time_accumulator = 0.0f;
         s->shader_frame_count = 0.0f;
-	blog(LOG_INFO, "[HyperShader] Time reset");
+	blog(LOG_INFO, "[hypershader] Time reset");
 	return false;
 }
 
@@ -2789,16 +2789,16 @@ bool log_audio_mixes_clicked(obs_properties_t *props, obs_property_t *property, 
 	struct hypershader_data *s = data;
 
 	if (s->probe_running) {
-		blog(LOG_INFO, "[HyperShader] Audio mix probe already in progress");
+		blog(LOG_INFO, "[hypershader] Audio mix probe already in progress");
 		return false;
 	}
 
 	s->probe_running = true; /* set BEFORE create so filter_destroy always joins */
 	if (pthread_create(&s->probe_thread, NULL, probe_audio_mixes_thread, s) == 0) {
-		blog(LOG_INFO, "[HyperShader] Started audio mix probe in background");
+		blog(LOG_INFO, "[hypershader] Started audio mix probe in background");
 	} else {
 		s->probe_running = false;
-		blog(LOG_ERROR, "[HyperShader] Failed to start audio mix probe thread");
+		blog(LOG_ERROR, "[hypershader] Failed to start audio mix probe thread");
 	}
 
 	return false;
@@ -2856,7 +2856,7 @@ static const char *pg_get_snippet(int id)
 {
 	switch (id) {
 	case 1: /* Basic Template */
-		return "// Basic HyperShader Template\n"
+		return "// Basic hypershader Template\n"
 		       "#include \"shadertoy_compat.glsl\"\n\n"
 		       "void hs_shade_pixel(out vec4 fragColor, in vec2 fragCoord) {\n"
 		       "    vec2 uv = fragCoord / hs_resolution.xy;\n"
@@ -3060,7 +3060,7 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 
 	obs_properties_t *props = obs_properties_create();
 
-	blog(LOG_INFO, "[Hypershader] filter_properties START (data=%p)", data);
+	blog(LOG_INFO, "[hypershader] filter_properties START (data=%p)", data);
 
 	/* Choose an effect first, then show its optional file path. */
 	pthread_mutex_lock(&global_metadata_mutex);
@@ -3157,7 +3157,7 @@ static obs_properties_t *hyper_ui_get_properties_for_kind(
 		set_property_visible_if_present(props, "mp_controlnet_model", false);
 	}
 
-	blog(LOG_INFO, "[Hypershader] filter_properties END (data=%p)", data);
+	blog(LOG_INFO, "[hypershader] filter_properties END (data=%p)", data);
 
 	/* Clear guard flag - properties construction complete */
 	if (s) {
@@ -3263,7 +3263,7 @@ static bool scan_shaders_dir_internal(void)
 	free_dynamic_examples_internal();
 	char *shaders_dir = shaders_dir_from_known();
 	if (!shaders_dir) {
-		blog(LOG_WARNING, "[HyperShader] Could not determine installed shaders directory");
+		blog(LOG_WARNING, "[hypershader] Could not determine installed shaders directory");
 		return false;
 	}
 
@@ -3307,11 +3307,11 @@ static bool scan_shaders_dir_internal(void)
 		for (size_t j = 0; j < i; j++) {
 			if (shader_example_preset_id(dynamic_examples[i].id) ==
 			    shader_example_preset_id(dynamic_examples[j].id))
-				blog(LOG_ERROR, "[HyperShader] Picker ID collision: %s and %s",
+				blog(LOG_ERROR, "[hypershader] Picker ID collision: %s and %s",
 				     dynamic_examples[i].id, dynamic_examples[j].id);
 		}
 	}
-	blog(LOG_INFO, "[HyperShader] Scanned %zu installed effect shaders", dynamic_examples_count);
+	blog(LOG_INFO, "[hypershader] Scanned %zu installed effect shaders", dynamic_examples_count);
 	bfree(shaders_dir);
 	return dynamic_examples_count > 0;
 }
@@ -3345,9 +3345,9 @@ char *shaders_dir_from_known(void)
 		char *slash = strrchr(module_dir, '/');
 		if (slash) {
 			*slash = '\0';
-			if (strlen(module_dir) + strlen("/hyperShaderFX/shaders") < PATH_MAX) {
+			if (strlen(module_dir) + strlen("/hypershader/shaders") < PATH_MAX) {
 				char candidate[PATH_MAX];
-				snprintf(candidate, sizeof(candidate), "%s/hyperShaderFX/shaders", module_dir);
+				snprintf(candidate, sizeof(candidate), "%s/hypershader/shaders", module_dir);
 				struct stat st;
 				if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode))
 					return bstrdup(candidate);
@@ -3357,7 +3357,7 @@ char *shaders_dir_from_known(void)
 		const char *lib_segment = strstr(module_file, "/lib/");
 		if (lib_segment) {
 			size_t root_len = (size_t)(lib_segment - module_file);
-			const char *resource_suffix = "/share/obs/obs-plugins/hyperShaderFX/shaders";
+			const char *resource_suffix = "/share/obs/obs-plugins/hypershader/shaders";
 			if (root_len + strlen(resource_suffix) < PATH_MAX) {
 				char candidate[PATH_MAX];
 				memcpy(candidate, module_file, root_len);
@@ -3373,19 +3373,19 @@ char *shaders_dir_from_known(void)
 	char *home = getenv("HOME");
 	if (home && home[0]) {
 		char candidate[PATH_MAX];
-		snprintf(candidate, sizeof(candidate), "%s/.local/share/obs/obs-plugins/hyperShaderFX/shaders", home);
-		blog(LOG_INFO, "[HyperShader] Checking: %s", candidate);
+		snprintf(candidate, sizeof(candidate), "%s/.local/share/obs/obs-plugins/hypershader/shaders", home);
+		blog(LOG_INFO, "[hypershader] Checking: %s", candidate);
 		struct stat st;
 		if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode)) {
-			blog(LOG_INFO, "[HyperShader] Found shaders dir: %s", candidate);
+			blog(LOG_INFO, "[hypershader] Found shaders dir: %s", candidate);
 			return bstrdup(candidate);
 		}
 
-		snprintf(candidate, sizeof(candidate), "%s/.config/obs-studio/plugins/hyperShaderFX/data/shaders",
+		snprintf(candidate, sizeof(candidate), "%s/.config/obs-studio/plugins/hypershader/data/shaders",
 			 home);
-		blog(LOG_INFO, "[HyperShader] Checking: %s", candidate);
+		blog(LOG_INFO, "[hypershader] Checking: %s", candidate);
 		if (stat(candidate, &st) == 0 && S_ISDIR(st.st_mode)) {
-			blog(LOG_INFO, "[HyperShader] Found shaders dir: %s", candidate);
+			blog(LOG_INFO, "[hypershader] Found shaders dir: %s", candidate);
 			return bstrdup(candidate);
 		}
 	}
@@ -3433,8 +3433,8 @@ char *shaders_dir_from_known(void)
 	}
 
 	/* Fallback 2: Development environment path relative to module data */
-	/* Often modules are in build/rundir/../../plugins/hyperShaderFX/data */
-	p = obs_module_file("../../plugins/hyperShaderFX/data/shaders");
+	/* Often modules are in build/rundir/../../plugins/hypershader/data */
+	p = obs_module_file("../../plugins/hypershader/data/shaders");
 	if (p) {
 		struct stat st;
 		if (stat(p, &st) == 0 && S_ISDIR(st.st_mode)) {
@@ -3449,7 +3449,7 @@ char *shaders_dir_from_known(void)
 void hyper_ui_init(void)
 {
 	/* Deferred initialization: Scan only when first requested by UI */
-	blog(LOG_INFO, "[HyperShader] UI initialized (shader scanning deferred)");
+	blog(LOG_INFO, "[hypershader] UI initialized (shader scanning deferred)");
 }
 
 void hyper_ui_free(void)

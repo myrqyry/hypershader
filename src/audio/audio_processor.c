@@ -126,13 +126,13 @@ void *probe_audio_mixes_thread(void *param)
 	struct hypershader_data *s = param;
 	audio_t *a = obs_get_audio();
 	if (!a) {
-		blog(LOG_WARNING, "[HyperShader] No audio output handler available to probe mixes");
+		blog(LOG_WARNING, "[hypershader] No audio output handler available to probe mixes");
 		return NULL;
 	}
 
 	const struct audio_output_info *info = audio_output_get_info(a);
 	if (info) {
-		blog(LOG_INFO, "[HyperShader] Audio output info: name='%s' sr=%u format=%d speakers=%d",
+		blog(LOG_INFO, "[hypershader] Audio output info: name='%s' sr=%u format=%d speakers=%d",
 		     info->name ? info->name : "(unnamed)", info->samples_per_sec, (int)info->format,
 		     (int)info->speakers);
 	}
@@ -146,10 +146,10 @@ void *probe_audio_mixes_thread(void *param)
 
 		bool ok = audio_output_connect(a, i, &conv, probe_audio_callback, NULL);
 		if (ok) {
-			blog(LOG_INFO, "[HyperShader] Mix %zu: connect OK", i);
+			blog(LOG_INFO, "[hypershader] Mix %zu: connect OK", i);
 			audio_output_disconnect(a, i, probe_audio_callback, NULL);
 		} else {
-			blog(LOG_INFO, "[HyperShader] Mix %zu: connect FAILED", i);
+			blog(LOG_INFO, "[hypershader] Mix %zu: connect FAILED", i);
 		}
 	}
 
@@ -247,19 +247,19 @@ void *sound_preview_thread_fn(void *param)
 
 	ma_device device;
 	if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
-		blog(LOG_ERROR, "[HyperShader] Failed to initialize miniaudio device for preview");
+		blog(LOG_ERROR, "[hypershader] Failed to initialize miniaudio device for preview");
 		s->sound_preview_running = false;
 		return NULL;
 	}
 
 	if (ma_device_start(&device) != MA_SUCCESS) {
-		blog(LOG_ERROR, "[HyperShader] Failed to start miniaudio device for preview");
+		blog(LOG_ERROR, "[hypershader] Failed to start miniaudio device for preview");
 		ma_device_uninit(&device);
 		s->sound_preview_running = false;
 		return NULL;
 	}
 
-	blog(LOG_INFO, "[HyperShader] Audio preview started (miniaudio, sr=%d, duration=%.1fs)", sr, duration);
+	blog(LOG_INFO, "[hypershader] Audio preview started (miniaudio, sr=%d, duration=%.1fs)", sr, duration);
 
 	/* Wait for playback to complete or thread cancellation */
 	while (state.samples_remaining > 0 && !state.stop_requested) {
@@ -274,7 +274,7 @@ void *sound_preview_thread_fn(void *param)
 	ma_device_stop(&device);
 	ma_device_uninit(&device);
 
-	blog(LOG_INFO, "[HyperShader] Audio preview finished");
+	blog(LOG_INFO, "[hypershader] Audio preview finished");
 	s->sound_preview_running = false;
 	return NULL;
 }
@@ -357,7 +357,7 @@ bool start_source_audio_connection(struct hypershader_data *s)
 	s->selected_audio_source = source;
 	obs_source_add_audio_capture_callback(source, source_audio_callback, s);
 	s->source_audio_connected = true;
-	blog(LOG_INFO, "[HyperShader] Capturing audio from source %s", obs_source_get_name(source));
+	blog(LOG_INFO, "[hypershader] Capturing audio from source %s", obs_source_get_name(source));
 	return true;
 }
 
@@ -390,7 +390,7 @@ void stop_source_audio_connection(struct hypershader_data *s)
 
 	obs_source_remove_audio_capture_callback(s->selected_audio_source, source_audio_callback, s);
 	atomic_store_explicit(&s->last_audio_capture_ns, 0, memory_order_release);
-	blog(LOG_INFO, "[HyperShader] Disconnected from OBS audio source %s",
+	blog(LOG_INFO, "[hypershader] Disconnected from OBS audio source %s",
 	     obs_source_get_name(s->selected_audio_source));
 	obs_source_release(s->selected_audio_source);
 	s->selected_audio_source = NULL;
@@ -416,7 +416,7 @@ bool start_obs_audio_connection(struct hypershader_data *s)
 
 	size_t mix_idx = s->audio_mix_idx; /* use user-selected mix */
 	if (!audio_output_connect(a, mix_idx, &conv, obs_audio_callback, s)) {
-		blog(LOG_ERROR, "[HyperShader] Failed to connect to audio output mix %zu", mix_idx);
+		blog(LOG_ERROR, "[hypershader] Failed to connect to audio output mix %zu", mix_idx);
 		return false;
 	}
 
@@ -424,7 +424,7 @@ bool start_obs_audio_connection(struct hypershader_data *s)
 	s->audio_connected = true;
 	s->audio_mix_idx = mix_idx;
 	s->audio_sample_rate = audio_output_get_sample_rate(a);
-	blog(LOG_INFO, "[HyperShader] Connected to OBS audio mix %zu (sr=%d)", mix_idx, s->audio_sample_rate);
+	blog(LOG_INFO, "[hypershader] Connected to OBS audio mix %zu (sr=%d)", mix_idx, s->audio_sample_rate);
 	return true;
 }
 
@@ -438,7 +438,7 @@ void stop_obs_audio_connection(struct hypershader_data *s)
 	atomic_store_explicit(&s->last_audio_capture_ns, 0, memory_order_release);
 	reset_beat_state(s);
 	s->audio_connected = false;
-	blog(LOG_INFO, "[HyperShader] Disconnected from OBS audio mix %zu", s->audio_mix_idx);
+	blog(LOG_INFO, "[hypershader] Disconnected from OBS audio mix %zu", s->audio_mix_idx);
 }
 
 /* Internal helpers for FFT locking */
@@ -597,7 +597,7 @@ void compute_audio_features(struct hypershader_data *s, float *window, int n)
 
 	/* Fill Audio Texture Row (FFT Spectrum) */
 	/* Row 0: FFT frequency data (normalized) */
-	/* HyperShader audio texture: 512 pixels wide; data[0].x = frequency magnitude */
+	/* hypershader audio texture: 512 pixels wide; data[0].x = frequency magnitude */
 
 	int nbins = s->audio_window_size / 2;
 	float smooth_factor = 0.5f; // Texture smoothing
@@ -727,7 +727,7 @@ void *audio_worker(void *p)
 
 		/* Validate monotonic timestamps */
 		if (s->last_audio_ts > 0 && current_ts < s->last_audio_ts) {
-			blog(LOG_WARNING, "[HyperShader] Audio timestamp went backward, resetting");
+			blog(LOG_WARNING, "[hypershader] Audio timestamp went backward, resetting");
 			s->last_audio_ts = 0;
 		}
 
@@ -737,7 +737,7 @@ void *audio_worker(void *p)
 			int next_fft = s->next_audio_fft_size;
 			int next_window = s->next_audio_window_type;
 
-			blog(LOG_INFO, "[HyperShader] Worker: Reconfiguring FFT to %d (window %d)", next_fft,
+			blog(LOG_INFO, "[hypershader] Worker: Reconfiguring FFT to %d (window %d)", next_fft,
 			     next_window);
 
 			/* Calculate new FFT size */
@@ -785,7 +785,7 @@ void *audio_worker(void *p)
 				}
 				s->audio_system_healthy = true;
 			} else {
-				blog(LOG_ERROR, "[HyperShader] Worker: FFT Reconfig FAILED");
+				blog(LOG_ERROR, "[hypershader] Worker: FFT Reconfig FAILED");
 				if (new_cfg)
 					kiss_fftr_free(new_cfg);
 				bfree(new_in);
@@ -826,7 +826,7 @@ void *audio_worker(void *p)
 					s->audio_latency_monitor.consecutive_overruns++;
 					if (s->audio_latency_monitor.consecutive_overruns > 3) {
 						blog(LOG_WARNING,
-						     "[HyperShader] Audio processing overruns detected "
+						     "[hypershader] Audio processing overruns detected "
 						     "(avg=%.2fms), consider reducing FFT size",
 						     (float)s->audio_latency_monitor.avg_process_time_ns / 1000000.0f);
 						s->audio_latency_monitor.consecutive_overruns = 0;
@@ -883,7 +883,7 @@ void *audio_worker(void *p)
 					}
 					if (significant_change || s->audio_debug_last_level < 0.0f) {
 						blog(LOG_INFO,
-						     "[HyperShader] Audio debug: level=%.6f peak=%.6f bands=[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f]",
+						     "[hypershader] Audio debug: level=%.6f peak=%.6f bands=[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f]",
 						     s->audio_level, s->audio_peak, s->audio_bands[0],
 						     s->audio_bands[1], s->audio_bands[2], s->audio_bands[3],
 						     s->audio_bands[4], s->audio_bands[5], s->audio_bands[6],

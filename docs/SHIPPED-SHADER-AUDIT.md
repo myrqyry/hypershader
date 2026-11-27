@@ -9,7 +9,7 @@ role, audio/Sight/texture control visibility, selected no-signal pixel contracts
 It additionally exercises Playground mode changes with actual libobs pixel comparisons.
 
 ```sh
-scripts/verify-shipped-shaders.sh /path/to/hyperShaderFX.so /path/to/data
+scripts/verify-shipped-shaders.sh /path/to/hypershader.so /path/to/data
 ```
 
 All 34 passed the final corpus test. The following table distinguishes per-effect supplemental

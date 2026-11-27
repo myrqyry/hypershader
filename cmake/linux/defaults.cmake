@@ -12,11 +12,11 @@ endif()
 # Enable find_package targets to become globally available targets
 set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL TRUE)
 
-option(HYPERSHADERFX_BUILD_OBS_FROM_SOURCE "Build the pinned OBS SDK from source" OFF)
+option(HYPERSHADER_BUILD_OBS_FROM_SOURCE "Build the pinned OBS SDK from source" OFF)
 
-if(HYPERSHADERFX_BUILD_OBS_FROM_SOURCE)
+if(HYPERSHADER_BUILD_OBS_FROM_SOURCE)
   include(buildspec)
-  set(_hypershaderfx_pinned_libobs_dir "${CMAKE_CURRENT_SOURCE_DIR}/.deps/lib/cmake/libobs")
+  set(_hypershader_pinned_libobs_dir "${CMAKE_CURRENT_SOURCE_DIR}/.deps/lib/cmake/libobs")
 
   # Preserve an explicit CMake or environment override. Otherwise source mode
   # must consume the SDK it just built rather than a host-selected libobs.
@@ -25,7 +25,7 @@ if(HYPERSHADERFX_BUILD_OBS_FROM_SOURCE)
   elseif(NOT libobs_DIR)
     set(
       libobs_DIR
-      "${_hypershaderfx_pinned_libobs_dir}"
+      "${_hypershader_pinned_libobs_dir}"
       CACHE PATH
       "Path to pinned source-built libobsConfig.cmake"
       FORCE
@@ -39,7 +39,10 @@ set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CM
 
 set(CPACK_GENERATOR "DEB")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${PLUGIN_EMAIL}")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${PLUGIN_AUTHOR}")
+if(PLUGIN_EMAIL)
+  set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${PLUGIN_AUTHOR} <${PLUGIN_EMAIL}>")
+endif()
 set(CPACK_SET_DESTDIR ON)
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.25.0 OR NOT CMAKE_CROSSCOMPILING)
@@ -69,7 +72,7 @@ set(CPACK_ARCHIVE_THREADS 0)
 
 include(CPack)
 
-function(_hypershaderfx_set_libobs_from_pkgconfig)
+function(_hypershader_set_libobs_from_pkgconfig)
   find_package(PkgConfig QUIET)
   if(NOT PKG_CONFIG_FOUND)
     return()
@@ -86,7 +89,7 @@ function(_hypershaderfx_set_libobs_from_pkgconfig)
   endif()
 endfunction()
 
-function(_hypershaderfx_prepare_libobs_dir)
+function(_hypershader_prepare_libobs_dir)
   if(DEFINED libobs_DIR AND libobs_DIR)
     get_filename_component(_libobs_prefix "${libobs_DIR}" DIRECTORY)
     get_filename_component(_libobs_prefix "${_libobs_prefix}" DIRECTORY)
@@ -97,10 +100,10 @@ function(_hypershaderfx_prepare_libobs_dir)
     endif()
   endif()
 
-  if(HYPERSHADERFX_BUILD_OBS_FROM_SOURCE AND (NOT DEFINED libobs_DIR OR NOT libobs_DIR))
+  if(HYPERSHADER_BUILD_OBS_FROM_SOURCE AND (NOT DEFINED libobs_DIR OR NOT libobs_DIR))
     set(
       libobs_DIR
-      "${_hypershaderfx_pinned_libobs_dir}"
+      "${_hypershader_pinned_libobs_dir}"
       CACHE PATH
       "Path to pinned source-built libobsConfig.cmake"
       FORCE
@@ -121,7 +124,7 @@ function(_hypershaderfx_prepare_libobs_dir)
   endif()
 endfunction()
 
-_hypershaderfx_prepare_libobs_dir()
+_hypershader_prepare_libobs_dir()
 
 find_package(libobs QUIET CONFIG)
 
@@ -130,7 +133,7 @@ if(NOT TARGET OBS::libobs)
 endif()
 
 if(NOT TARGET OBS::libobs)
-  _hypershaderfx_set_libobs_from_pkgconfig()
+  _hypershader_set_libobs_from_pkgconfig()
 endif()
 
 if(NOT TARGET OBS::libobs)

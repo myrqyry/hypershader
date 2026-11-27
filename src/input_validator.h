@@ -225,24 +225,24 @@ static inline validation_result_t validate_numeric_range(double value, double mi
 static inline double clamp_numeric_range(double value, double min, double max, const char *param_name)
 {
 	if (isnan(value)) {
-		blog(LOG_WARNING, "[HyperShader] %s: NaN value, defaulting to %f",
+		blog(LOG_WARNING, "[hypershader] %s: NaN value, defaulting to %f",
 		     param_name ? param_name : "parameter", min);
 		return min;
 	}
 
 	if (isinf(value)) {
-		blog(LOG_WARNING, "[HyperShader] %s: Infinite value, clamping", param_name ? param_name : "parameter");
+		blog(LOG_WARNING, "[hypershader] %s: Infinite value, clamping", param_name ? param_name : "parameter");
 		return (value > 0) ? max : min;
 	}
 
 	if (value < min) {
-		blog(LOG_DEBUG, "[HyperShader] %s: value %f below minimum %f, clamping",
+		blog(LOG_DEBUG, "[hypershader] %s: value %f below minimum %f, clamping",
 		     param_name ? param_name : "parameter", value, min);
 		return min;
 	}
 
 	if (value > max) {
-		blog(LOG_DEBUG, "[HyperShader] %s: value %f above maximum %f, clamping",
+		blog(LOG_DEBUG, "[hypershader] %s: value %f above maximum %f, clamping",
 		     param_name ? param_name : "parameter", value, max);
 		return max;
 	}
@@ -284,7 +284,7 @@ static inline bool validate_shader_path_with_log(const char *path, const char *c
 	validation_result_t result = validate_file_path(path, PATH_MAX, false);
 
 	if (result != VALIDATION_OK) {
-		blog(LOG_ERROR, "[HyperShader] %s: Invalid shader path: %s (%s)", caller ? caller : "unknown",
+		blog(LOG_ERROR, "[hypershader] %s: Invalid shader path: %s (%s)", caller ? caller : "unknown",
 		     path ? path : "(null)", validation_error_message(result));
 		return false;
 	}

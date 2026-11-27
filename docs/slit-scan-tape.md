@@ -1,8 +1,8 @@
-# Slit Scan Tape — HyperShaderFX
+# Slit Scan Tape — hypershader
 
 **Native shader:** `data/shaders/root/slit_scan_tape.effect`
 
-This is an original HyperShaderFX HLSL/OBS-effect implementation of the
+This is an original hypershader HLSL/OBS-effect implementation of the
 **slit-scan time mosaic** technique, inspired by Image/ine (ImWeb). It was
 recovered from the project's local *round-two uninstalled draft* and tested
 against real libobs/OpenGL rendering. No Image/ine source code was copied.
@@ -25,13 +25,13 @@ successive captures over time.
 - **Erase Tape:** clear the history to transparent while enabled
 
 Apply as an **effect filter on an existing camera/game/video source**. The
-standalone HyperShaderFX Source has no live input image, so it cannot build a
+standalone hypershader Source has no live input image, so it cannot build a
 video tape without an external texture feed.
 
 ## Rendering contract
 
 The effect uses `hs_history` as the actual **previous output** through
-HyperShaderFX's current ping-pong render history. Only the new strip samples
+hypershader's current ping-pong render history. Only the new strip samples
 the *current* `image`; remaining pixels are read from the previous output at
 a shifted coordinate. There is no CPU framebuffer readback or external state.
 

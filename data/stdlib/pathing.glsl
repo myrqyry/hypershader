@@ -1,4 +1,4 @@
-// HyperShader Standard Library - Pathing & Animation Effects
+// hypershader Standard Library - Pathing & Animation Effects
 // Animated path/flow effects for textures
 
 #ifndef _STDLIB_PATHING_H_

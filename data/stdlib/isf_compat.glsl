@@ -1,5 +1,5 @@
-// HyperShader Standard Library - ISF Compatibility
-// Maps ISF globals to the native HyperShader runtime.
+// hypershader Standard Library - ISF Compatibility
+// Maps ISF globals to the native hypershader runtime.
 
 #ifndef _STDLIB_ISF_H_
 #define _STDLIB_ISF_H_
@@ -8,7 +8,7 @@
 
 // --- ISF Uniform Configuration ---
 // ISF uses specific names for time and resolution.
-// We map them to the native HyperShader runtime equivalents.
+// We map them to the native hypershader runtime equivalents.
 
 #define RENDERSIZE hs_resolution.xy
 #define TIME hs_time

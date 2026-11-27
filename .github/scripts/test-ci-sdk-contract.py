@@ -15,12 +15,12 @@ assert "set(dependencies_list obs-studio)" in text
 assert "_check_dependencies()" in text
 
 defaults = (root / "cmake/linux/defaults.cmake").read_text()
-assert "HYPERSHADERFX_BUILD_OBS_FROM_SOURCE" in defaults
+assert "HYPERSHADER_BUILD_OBS_FROM_SOURCE" in defaults
 assert "include(buildspec)" in defaults
-assert "_hypershaderfx_pinned_libobs_dir" in defaults
+assert "_hypershader_pinned_libobs_dir" in defaults
 assert "DEFINED ENV{libobs_DIR}" in defaults
 assert "elseif(NOT libobs_DIR)" in defaults
-assert "HYPERSHADERFX_BUILD_OBS_FROM_SOURCE AND (NOT DEFINED libobs_DIR OR NOT libobs_DIR)" in defaults
+assert "HYPERSHADER_BUILD_OBS_FROM_SOURCE AND (NOT DEFINED libobs_DIR OR NOT libobs_DIR)" in defaults
 assert r"\.deps/" in defaults, "source packages must exclude downloaded SDKs"
 assert r"\.meristem/local/" in defaults, "source packages must exclude local Meristem state"
 
@@ -29,7 +29,7 @@ assert "elseif(OS_LINUX)" in bootstrap
 assert 'set(_cmake_generator "Ninja")' in bootstrap
 
 builder = (root / ".github/scripts/build-ubuntu").read_text()
-assert "-DHYPERSHADERFX_BUILD_OBS_FROM_SOURCE=ON" in builder
+assert "-DHYPERSHADER_BUILD_OBS_FROM_SOURCE=ON" in builder
 
 setup = (root / ".github/scripts/utils.zsh/setup_ubuntu").read_text()
 assert "ppa:obsproject/obs-studio" not in setup
@@ -43,9 +43,11 @@ assert "ubuntu-latest" not in workflow
 assert "test-ci-sdk-contract.py" in workflow
 
 obs33_workflow = (root / ".github/workflows/obs33-compatibility.yml").read_text()
-assert "OBS 33.0.1" in obs33_workflow
-assert "runs-on: ubuntu-26.04" in obs33_workflow
-assert "build-obs33-compat.sh" in obs33_workflow
+assert "myrqyry/obs-plugin-ci/.github/workflows/build.yml@70ce37b1015df80478f8ed559f5c88bf4007233f" in obs33_workflow
+assert "profile: full" in obs33_workflow
+assert "driver: caller" in obs33_workflow
+assert "minimum-tests: 37" in obs33_workflow
+assert "source-package: true" in obs33_workflow
 windows_helpers = (root / "cmake/windows/helpers.cmake").read_text()
 assert 'DESTINATION "${target}/bin/64bit"' in windows_helpers
 assert 'DESTINATION "${target}"' in windows_helpers
@@ -102,11 +104,12 @@ for required in ("_fullpath", "_stricmp", "strtok_s", "S_ISDIR", "S_ISREG"):
 # The curated repository uses main, not the development repository's master.
 for candidate in (workflow, obs33_workflow):
     assert candidate.count("branches: [main, master]") == 2, "CI must cover the default branch for pushes and PRs"
-    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in candidate
-    assert "persist-credentials: false" in candidate
+    if candidate == workflow:
+        assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in candidate
+        assert "persist-credentials: false" in candidate
     assert "cancel-in-progress: true" in candidate
     assert "github.sha" not in candidate, "Concurrency must cancel superseded runs on the same ref"
 assert "check_readme_links.py" in workflow
 assert "test-readme-links.py" in workflow
 
-print("PASS: HyperShaderFX CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")
+print("PASS: hypershader CI uses explicit runners, pinned Linux OBS SDK, and portable graphics/atomic paths")

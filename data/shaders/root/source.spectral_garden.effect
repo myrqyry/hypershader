@@ -1,6 +1,6 @@
 // @label "Spectral Garden"
 // @description "Eight flowering stems respond to eight real FFT bands. Kick opens the blossoms; no AI model, frame history or extra audio capture."
-// Original native HyperShaderFX audio instrument.
+// Original native hypershader audio instrument.
 // One flower per measured band. The quiet garden remains visible in silence.
 #include "../../stdlib/hypershader_standard.glsl"
 

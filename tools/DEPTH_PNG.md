@@ -5,7 +5,7 @@ It embeds and extracts an existing floating-point depth map in a normal PNG,
 using the same private `slDp` ancillary chunk as
 [NotRayST/ShaderLab](https://github.com/NotRayST/ShaderLab/blob/main/common/depth_chunk.cpp).
 It does **not** estimate depth, capture a game's GPU buffers, or connect to
-HyperShaderFX/OBS rendering yet. The first purpose is a real, testable,
+hypershader/OBS rendering yet. The first purpose is a real, testable,
 cross-platform storage boundary for later depth-aware shader effects.
 
 ## Usage
