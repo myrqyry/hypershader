@@ -22,8 +22,8 @@ or partial below remain open for inspection and implementation.
 - [x] 12. Cache listed per-frame effect handles — 46ba064, graph and compositor tests.
 - [ ] 13. Double-buffered MediaPipe readback; establish actual GPU readiness.
 - [x] 14. SPSC audio race — af2940a, producer/consumer queue and worker-owned history, concurrent and real PCM probes.
-- [ ] 15. Audio source weak-reference lifetime and teardown.
-- [ ] 16. Lazy EnTT allocation.
+- [x] 15. Audio source lifetime and teardown — 86fb457: worker detaches removed sources; strong ref retained only while callback registered for safe libobs teardown. Native deletion/replacement regression passes; intentionally not an unsynchronized weak-reference conversion.
+- [x] 16. Lazy EnTT allocation — 2d91f24: allocate on compatible effect load, release on switch/teardown, GPU texture creation outside render. Native entity animation and allocation lifecycle regression passed; full catalog 39/39.
 - [ ] 17. Hidden/disabled workload suspension.
 - [ ] 18. Single-pass GLSL translator.
 - [ ] 19. Stdlib include cache.
@@ -131,7 +131,7 @@ Evidence: /tmp/hs-audit-shipped-full.log, /tmp/hs-audit-cache-graph.log,
 /tmp/hs-audit-compositor.log, /tmp/hs-audit-panel-final.log,
 /tmp/hs-audit-meta-green.log, /tmp/hs-audit-final-*.log.
 
-Next: reproduce and resolve audio source teardown and lazy scene
+Next: continue update-time parameter snapshots after verified audio source teardown and lazy scene
 allocation, then complete update-time control snapshots and GPU staging.
 Graph lifetime/transient admission before expanding render scale and
 transition scheduler. Universal spatial mask should reuse the existing
@@ -139,3 +139,5 @@ Sight path and preserve temporal history. No duplicate inference engine.
 Keep output defaults compatible and qualify native pixels before commit.
 No throughput measurements, TSAN qualification, live installation, model
 inference, Windows/macOS validation, merge or push in this pass.
+
+2026-11-28 second batch: 86fb457 and 2d91f24; evidence /tmp/hs-lifetime-red.log, /tmp/hs-lifetime-green.log, /tmp/hs-entity-red.log, /tmp/hs-entity-green.log, /tmp/hs-entity-catalog-full.log. Isolated Qt build, no install/push. Weak-only audio ownership intentionally not implemented; removed-source detach depends on running audio worker.
