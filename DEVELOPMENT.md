@@ -271,3 +271,31 @@ Run the isolated native lifecycle/PCM/Sight-provider fixture:
 
 This test uses real libobs audio capture and native rendered pixels; the
 Sight provider is a deterministic test endpoint (not real inference).
+
+### Shared shader library cache
+
+The native preprocessor keeps an immutable per-file include plan and original
+text for canonical .glsl files beneath the installed stdlib directory. The
+metadata scanner reads the same cached text, but retains its own metadata
+parsing semantics. Include names remain unresolved in each plan; every
+compilation resolves them against current files and its own include guard.
+Managed Builder revisions and root effects are not cached.
+
+On POSIX, file identity, size, mode and nanosecond modification/change times
+are checked on each lookup. Missing, malformed, unstable and oversized
+entries are not retained. A shared 64-entry / 2 MiB retained-buffer LRU
+releases its references on module unload. Concurrent cold misses may read
+independently; cache I/O and parsing occur outside the cache mutex. Windows
+uses the uncached path until a high-resolution Windows identity check is
+implemented. The cache does not introduce a file watcher or force an
+existing effect to recompile; changes become visible on the next compile
+(including Builder's revisioned Validate/Apply). Metadata and compilation
+are not a transactional snapshot across concurrent file edits.
+
+Run the isolated native regression on Linux:
+
+    bash scripts/verify-stdlib-cache.sh MODULE DATA
+
+The test interposes real file opens, checks rendered pixels and metadata
+defaults, same-size edits with restored mtime, missing/restored dependencies,
+changed include order, managed revisions, and LRU eviction.

@@ -47,6 +47,7 @@ OBS_DECLARE_MODULE()
 
 OBS_MODULE_USE_DEFAULT_LOCALE("hypershader", "en-US")
 
+extern void hs_include_cache_clear(void);
 extern struct obs_source_info hypershader_filter_info;
 extern struct obs_source_info hypershader_source_info;
 extern struct obs_source_info hypershader_transition_info;
@@ -91,4 +92,5 @@ void obs_module_unload(void)
 	unregister_shader_builder_dock();
 #endif
 	hyper_ui_free();
+    hs_include_cache_clear();
 }

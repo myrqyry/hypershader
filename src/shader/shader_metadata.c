@@ -13,6 +13,7 @@
 /* From shader_preprocess.c */
 extern char *hs_resolve_data_file(const char *path);
 extern char *resolve_include_path(const char *include_name, const char *current_file_path);
+extern char *hs_stdlib_cached_text(const char *canonical_path);
 
 /* Maximum string lengths for metadata parsing (security/robustness) */
 #define META_MAX_LABEL_LEN 256
@@ -287,8 +288,10 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 	}
 
 	blog(LOG_DEBUG, "[hypershader] Parsing metadata from: %s", canonical_path);
-	FILE *f = fopen(canonical_path, "r");
-	if (!f) {
+	char *cached=hs_stdlib_cached_text(canonical_path);
+    const char *cursor=cached;
+    FILE *f=cached ? NULL : fopen(canonical_path,"r");
+	if (!f && !cached) {
 		blog(LOG_WARNING, "[hypershader] ┌─ Metadata parse failed");
 		blog(LOG_WARNING, "[hypershader] ├─ File : %s", canonical_path);
 		blog(LOG_WARNING, "[hypershader] └─ Action: file unreadable");
@@ -303,7 +306,12 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 	bool in_include_block_comment = false;
     bool in_channel_block_comment = false;
 
-	while (fgets(line, sizeof(line), f)) {
+	while (cursor ? *cursor!=0 : fgets(line,sizeof(line),f)!=NULL) {
+        if (cursor) {
+            size_t n=0;
+            while (n<sizeof(line)-1 && cursor[n]) { if (cursor[n++]=='\n') break; }
+            memcpy(line,cursor,n);line[n]=0;cursor+=n;
+        }
         const bool started_in_block = in_channel_block_comment;
         metadata_scan_input_use(line, &in_channel_block_comment, channel_usage, capabilities);
 
@@ -543,7 +551,8 @@ void parse_shader_metadata_internal(const char *path, shader_meta_t *da, int dep
 
 		last_comment[0] = '\0';
 	}
-	fclose(f);
+	if (f) fclose(f);
+    bfree(cached);
 	blog(LOG_DEBUG, "[hypershader] Finished parsing %s: found %zu new entries", canonical_path,
 	     da->num - initial_count);
 	if (resolved_path)

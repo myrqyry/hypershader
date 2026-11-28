@@ -1106,8 +1106,11 @@ static char *read_file_contents(const char *path)
 	size_t read = fread(buf, 1, size, f);
 	fclose(f);
 
-	if (read != (size_t)size) {
-		blog(LOG_WARNING, "[hypershader] Partial read: expected %zu, got %zu", (size_t)size, read);
+	if (read != (size_t)size || memchr(buf, '\0', read)) {
+		blog(LOG_WARNING, "[hypershader] Incomplete or non-text shader read: expected %zu, got %zu", (size_t)size, read);
+        bfree(buf);
+        bfree(resolved_path);
+        return NULL;
 	}
 
 	buf[read] = '\0';
@@ -1266,135 +1269,293 @@ char *resolve_include_path(const char *include_name, const char *current_file_pa
 	return NULL; /* Not found */
 }
 
-/* Process shader file and inline all #include directives (with include guard) */
-static char *preprocess_shader_with_guard(const char *path, int depth, struct include_guard *guard)
+/* A per-file plan stores literal runs and unresolved include names, never
+ * a flattened dependency graph. Every expansion still resolves dependencies
+ * in caller order, with its own cycle/duplicate guard. */
+struct hs_include_piece {
+    char *text;
+    bool include;
+};
+struct hs_include_plan {
+    atomic_uint refs;
+    char *content;
+    struct hs_include_piece *pieces;
+    size_t count, capacity, bytes;
+    bool valid;
+};
+
+static void include_plan_release(struct hs_include_plan *plan)
 {
-	if (depth > 10) {
-		blog(LOG_ERROR, "[hypershader] Include depth exceeded (max=10)");
-		return NULL;
-	}
+    if (!plan || atomic_fetch_sub_explicit(&plan->refs,1,memory_order_acq_rel)!=1)
+        return;
+    for (size_t i=0;i<plan->count;i++) bfree(plan->pieces[i].text);
+    bfree(plan->pieces);
+    bfree(plan->content);
+    bfree(plan);
+}
 
-	char canonical_path[PATH_MAX];
-	if (hs_realpath(path, canonical_path) == NULL) {
-		strncpy(canonical_path, path, PATH_MAX - 1);
-		canonical_path[PATH_MAX - 1] = '\0';
-	}
+static void include_plan_piece(struct hs_include_plan *plan,char *text,bool include)
+{
+    if (plan->count==plan->capacity) {
+        plan->capacity=plan->capacity ? plan->capacity*2 : 8;
+        plan->pieces=brealloc(plan->pieces,plan->capacity*sizeof(*plan->pieces));
+    }
+    plan->pieces[plan->count++]=(struct hs_include_piece){text,include};
+    plan->bytes+=strlen(text)+1;
+}
 
-	/* Check for circular include using the guard */
-	if (include_guard_contains(guard, canonical_path)) {
-		return bstrdup("");
-	}
+static void include_plan_flush(struct hs_include_plan *plan,struct dstr *literal)
+{
+    if (!literal->len) return;
+    include_plan_piece(plan,literal->array,false);
+    /* dstr reserves capacity beyond its logical length. Account for the
+     * actual retained buffer rather than only the visible source bytes. */
+    plan->bytes+=literal->capacity-literal->len-1;
+    memset(literal,0,sizeof(*literal));
+}
 
-	char *content = read_file_contents(canonical_path);
-	if (!content) {
-		blog(LOG_WARNING, "[hypershader] ┌─ Shader read failed");
-		blog(LOG_WARNING, "[hypershader] ├─ Path : %s", canonical_path);
-		blog(LOG_WARNING, "[hypershader] └─ Action: check file access and include paths");
-		return NULL;
-	}
+static struct hs_include_plan *include_plan_parse(char *content,const char *path)
+{
+    if (!content) return NULL;
+    struct hs_include_plan *plan=bzalloc(sizeof(*plan));
+    atomic_init(&plan->refs,1);
+    plan->content=content;
+    plan->bytes=sizeof(*plan)+strlen(content)+1;
+    struct dstr literal={0};
+    bool in_block_comment=false;
+    for (const char *line=content;line && *line;) {
+        const char *end=strchr(line,'\n');
+        size_t len=end ? (size_t)(end-line) : strlen(line);
+        const char *inc=effect_include_directive(line,len,&in_block_comment);
+        if (inc) {
+            const char *limit=line+len;
+            const char *q1=inc+8;
+            while (q1<limit && (*q1==' ' || *q1=='\t')) ++q1;
+            const char *q2=q1<limit && *q1=='"' ? memchr(q1+1,'"',limit-q1-1) : NULL;
+            if (!q2 || q2==q1+1) {
+                blog(LOG_ERROR,"[hypershader] Invalid #include directive in %s",path);
+                dstr_free(&literal);
+                return plan;
+            }
+            include_plan_flush(plan,&literal);
+            size_t n=(size_t)(q2-q1-1);
+            char *name=bmalloc(n+1);
+            memcpy(name,q1+1,n);
+            name[n]='\0';
+            include_plan_piece(plan,name,true);
+        } else if (strncmp(line,"#define SHADERTOY_MAINIMAGE_WRAPPER",sizeof("#define SHADERTOY_MAINIMAGE_WRAPPER")-1)==0 ||
+                   strncmp(line,"#define HYPERSHADER_PIXEL_WRAPPER",sizeof("#define HYPERSHADER_PIXEL_WRAPPER")-1)==0) {
+            /* Keep the existing continuation and wrapper removal semantics. */
+            bool continued=len && line[len-1]=='\\';
+            while (continued && end && end[1]) {
+                line=end+1;
+                end=strchr(line,'\n');
+                len=end ? (size_t)(end-line) : strlen(line);
+                continued=len && line[len-1]=='\\';
+            }
+        } else {
+            dstr_ncat(&literal,line,len);
+            dstr_cat(&literal,"\n");
+        }
+        line=end ? end+1 : NULL;
+    }
+    include_plan_flush(plan,&literal);
+    plan->bytes+=plan->capacity*sizeof(*plan->pieces);
+    plan->valid=true;
+    return plan;
+}
 
-	include_guard_add(guard, canonical_path);
+/* Bounded shared stdlib cache. Revalidate on every lookup; never cache
+ * missing files, invalid plans, or files changed while being read.
+ * Windows CRT stat has coarse timestamps, so keep its uncached path until
+ * high-resolution file identity is available. */
+#define HS_INCLUDE_CACHE_ENTRIES 64
+#define HS_INCLUDE_CACHE_BYTES (2u*1024u*1024u)
+#ifndef _WIN32
+struct hs_include_cache_entry {
+    char *path;
+    struct stat stamp;
+    struct hs_include_plan *plan;
+    uint64_t used;
+};
+static struct hs_include_cache_entry include_cache[HS_INCLUDE_CACHE_ENTRIES];
+static pthread_mutex_t include_cache_lock=PTHREAD_MUTEX_INITIALIZER;
+static uint64_t include_cache_clock;
+static size_t include_cache_bytes;
 
-	/* Dynamic buffer for result */
-	size_t result_size = strlen(content) * 2;
-	if (result_size < 1024)
-		result_size = 1024;
-	size_t result_len = 0;
-	char *result = bmalloc(result_size);
-	result[0] = '\0';
+static bool include_stamp_equal(const struct stat *a,const struct stat *b)
+{
+    if (a->st_dev!=b->st_dev || a->st_ino!=b->st_ino || a->st_size!=b->st_size ||
+        a->st_mtime!=b->st_mtime || a->st_ctime!=b->st_ctime || a->st_mode!=b->st_mode)
+        return false;
+#ifdef __APPLE__
+    return a->st_mtimespec.tv_nsec==b->st_mtimespec.tv_nsec &&
+           a->st_ctimespec.tv_nsec==b->st_ctimespec.tv_nsec;
+#else
+    return a->st_mtim.tv_nsec==b->st_mtim.tv_nsec && a->st_ctim.tv_nsec==b->st_ctim.tv_nsec;
+#endif
+}
 
-	char *line_start = content;
-	char *line_end;
-	bool in_block_comment = false;
+static void include_cache_evict(size_t i)
+{
+    struct hs_include_cache_entry *entry=&include_cache[i];
+    if (!entry->plan) return;
+    include_cache_bytes-=entry->plan->bytes+strlen(entry->path)+1;
+    include_plan_release(entry->plan);
+    bfree(entry->path);
+    memset(entry,0,sizeof(*entry));
+}
 
-	while (line_start && *line_start) {
-		line_end = strchr(line_start, '\n');
-		size_t line_len = line_end ? (size_t)(line_end - line_start) : strlen(line_start);
+static bool include_cache_eligible(const char *path)
+{
+    char *data=hs_plugin_data_path();
+    char root[PATH_MAX],stdlib[PATH_MAX];
+    struct dstr dir={0};
+    if (data) dstr_printf(&dir,"%s/stdlib",data);
+    const char *ext=strrchr(path,'.');
+    bool eligible=data && hs_realpath(data,root) && hs_realpath(dir.array,stdlib) &&
+        hs_path_in_data_dir(stdlib,root) && hs_path_in_data_dir(path,stdlib) &&
+        ext && strcmp(ext,".glsl")==0;
+    dstr_free(&dir);
+    bfree(data);
+    return eligible;
+}
 
-		const char *inc = effect_include_directive(line_start, line_len, &in_block_comment);
-		if (inc) {
-			const char *line_limit = line_start + line_len;
-			const char *q1 = inc + 8;
-			while (q1 < line_limit && (*q1 == ' ' || *q1 == '\t'))
-				++q1;
-			const char *q2 = (q1 < line_limit && *q1 == '"')
-				? memchr(q1 + 1, '"', line_limit - q1 - 1) : NULL;
-			if (!q2 || q2 == q1 + 1) {
-				blog(LOG_ERROR, "[hypershader] Invalid #include directive in %s", canonical_path);
-				bfree(content);
-				bfree(result);
-				return NULL;
-			}
-			size_t inc_path_len = (size_t)(q2 - q1 - 1);
-			char *inc_filename = bmalloc(inc_path_len + 1);
-			memcpy(inc_filename, q1 + 1, inc_path_len);
-			inc_filename[inc_path_len] = '\0';
-			char *full_path = resolve_include_path(inc_filename, canonical_path);
-			char *included = full_path
-				? preprocess_shader_with_guard(full_path, depth + 1, guard) : NULL;
-			if (full_path)
-				bfree(full_path);
-			if (!included) {
-				blog(LOG_ERROR, "[hypershader] Required #include failed: %s in %s",
-				     inc_filename, canonical_path);
-				bfree(inc_filename);
-				bfree(content);
-				bfree(result);
-				return NULL;
-			}
-			bfree(inc_filename);
-			size_t inc_len = strlen(included);
-			while (result_len + inc_len + 2 >= result_size) {
-				result_size *= 2;
-				result = brealloc(result, result_size);
-			}
-			if (result_len > 0 && result[result_len - 1] != '\n')
-				result[result_len++] = '\n';
-			memcpy(result + result_len, included, inc_len);
-			result_len += inc_len;
-			if (result_len > 0 && result[result_len - 1] != '\n')
-				result[result_len++] = '\n';
-			result[result_len] = '\0';
-			bfree(included);
-			line_start = line_end ? line_end + 1 : NULL;
-			continue;
-		}
+static struct hs_include_plan *include_cache_get(const char *path)
+{
+    if (!include_cache_eligible(path)) return NULL;
+    struct stat before,after;
+    if (stat(path,&before)!=0 || !S_ISREG(before.st_mode) || before.st_size<=0 ||
+        before.st_size>HS_MAX_SHADER_FILE_SIZE || hs_access_exists(path)!=0)
+        return NULL;
+    pthread_mutex_lock(&include_cache_lock);
+    for (size_t i=0;i<HS_INCLUDE_CACHE_ENTRIES;i++) {
+        struct hs_include_cache_entry *entry=&include_cache[i];
+        if (!entry->plan || strcmp(entry->path,path)!=0) continue;
+        if (include_stamp_equal(&entry->stamp,&before)) {
+            struct hs_include_plan *plan=entry->plan;
+            atomic_fetch_add_explicit(&plan->refs,1,memory_order_relaxed);
+            entry->used=++include_cache_clock;
+            pthread_mutex_unlock(&include_cache_lock);
+            return plan;
+        }
+        include_cache_evict(i);
+        break;
+    }
+    pthread_mutex_unlock(&include_cache_lock);
 
-		/* The OBS effect compiler cannot expand multi-line wrapper defines.
-		 * Skip exactly the definition and its continuation lines, including
-		 * the final non-backslash line (previously leaked a stray brace). */
-		if (strncmp(line_start, "#define SHADERTOY_MAINIMAGE_WRAPPER", sizeof("#define SHADERTOY_MAINIMAGE_WRAPPER") - 1) == 0 ||
-		    strncmp(line_start, "#define HYPERSHADER_PIXEL_WRAPPER", sizeof("#define HYPERSHADER_PIXEL_WRAPPER") - 1) == 0) {
-			bool continued = line_len > 0 && line_start[line_len - 1] == '\\';
-			line_start = line_end ? line_end + 1 : NULL;
-			while (continued && line_start && *line_start) {
-				char *next = strchr(line_start, '\n');
-				size_t clen = next ? (size_t)(next - line_start) : strlen(line_start);
-				continued = clen > 0 && line_start[clen - 1] == '\\';
-				line_start = next ? next + 1 : NULL;
-			}
-			continue;
-		}
+    /* Do not hold the shared cache mutex across file I/O or parsing. */
+    struct hs_include_plan *plan=include_plan_parse(read_file_contents(path),path);
+    if (!plan || !plan->valid || stat(path,&after)!=0 || !include_stamp_equal(&before,&after))
+        return plan;
+    size_t bytes=plan->bytes+strlen(path)+1;
+    if (bytes>HS_INCLUDE_CACHE_BYTES) return plan;
 
-		while (result_len + line_len + 2 >= result_size) {
-			result_size *= 2;
-			result = brealloc(result, result_size);
-		}
+    pthread_mutex_lock(&include_cache_lock);
+    /* A concurrent compiler may have populated this key already. Keep its
+     * entry if identical; do not overwrite a newer version with an old one. */
+    for (size_t i=0;i<HS_INCLUDE_CACHE_ENTRIES;i++) {
+        struct hs_include_cache_entry *entry=&include_cache[i];
+        if (!entry->plan || strcmp(entry->path,path)!=0) continue;
+        pthread_mutex_unlock(&include_cache_lock);
+        return plan;
+    }
+    for (;;) {
+        size_t free_slot=HS_INCLUDE_CACHE_ENTRIES,oldest=0;
+        uint64_t least=UINT64_MAX;
+        for (size_t i=0;i<HS_INCLUDE_CACHE_ENTRIES;i++) {
+            if (!include_cache[i].plan) free_slot=i;
+            else if (include_cache[i].used<least) {
+                least=include_cache[i].used;
+                oldest=i;
+            }
+        }
+        if (free_slot<HS_INCLUDE_CACHE_ENTRIES && include_cache_bytes+bytes<=HS_INCLUDE_CACHE_BYTES) {
+            atomic_fetch_add_explicit(&plan->refs,1,memory_order_relaxed);
+            include_cache[free_slot]=(struct hs_include_cache_entry){bstrdup(path),after,plan,++include_cache_clock};
+            include_cache_bytes+=bytes;
+            break;
+        }
+        include_cache_evict(oldest);
+    }
+    pthread_mutex_unlock(&include_cache_lock);
+    return plan;
+}
+#endif
 
-		memcpy(result + result_len, line_start, line_len);
-		result_len += line_len;
-		result[result_len++] = '\n';
-		result[result_len] = '\0';
+void hs_include_cache_clear(void)
+{
+#ifndef _WIN32
+    pthread_mutex_lock(&include_cache_lock);
+    for (size_t i=0;i<HS_INCLUDE_CACHE_ENTRIES;i++) include_cache_evict(i);
+    include_cache_clock=0;
+    pthread_mutex_unlock(&include_cache_lock);
+#endif
+}
 
-		if (line_end) {
-			line_start = line_end + 1;
-		} else {
-			line_start = NULL;
-		}
-	}
+/* Metadata consumes the same cached text as the compiler. Caller owns the
+ * returned copy; NULL means the existing uncached reader should be used. */
+char *hs_stdlib_cached_text(const char *canonical_path)
+{
+#ifndef _WIN32
+    struct hs_include_plan *plan=include_cache_get(canonical_path);
+    if (plan) {
+        char *text=bstrdup(plan->content);
+        include_plan_release(plan);
+        return text;
+    }
+#else
+    UNUSED_PARAMETER(canonical_path);
+#endif
+    return NULL;
+}
 
-	bfree(content);
-	return result;
+/* Process shader file and inline all #include directives (with include guard) */
+static char *preprocess_shader_with_guard(const char *path,int depth,struct include_guard *guard)
+{
+    if (depth>10) {
+        blog(LOG_ERROR,"[hypershader] Include depth exceeded (max=10)");
+        return NULL;
+    }
+    char canonical[PATH_MAX];
+    if (!hs_realpath(path,canonical)) {
+        strncpy(canonical,path,PATH_MAX-1);
+        canonical[PATH_MAX-1]='\0';
+    }
+    if (include_guard_contains(guard,canonical)) return bstrdup("");
+    struct hs_include_plan *plan=NULL;
+#ifndef _WIN32
+    plan=include_cache_get(canonical);
+#endif
+    if (!plan) plan=include_plan_parse(read_file_contents(canonical),canonical);
+    if (!plan || !plan->valid) {
+        include_plan_release(plan);
+        return NULL;
+    }
+    include_guard_add(guard,canonical);
+    struct dstr result={0};
+    for (size_t i=0;i<plan->count;i++) {
+        const struct hs_include_piece *piece=&plan->pieces[i];
+        if (!piece->include) {
+            dstr_cat(&result,piece->text);
+            continue;
+        }
+        char *full=resolve_include_path(piece->text,canonical);
+        char *included=full ? preprocess_shader_with_guard(full,depth+1,guard) : NULL;
+        bfree(full);
+        if (!included) {
+            blog(LOG_ERROR,"[hypershader] Required #include failed: %s in %s",piece->text,canonical);
+            dstr_free(&result);
+            include_plan_release(plan);
+            return NULL;
+        }
+        if (result.len && result.array[result.len-1]!='\n') dstr_cat(&result,"\n");
+        dstr_cat(&result,included);
+        if (result.len && result.array[result.len-1]!='\n') dstr_cat(&result,"\n");
+        bfree(included);
+    }
+    include_plan_release(plan);
+    return result.array ? result.array : bstrdup("");
 }
 
 /* Legacy wrapper for backward compatibility */
