@@ -38,13 +38,14 @@ void* source_create(obs_data_t*,obs_source_t*){
  const uint8_t* pixels=frame.data();
  obs_enter_graphics();
  s->texture=gs_texture_create(W,H,GS_RGBA,1,&pixels,GS_DYNAMIC);
- obs_leave_graphics(); active=s;return s;
+ active=s;obs_leave_graphics();return s;
 }
 void source_destroy(void* data){
  auto* s=(TestSource*)data;
  obs_enter_graphics();
  if(s->texture)gs_texture_destroy(s->texture);
- obs_leave_graphics();active=nullptr;delete s;
+ if(active==s)active=nullptr;
+ obs_leave_graphics();delete s;
 }
 void source_render(void* data,gs_effect_t*){
  auto* s=(TestSource*)data;
