@@ -148,8 +148,8 @@ static bool graph_valid_id(const char *id, size_t len)
 		    !(id[i] >= '0' && id[i] <= '9') && id[i] != '_')
 			return false;
 	/* Prevent a resource name from colliding with another's companions. */
-	const char *suffixes[] = {"_order", "_previous", "_resolution", "_divisor", "_format"};
-	for (unsigned i = 0; i < 5; ++i) {
+	const char *suffixes[] = {"_order", "_previous", "_resolution", "_divisor", "_format", "_transient", "_last_use"};
+	for (unsigned i = 0; i < 7; ++i) {
 		size_t n = strlen(suffixes[i]);
 		if (len >= n && !memcmp(id + len - n, suffixes[i], n))
 			return false;
@@ -192,7 +192,7 @@ static bool graph_configure(gs_effect_t *effect, struct hs_graph_plan *plan,
 		    gs_effect_get_technique(effect, "BufferB"))
 			return false;
 		/* Reject misspelled or orphaned reserved resource uniforms. */
-		const char *suffixes[] = {"", "_order", "_previous", "_resolution", "_divisor", "_format"};
+		const char *suffixes[] = {"", "_order", "_previous", "_resolution", "_divisor", "_format", "_transient", "_last_use"};
 		for (size_t i = 0; i < nparams; ++i) {
 			struct gs_effect_param_info info;
 			gs_effect_get_param_info(gs_effect_get_param_by_idx(effect, i), &info);
@@ -200,7 +200,7 @@ static bool graph_configure(gs_effect_t *effect, struct hs_graph_plan *plan,
 				continue;
 			bool known = false;
 			for (unsigned j = 0; j < plan->count; ++j)
-				for (unsigned k = 0; k < 6; ++k) {
+				for (unsigned k = 0; k < 8; ++k) {
 					char name[80];
 					snprintf(name, sizeof(name), "%s%s", plan->resource[j], suffixes[k]);
 					known |= strcmp(name, info.name) == 0;
@@ -242,6 +242,21 @@ static bool graph_configure(gs_effect_t *effect, struct hs_graph_plan *plan,
 			goto bad_descriptor;
 		plan->divisor[i] = (uint32_t)divisor;
 		plan->float16[i] = format == 1;
+        int transient=0, last_use=(int)plan->count;
+        if (plan->named) {
+            snprintf(name,sizeof(name),"%s_transient",plan->resource[i]);
+            if (!graph_read_descriptor(effect,name,0,&transient) ||
+                (transient!=0 && transient!=1))
+                goto bad_descriptor;
+            snprintf(name,sizeof(name),"%s_last_use",plan->resource[i]);
+            if ((!transient && gs_effect_get_param_by_name(effect,name)) ||
+                !graph_read_descriptor(effect,name,(int)plan->count,&last_use) ||
+                last_use<(int)i || last_use>(int)plan->count)
+                goto bad_descriptor;
+        }
+        plan->transient[i]=transient!=0;
+        plan->last_use[i]=(unsigned)last_use;
+
 		plan->current[i] = gs_effect_get_param_by_name(effect, plan->resource[i]);
 		snprintf(name, sizeof(name), "%s_previous", plan->resource[i]);
 		plan->previous[i] = gs_effect_get_param_by_name(effect, name);
@@ -249,7 +264,8 @@ static bool graph_configure(gs_effect_t *effect, struct hs_graph_plan *plan,
 		plan->resolution[i] = gs_effect_get_param_by_name(effect, name);
 		if (!gs_effect_get_technique(effect, plan->technique[i]) ||
 		    !graph_param_type(plan->current[i], GS_SHADER_PARAM_TEXTURE, true) ||
-		    !graph_param_type(plan->previous[i], GS_SHADER_PARAM_TEXTURE, true) ||
+		    (plan->transient[i] ? plan->previous[i]!=NULL :
+             !graph_param_type(plan->previous[i], GS_SHADER_PARAM_TEXTURE, true)) ||
 		    !graph_param_type(plan->resolution[i], GS_SHADER_PARAM_VEC3, false))
 			goto bad_descriptor;
 		continue;
@@ -259,7 +275,8 @@ bad_descriptor:
 		return false;
 	}
 	plan->output_resolution = gs_effect_get_param_by_name(effect, "hs_graph_output_resolution");
-	return graph_param_type(plan->output_resolution, GS_SHADER_PARAM_VEC3, false);
+	return graph_param_type(plan->output_resolution, GS_SHADER_PARAM_VEC3, false) &&
+        hs_graph_plan_slots(plan->count,plan->divisor,plan->float16,plan->transient,plan->last_use,plan->owner);
 }
 
 static void graph_set_resolution(gs_eparam_t *param, uint32_t width, uint32_t height)
@@ -2246,7 +2263,7 @@ static shader_resource_t *load_shader_resource(struct hypershader_data *s, const
 
 	res->graph.valid = graph_configure(res->effect, &res->graph, s->kind);
 	if (!res->graph.valid && res->graph.named) {
-		res->error = bstrdup("Invalid named pass graph: require contiguous unique orders 0..7, matching Pass_name techniques and typed current/previous resources; filter or source lane only");
+		res->error = bstrdup("Invalid named pass graph: require contiguous unique orders 0..7, matching Pass_name techniques, typed resources and valid lifetime descriptors; filter or source lane only");
 		goto cleanup_error;
 	}
 
@@ -5417,8 +5434,8 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 		buffer_bpp[i] = s->graph.float16[i] ? 8 : output_bpp;
 	const uint64_t limit = (uint64_t)s->graph.budget_mib * HS_GRAPH_MIB;
 	uint64_t bytes = 0;
-	const bool valid = hs_graph_budget_bytes(width, height, output_bpp,
-						s->graph.divisor, buffer_bpp, s->graph.count, &bytes);
+	const bool valid = hs_graph_planned_bytes(width,height,output_bpp,s->graph.divisor,buffer_bpp,
+        s->graph.transient,s->graph.owner,s->graph.count,&bytes);
 	if (!valid || bytes > limit) {
 		if (!s->graph_budget_rejected) {
 			graph_release_targets(s);
@@ -5450,18 +5467,17 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 
 	if (target && !s->feedback_input)
 		s->feedback_input = gs_texrender_create(format, GS_ZS_NONE);
-	for (int buffer = 0; buffer < (int)s->graph.count; buffer++)
-		for (int frame = 0; frame < 2; frame++)
-			if (!s->graph_history[buffer][frame])
-				s->graph_history[buffer][frame] =
-					gs_texrender_create(s->graph.float16[buffer] ? GS_RGBA16F : format, GS_ZS_NONE);
-
-	if (target && !s->feedback_input)
-		return false;
-	for (int buffer = 0; buffer < (int)s->graph.count; buffer++)
-		for (int frame = 0; frame < 2; frame++)
-			if (!s->graph_history[buffer][frame])
-				return false;
+    if (target && !s->feedback_input)
+        return false;
+    for (unsigned i=0;i<s->graph.count;i++) {
+        if (s->graph.owner[i]!=i) continue;
+        for (unsigned slot=0;slot<(s->graph.transient[i]?1U:2U);slot++) {
+            if (!s->graph_history[i][slot])
+                s->graph_history[i][slot]=gs_texrender_create(
+                    s->graph.float16[i]?GS_RGBA16F:format,GS_ZS_NONE);
+            if (!s->graph_history[i][slot]) return false;
+        }
+    }
 
 	/* A standalone generator has no upstream image. Match the existing
 	 * source lane's opaque-black placeholder; external channels still work. */
@@ -5513,7 +5529,8 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 		struct vec4 black;
 		vec4_set(&black, 0.0f, 0.0f, 0.0f, 1.0f);
 		for (unsigned i = 0; i < s->graph.count; ++i) {
-			gs_texrender_t *history = s->graph_history[i][read];
+			if (s->graph.transient[i]) continue;
+            gs_texrender_t *history = s->graph_history[i][read];
 			gs_texrender_reset(history);
 			if (!gs_texrender_begin(history, hs_graph_extent(width, s->graph.divisor[i]),
 						hs_graph_extent(height, s->graph.divisor[i])))
@@ -5525,7 +5542,8 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 	gs_texture_t *previous[HS_GRAPH_MAX_PASSES] = {0};
 	gs_texture_t *current[HS_GRAPH_MAX_PASSES] = {0};
 	for (unsigned i = 0; i < s->graph.count; ++i) {
-		previous[i] = gs_texrender_get_texture(s->graph_history[i][read]);
+		if (s->graph.transient[i]) continue;
+        previous[i] = gs_texrender_get_texture(s->graph_history[i][read]);
 		if (!previous[i] || gs_texture_get_width(previous[i]) != hs_graph_extent(width, s->graph.divisor[i]) ||
 		    gs_texture_get_height(previous[i]) != hs_graph_extent(height, s->graph.divisor[i]) ||
 		    gs_texture_get_color_format(previous[i]) != (s->graph.float16[i] ? GS_RGBA16F : format))
@@ -5533,7 +5551,7 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 	}
 	gs_eparam_t *image = s->ep_image;
 	for (unsigned pass = 0; pass < s->graph.count; pass++) {
-		gs_texrender_t *destination = s->graph_history[pass][write];
+		gs_texrender_t *destination = s->graph_history[s->graph.owner[pass]][s->graph.transient[pass]?0:write];
 		const uint32_t pass_width = hs_graph_extent(width, s->graph.divisor[pass]);
 		const uint32_t pass_height = hs_graph_extent(height, s->graph.divisor[pass]);
 		gs_texrender_reset(destination);
@@ -5552,8 +5570,15 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 		/* Effect loops may clear sampled texture state between techniques.
 		 * Every graph pass owns the complete previous-frame contract. */
 		for (unsigned i = 0; i < s->graph.count; ++i) {
-			gs_effect_set_texture(s->graph.previous[i], previous[i]);
-			gs_effect_set_texture(s->graph.current[i], i < pass ? current[i] : previous[i]);
+            if (s->graph.transient[i]) {
+                /* Never bind an alias of the active destination. Unproduced
+                 * and expired logical resources are explicitly unavailable. */
+                gs_effect_set_texture(s->graph.current[i],
+                    i<pass && pass<=s->graph.last_use[i]?current[i]:s->dummy_texture);
+            } else {
+                gs_effect_set_texture(s->graph.previous[i],previous[i]);
+                gs_effect_set_texture(s->graph.current[i],i<pass?current[i]:previous[i]);
+            }
 		}
 		graph_bind_controls(s);
 		graph_bind_builtins(s, pass_width, pass_height, flow, flow_step, flow_selected);
@@ -5581,8 +5606,10 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 	if (image)
 		gs_effect_set_texture(image, input);
 	for (unsigned i = 0; i < s->graph.count; ++i) {
-		gs_effect_set_texture(s->graph.current[i], current[i]);
-		gs_effect_set_texture(s->graph.previous[i], previous[i]);
+        gs_effect_set_texture(s->graph.current[i],
+            s->graph.transient[i] && s->graph.last_use[i]<s->graph.count?s->dummy_texture:current[i]);
+        if (!s->graph.transient[i])
+            gs_effect_set_texture(s->graph.previous[i],previous[i]);
 	}
 	graph_bind_controls(s);
     graph_bind_builtins(s, width, height, flow, flow_step, flow_selected);

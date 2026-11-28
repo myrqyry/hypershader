@@ -49,4 +49,54 @@ static inline bool hs_graph_budget_bytes(uint32_t width, uint32_t height,
     *out = total;
     return true;
 }
+/* Immutable interval allocation. A transient producer stays live through its
+ * last consumer (inclusive); equal descriptors alone are not sufficient.
+ * Owners are pass indices, never shared with persistent history. */
+static inline bool hs_graph_plan_slots(unsigned count, const uint32_t *divisor,
+    const bool *float16, const bool *transient, const unsigned *last_use,
+    unsigned *owner)
+{
+    if (!count || count > HS_GRAPH_MAX_PASSES) return false;
+    unsigned end[HS_GRAPH_MAX_PASSES] = {0};
+    for (unsigned i=0;i<count;i++) {
+        owner[i]=i;
+        if (!transient[i]) continue;
+        if (last_use[i]<i || last_use[i]>count) return false;
+        for (unsigned j=0;j<i;j++) {
+            if (owner[j]==j && transient[j] && end[j]<i &&
+                divisor[j]==divisor[i] && float16[j]==float16[i]) {
+                owner[i]=j;
+                break;
+            }
+        }
+        end[owner[i]]=last_use[i];
+    }
+    return true;
+}
+
+static inline bool hs_graph_planned_bytes(uint32_t width,uint32_t height,
+    uint32_t output_bpp,const uint32_t *divisor,const uint32_t *buffer_bpp,
+    const bool *transient,const unsigned *owner,unsigned count,uint64_t *out)
+{
+    if (!count || count>HS_GRAPH_MAX_PASSES) return false;
+    uint64_t total=4;
+    if (!hs_graph_add_surface(&total,width,height,output_bpp,3)) return false;
+    for (unsigned i=0;i<count;i++) {
+        if (owner[i]>i || owner[owner[i]]!=owner[i]) return false;
+        uint32_t d=divisor[i];
+        if (d!=1 && d!=2 && d!=4 && d!=8) return false;
+        if (owner[i]!=i) {
+            if (!transient[i] || !transient[owner[i]] ||
+                divisor[owner[i]]!=d || buffer_bpp[owner[i]]!=buffer_bpp[i])
+                return false;
+            continue;
+        }
+        if (!hs_graph_add_surface(&total,hs_graph_extent(width,d),
+                hs_graph_extent(height,d),buffer_bpp[i],transient[i]?1:2))
+            return false;
+    }
+    *out=total;
+    return true;
+}
+
 #endif

@@ -15,7 +15,7 @@ scheduler as the named pass form below.
 
 ## Named ordered passes
 
-For new effects, declare one to eight named persistent passes. The order
+For new effects, declare one to eight named ordered passes (persistent by default). The order
 uniform is immutable metadata, not a slider. For example, the following
 is one pass declaration (a complete effect also needs its vertex/pixel
 functions, a matching Pass_integrate technique and final Draw technique):
@@ -31,15 +31,15 @@ uniform float3 hs_pass_integrate_resolution;
 
 Use lowercase identifiers starting with a letter (up to 24 characters,
 letters, digits and underscores). Resource companion suffixes
-`_order`, `_previous`, `_resolution`, `_divisor`, `_format` are
+`_order`, `_previous`, `_resolution`, `_divisor`, `_format`, `_transient`, `_last_use` are
 reserved at the end of pass identifiers. Orders must be unique and
 contiguous from zero, regardless of declaration or technique order.
-For each id, declare a matching `Pass_<id>` technique, the two texture2d
+For each persistent id, declare a matching `Pass_<id>` technique, the two texture2d
 bindings, and optionally the float3 resolution binding. Use divisor 1,
 2, 4 or 8 and format 0 (source format) or 1 (RGBA16F), as for A/B.
 The final Draw technique renders at full source resolution.
 
-Before each pass, the unsuffixed resource represents the most recently
+For persistent passes, before each pass the unsuffixed resource represents the most recently
 completed result: current-frame output for earlier stages, previous
 frame for the current or later stages. The explicit `_previous`
 resource always refers to the previous successful graph frame.
@@ -47,7 +47,7 @@ In Draw all unsuffixed resources refer to current-frame results.
 The original image (full-sized for filters, the black placeholder for sources), controls, external texture inputs and resolution/time built-ins are rebound through the existing renderer.
 This is an ordered schedule with implicit texture sampling dependencies,
 not an automatically sorted DAG or shader-language dependency analysis.
-Every declared stage owns two persistent surfaces. Use explicit
+Persistent stages own two surfaces. Use explicit
 `_previous` for intentional temporal dependencies.
 
 The loader rejects noncontiguous or duplicate orders, out-of-range
@@ -62,6 +62,46 @@ The native fixture
 contains a complete integrate/diffuse/resolve schedule. The regression
 runner also derives an eight-pass chain and six malformed schedules
 inside an isolated copy of the plugin data directory.
+
+## Transient passes and physical target reuse
+
+For purely current-frame intermediates, declare an immutable transient
+descriptor and omit the previous-frame texture:
+
+    uniform int hs_pass_blur_order = 1;
+    uniform int hs_pass_blur_divisor = 2;
+    uniform int hs_pass_blur_transient = 1;
+    uniform int hs_pass_blur_last_use = 2;
+    uniform texture2d hs_pass_blur;
+
+Transient values are 0 (default persistent) or 1. The last-use descriptor
+is the final consumer's zero-based pass order, inclusive; the final Draw
+is numbered N for an N-pass graph. Omit last-use to retain the result
+through Draw. It must be between the producer's order and N. Persistent
+passes must not specify last-use, and transient passes must not declare
+a previous-frame texture. Malformed descriptors reject the candidate
+without replacing the working shader.
+
+The host assigns a single surface to each transient lifetime. It may
+reuse a surface only after the previous owner's inclusive last-use,
+and only for matching divisor and format. Persistent history is never
+aliased. Before production or after expiry, a transient binding receives
+the opaque-black 1x1 fallback (never the active write target). Its
+resolution uniform still describes its nominal pass size; do not use
+integer fetches on an unavailable binding. The author must declare a
+correct lifetime: native effect sampling dependencies are not inferred
+or statically checked by the scheduler. Use the default through Draw
+when uncertain.
+
+A four-stage native fixture with one persistent stage and three transient
+stages in a chain reuses the first temporary for the third. At equal
+descriptors it needs four pass surfaces instead of eight, with the same
+arithmetic and retained history. The native probe counts distinct
+texrender handles and reads the actual final pixels in source and filter
+lanes (set HS_TRANSIENT_TEST_FILTER=1 for the filter). The temporary
+allocation budget counts physical owners rather than logical stages.
+The visual Builder continues to emit persistent graphs until it gains
+explicit transient controls; full native effect authoring is supported.
 
 ## Contract
 A graph effect must declare all four texture uniforms hs_buffer_a,
@@ -179,8 +219,8 @@ The optional shader declaration `uniform int hs_graph_budget_mib = 64;`
 can request a smaller cap (integer 1 through 512). This is immutable
 metadata, not a live control. The calculation reserves the full-size
 input capture, both full-size compositor surfaces, a transparent pixel,
-and both ping-pong textures for each intermediate buffer using its
-actual format and rounded dimensions. Integer arithmetic rejects overflow.
+and two textures per persistent buffer or one per distinct transient
+physical owner, using its actual format and rounded dimensions. Integer arithmetic rejects overflow.
 
 The cap is a conservative logical texture-payload estimate, not a GPU
 VRAM measurement or global limit. Driver allocation overhead, input

@@ -53,6 +53,9 @@ struct hs_graph_plan {
     char resource[HS_GRAPH_MAX_PASSES][48];
     uint32_t divisor[HS_GRAPH_MAX_PASSES];
     bool float16[HS_GRAPH_MAX_PASSES];
+    bool transient[HS_GRAPH_MAX_PASSES];
+    unsigned last_use[HS_GRAPH_MAX_PASSES];
+    unsigned owner[HS_GRAPH_MAX_PASSES];
     gs_eparam_t *current[HS_GRAPH_MAX_PASSES];
     gs_eparam_t *previous[HS_GRAPH_MAX_PASSES];
     gs_eparam_t *resolution[HS_GRAPH_MAX_PASSES];
