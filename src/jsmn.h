@@ -2,6 +2,9 @@
 #ifndef JSMN_H
 #define JSMN_H
 
+#include <stddef.h>
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,7 +29,7 @@ typedef struct {
 
 void jsmn_init(jsmn_parser *parser);
 
-/* Run JSON parser. It parses a JSON data string into an array of tokens, each describing a single JSON object. */
+/* Parse a complete JSON document after jsmn_init. NULL tokens counts tokens without allocating.\n * Returns -1 on invalid input, excessive nesting or insufficient capacity.\n * Container size counts immediate children (object keys and values separately). */
 int jsmn_parse(jsmn_parser *parser, const char *js, size_t len, jsmntok_t *tokens, unsigned int num_tokens);
 
 #ifdef __cplusplus

@@ -1,128 +1,193 @@
 /* Minimal JSMN implementation (public domain / MIT style) */
-#include <string.h>
 #include "jsmn.h"
+#include <limits.h>
+#include <string.h>
 
-static int jsmn_parse_primitive(jsmn_parser *parser, const char *js, size_t len, jsmntok_t *tokens, size_t num_tokens,
-				size_t *toknext)
+#define HS_JSON_MAX_DEPTH 128
+
+struct scanner {
+    jsmn_parser *p;
+    const char *js;
+    size_t len;
+    jsmntok_t *tokens;
+    unsigned cap;
+};
+
+static char peek(const struct scanner *s)
 {
-	size_t start = parser->pos;
-	while (parser->pos < len && js[parser->pos] != '\0') {
-		char c = js[parser->pos];
-		if (c == ',' || c == ']' || c == '}' || c == '\n' || c == '\r' || c == '\t' || c == ' ')
-			break;
-		parser->pos++;
-	}
-	if (*toknext >= (size_t)num_tokens)
-		return -1;
-	tokens[*toknext].type = JSMN_PRIMITIVE;
-	tokens[*toknext].start = (int)start;
-	tokens[*toknext].end = (int)parser->pos;
-	tokens[*toknext].size = 0;
-	(*toknext)++;
-	return 0;
+    return s->p->pos < s->len ? s->js[s->p->pos] : '\0';
 }
 
-static void jsmn_skip_whitespace(jsmn_parser *parser, const char *js, size_t len)
+static void whitespace(struct scanner *s)
 {
-	while (parser->pos < len) {
-		char c = js[parser->pos];
-		if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
-			parser->pos++;
-		else
-			break;
-	}
+    while (peek(s) == ' ' || peek(s) == '\t' || peek(s) == '\r' || peek(s) == '\n')
+        ++s->p->pos;
+}
+
+static bool digit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static bool hex(char c)
+{
+    return digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static int begin(struct scanner *s, jsmntype_t type, int parent)
+{
+    if (s->p->toknext >= INT_MAX || (s->tokens && s->p->toknext >= s->cap))
+        return -1;
+    int i = (int)s->p->toknext++;
+    if (s->tokens) {
+        s->tokens[i] = (jsmntok_t){.type = type, .start = (int)s->p->pos, .end = -1};
+#ifdef JSMN_PARENT_LINKS
+        s->tokens[i].parent = parent;
+#endif
+        if (parent >= 0)
+            ++s->tokens[parent].size;
+    }
+    return i;
+}
+
+static void finish(struct scanner *s, int i)
+{
+    if (s->tokens)
+        s->tokens[i].end = (int)s->p->pos;
+}
+
+static bool string(struct scanner *s, int parent)
+{
+    ++s->p->pos;
+    int i = begin(s, JSMN_STRING, parent);
+    if (i < 0)
+        return false;
+    while (s->p->pos < s->len) {
+        unsigned char c = (unsigned char)peek(s);
+        if (c == '"') {
+            finish(s, i);
+            ++s->p->pos;
+            return true;
+        }
+        if (c < 32)
+            return false;
+        ++s->p->pos;
+        if (c == '\\') {
+            char escape = peek(s);
+            if (!escape || !strchr("\"\\/bfnrtu", escape))
+                return false;
+            ++s->p->pos;
+            if (escape == 'u') {
+                for (int n = 0; n < 4; ++n) {
+                    if (!hex(peek(s)))
+                        return false;
+                    ++s->p->pos;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static bool number(struct scanner *s)
+{
+    if (peek(s) == '-')
+        ++s->p->pos;
+    if (!digit(peek(s)))
+        return false;
+    if (peek(s) == '0')
+        ++s->p->pos;
+    else
+        while (digit(peek(s)))
+            ++s->p->pos;
+    if (peek(s) == '.') {
+        ++s->p->pos;
+        if (!digit(peek(s)))
+            return false;
+        while (digit(peek(s)))
+            ++s->p->pos;
+    }
+    if (peek(s) == 'e' || peek(s) == 'E') {
+        ++s->p->pos;
+        if (peek(s) == '+' || peek(s) == '-')
+            ++s->p->pos;
+        if (!digit(peek(s)))
+            return false;
+        while (digit(peek(s)))
+            ++s->p->pos;
+    }
+    return true;
+}
+
+static bool value(struct scanner *s, int parent, unsigned depth)
+{
+    whitespace(s);
+    char c = peek(s);
+    if (c == '"')
+        return string(s, parent);
+    if (c == '{' || c == '[') {
+        if (depth >= HS_JSON_MAX_DEPTH)
+            return false;
+        bool object = c == '{';
+        char close = object ? '}' : ']';
+        int i = begin(s, object ? JSMN_OBJECT : JSMN_ARRAY, parent);
+        if (i < 0)
+            return false;
+        ++s->p->pos;
+        whitespace(s);
+        if (peek(s) != close) {
+            for (;;) {
+                if (object) {
+                    if (peek(s) != '"' || !string(s, i))
+                        return false;
+                    whitespace(s);
+                    if (peek(s) != ':')
+                        return false;
+                    ++s->p->pos;
+                }
+                if (!value(s, i, depth + 1))
+                    return false;
+                whitespace(s);
+                if (peek(s) == close)
+                    break;
+                if (peek(s) != ',')
+                    return false;
+                ++s->p->pos;
+                whitespace(s);
+            }
+        }
+        ++s->p->pos;
+        finish(s, i);
+        return true;
+    }
+    int i = begin(s, JSMN_PRIMITIVE, parent);
+    if (i < 0)
+        return false;
+    const char *literal = c == 't' ? "true" : c == 'f' ? "false" : c == 'n' ? "null" : NULL;
+    if (literal) {
+        size_t n = strlen(literal);
+        if (s->len - s->p->pos < n || memcmp(s->js + s->p->pos, literal, n))
+            return false;
+        s->p->pos += (unsigned)n;
+    } else if (!number(s)) {
+        return false;
+    }
+    finish(s, i);
+    return true;
 }
 
 void jsmn_init(jsmn_parser *parser)
 {
-	parser->pos = 0;
-	parser->toknext = 0;
-	parser->toksuper = -1;
+    *parser = (jsmn_parser){.toksuper = -1};
 }
 
 int jsmn_parse(jsmn_parser *parser, const char *js, size_t len, jsmntok_t *tokens, unsigned int num_tokens)
 {
-	size_t i;
-	size_t toknext = parser->toknext;
-
-	for (i = parser->pos; i < len; i = parser->pos) {
-		jsmn_skip_whitespace(parser, js, len);
-		if (parser->pos >= len)
-			break;
-		char c = js[parser->pos++];
-		switch (c) {
-		case '{':
-		case '[': {
-			if (toknext >= (size_t)num_tokens)
-				return -1;
-			tokens[toknext].type = (c == '{') ? JSMN_OBJECT : JSMN_ARRAY;
-			tokens[toknext].start = (int)(parser->pos - 1);
-			tokens[toknext].size = 0;
-#ifdef JSMN_PARENT_LINKS
-			tokens[toknext].parent = parser->toksuper;
-#endif
-			parser->toksuper = (int)toknext;
-			toknext++;
-			break;
-		}
-		case '}':
-		case ']': {
-			jsmntype_t type = (c == '}') ? JSMN_OBJECT : JSMN_ARRAY;
-			int found = 0;
-			for (int j = (int)toknext - 1; j >= 0; j--) {
-				if (tokens[j].start != -1 && tokens[j].end == -1) {
-					if (tokens[j].type == type) {
-						tokens[j].end = (int)parser->pos;
-						found = 1;
-#ifdef JSMN_PARENT_LINKS
-						parser->toksuper = tokens[j].parent;
-#else
-						parser->toksuper = -1;
-#endif
-						break;
-					}
-				}
-			}
-			if (!found)
-				return -1;
-			break;
-		}
-		case '"': {
-			if (toknext >= (size_t)num_tokens)
-				return -1;
-			size_t start = parser->pos;
-			while (parser->pos < len) {
-				char ch = js[parser->pos];
-				if (ch == '"')
-					break;
-				if (ch == '\\')
-					parser->pos++; /* skip escaped */
-				parser->pos++;
-			}
-			if (parser->pos >= len)
-				return -1;
-			tokens[toknext].type = JSMN_STRING;
-			tokens[toknext].start = (int)start;
-			tokens[toknext].end = (int)parser->pos;
-			tokens[toknext].size = 0;
-#ifdef JSMN_PARENT_LINKS
-			tokens[toknext].parent = parser->toksuper;
-#endif
-			toknext++;
-			parser->pos++; /* skip closing quote */
-			break;
-		}
-		default: {
-			/* primitive */
-			parser->pos--;
-			if (jsmn_parse_primitive(parser, js, len, tokens, num_tokens, &toknext) != 0)
-				return -1;
-			break;
-		}
-		}
-	}
-
-	parser->pos = i;
-	parser->toknext = (int)toknext;
-	return (int)toknext;
+    if (!parser || !js || len > INT_MAX || parser->pos || parser->toknext)
+        return -1;
+    struct scanner s = {parser, js, len, tokens, num_tokens};
+    if (!value(&s, -1, 0))
+        return -1;
+    whitespace(&s);
+    return parser->pos == len ? (int)parser->toknext : -1;
 }

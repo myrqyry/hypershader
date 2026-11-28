@@ -33,6 +33,10 @@ jobs:
         run: python3 .github/scripts/test-ci-sdk-contract.py
       - name: Verify candidate source export boundary
         run: python3 scripts/test-stage-release-source.py
+      - name: Verify bounded JSON parser
+        run: |
+          cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-jsmn.c src/jsmn.c -o "$RUNNER_TEMP/hs-json-test"
+          "$RUNNER_TEMP/hs-json-test"
       - name: Verify graph allocation budget
         run: |
           cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-graph-budget.c -o "$RUNNER_TEMP/hs-graph-budget-test"

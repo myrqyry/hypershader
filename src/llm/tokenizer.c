@@ -103,15 +103,20 @@ llm_tokenizer_t *llm_tokenizer_create(const char *json_path)
 	jsmn_parser p;
 	jsmn_init(&p);
 	int res = jsmn_parse(&p, json_str, strlen(json_str), NULL, 0);
-	if (res < 0) {
+	if (res <= 0) {
 		bfree(json_str);
-		bfree(t);
+		llm_tokenizer_destroy(t);
 		return NULL;
 	}
 
 	jsmntok_t *tokens = bmalloc(sizeof(jsmntok_t) * res);
 	jsmn_init(&p);
-	jsmn_parse(&p, json_str, strlen(json_str), tokens, res);
+	if (jsmn_parse(&p, json_str, strlen(json_str), tokens, res) != res) {
+		bfree(tokens);
+		bfree(json_str);
+		llm_tokenizer_destroy(t);
+		return NULL;
+	}
 
 	/* Very naive traversal to find "vocab" inside "model" */
 	/* Check structure: model -> vocab -> [token: id] OR {token: id} */
