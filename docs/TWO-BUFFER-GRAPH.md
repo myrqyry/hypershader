@@ -264,7 +264,7 @@ to numbered inputs, and a named live standalone source.
 
 ## Resource allocation budget
 
-Graph color-target payload is capped per filter instance at 512 MiB.
+Graph color-target payload is capped per source or filter instance at 512 MiB.
 The optional shader declaration `uniform int hs_graph_budget_mib = 64;`
 can request a smaller cap (integer 1 through 512). This is immutable
 metadata, not a live control. The calculation reserves the full-size
@@ -273,10 +273,23 @@ compositor surface, a transparent pixel,
 and two textures per persistent buffer or one per distinct transient
 physical owner, using its actual format and rounded dimensions. Integer arithmetic rejects overflow.
 
-The cap is a conservative logical texture-payload estimate, not a GPU
-VRAM measurement or global limit. Driver allocation overhead, input
-channels, ML resources, other filters and OBS's output target are not
-included. An over-budget graph releases its graph targets and passes the
+A shared aggregate admission cap also applies across all HyperShader graph
+instances in the OBS process. The default is 1024 MiB; set the
+`HS_GRAPH_AGGREGATE_MIB` environment variable before launching OBS to
+override it (integer 1–16384 MiB; invalid values use the default).
+Each graph reserves its complete estimated payload before creating any
+target or recursively drawing upstream sources. Incompatible targets are
+destroyed before resizing; a failed draw, accepted shader replacement or
+destruction releases the reservation. Existing compatible admitted graphs
+retain their reservation and history, including while hidden; no forced
+eviction or automatic precision reduction occurs. New admissions use
+available capacity in render order. Reducing render scale or removing a
+graph can free capacity for a rejected instance.
+
+Both caps are conservative logical texture-payload estimates, not GPU
+VRAM measurements. Driver allocation overhead, input channels, ML
+resources, ordinary non-graph effects, other plugins and OBS's output
+target are not included. An over-budget graph releases its graph targets and passes the
 upstream image through for filters (standalone sources draw nothing) without silently changing its resolution or
 precision. Logging occurs once per rejection episode. When the source
 size fits again, fresh histories are allocated; old state is not reused.
@@ -291,6 +304,11 @@ The budget calculator also has a dependency-free C test:
 
 The native graph runner checks rejection, recovery, repeat rejection,
 and clean reset after resizing with a deliberately small 1 MiB budget.
+The aggregate regression runs real source and filter instances with a
+1 MiB shared cap and checks concurrent admission, rejection, recovery,
+shader replacement, teardown and an injected target-begin failure:
+
+    bash scripts/verify-aggregate-graph-budget.sh MODULE DATA
 
 ## Included native effect
 data/shaders/root/ink_reaction_buffers.effect demonstrates a
@@ -333,7 +351,7 @@ the requested allocation. Graph mode remains intentionally opt-in.
 - Graph-enabled audio/animated channels and per-pass audio
   controls need dedicated integration regression coverage.
 
-- The budget is per-filter logical graph color payload only; aggregate VRAM admission and backend-specific overhead are not accounted for.
+- Per-instance and aggregate budgets cover logical graph color payload only; device-specific available VRAM, backend overhead and non-graph resources are not accounted for.
 
 ## Standalone source instruments
 

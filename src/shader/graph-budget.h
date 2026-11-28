@@ -4,8 +4,28 @@
 #include <stdint.h>
 
 #define HS_GRAPH_MAX_MIB 512
+#define HS_GRAPH_AGGREGATE_DEFAULT_MIB 1024
+#define HS_GRAPH_AGGREGATE_MAX_MIB 16384
 #define HS_GRAPH_MAX_PASSES 8
 #define HS_GRAPH_MIB UINT64_C(1048576)
+
+/* Graphics-context-owned reservation arithmetic. Failed admission is
+ * non-mutating; the caller destroys old targets before relinquishing bytes. */
+static inline bool hs_graph_reserve(uint64_t *total,uint64_t *owned,uint64_t bytes,uint64_t limit)
+{
+    if (*owned>*total) return false;
+    const uint64_t others=*total-*owned;
+    if (others>limit || bytes>limit-others) return false;
+    *total=others+bytes;
+    *owned=bytes;
+    return true;
+}
+
+static inline void hs_graph_unreserve(uint64_t *total,uint64_t *owned)
+{
+    *total-=*owned;
+    *owned=0;
+}
 
 static inline uint32_t hs_render_scale_percent(int64_t value)
 {

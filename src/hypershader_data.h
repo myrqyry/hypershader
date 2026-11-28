@@ -352,6 +352,8 @@ struct hypershader_data {
 	uint32_t graph_width, graph_height, graph_scale_percent;
 	enum gs_color_format graph_format;
 	bool graph_budget_rejected;
+    bool graph_aggregate_rejected;
+    uint64_t graph_reserved_bytes; /* graphics context only */
 
 	unsigned graph_write_idx;
 	uint32_t graph_frame; /* reset on reload/resize, independent of OBS source age */

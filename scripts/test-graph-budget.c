@@ -56,6 +56,22 @@ int main(void)
     assert(hs_graph_scaled_bytes(1920,1080,960,540,4,d4,b4,t4,owner,4,&bytes));
     assert(bytes==UINT64_C(1920)*1080*8+UINT64_C(960)*540*4+UINT64_C(480)*270*4*4+4);
     assert(!hs_graph_scaled_bytes(1920,1080,0,540,4,d4,b4,t4,owner,4,&bytes));
+    uint64_t total=0,a=0,b=0;
+    assert(hs_graph_reserve(&total,&a,60,100)&&total==60&&a==60);
+    assert(!hs_graph_reserve(&total,&b,60,100)&&total==60&&b==0);
+    assert(hs_graph_reserve(&total,&a,40,100)&&total==40);
+    assert(hs_graph_reserve(&total,&b,60,100)&&total==100);
+    assert(!hs_graph_reserve(&total,&a,41,100)&&total==100&&a==40);
+    hs_graph_unreserve(&total,&b);
+    hs_graph_unreserve(&total,&b);
+    assert(total==40&&b==0);
+    assert(hs_graph_reserve(&total,&a,100,100)&&total==100);
+    hs_graph_unreserve(&total,&a);
+    assert(total==0&&a==0);
+    assert(hs_graph_reserve(&total,&a,UINT64_MAX,UINT64_MAX));
+    assert(!hs_graph_reserve(&total,&b,1,UINT64_MAX));
+    hs_graph_unreserve(&total,&a);
+    assert(total==0);
     puts("GRAPH_BUDGET_UNIT_PASS");
     return 0;
 }

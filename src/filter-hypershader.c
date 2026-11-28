@@ -111,6 +111,29 @@ static bool history_cancel_pressed(void *data, obs_hotkey_pair_id id, obs_hotkey
     return pressed && s && atomic_exchange_explicit(&s->history_reset_requested, false, memory_order_acq_rel);
 }
 
+/* All graph allocations, nested renders, swaps and destruction are
+ * serialized by libobs's graphics context, not an extra render-path lock. */
+static uint64_t graph_reserved_total;
+static uint64_t graph_aggregate_limit=HS_GRAPH_AGGREGATE_DEFAULT_MIB*HS_GRAPH_MIB;
+
+void hs_graph_budget_init(void)
+{
+    const char *raw=getenv("HS_GRAPH_AGGREGATE_MIB");
+    graph_aggregate_limit=HS_GRAPH_AGGREGATE_DEFAULT_MIB*HS_GRAPH_MIB;
+    if (raw && *raw) {
+        char *end=NULL;
+        errno=0;
+        unsigned long mib=strtoul(raw,&end,10);
+        if (!errno && end && !*end && raw[0]>='0' && raw[0]<='9' &&
+            mib>=1 && mib<=HS_GRAPH_AGGREGATE_MAX_MIB)
+            graph_aggregate_limit=mib*HS_GRAPH_MIB;
+        else
+            blog(LOG_WARNING,"[hypershader] Invalid HS_GRAPH_AGGREGATE_MIB; using default");
+    }
+    blog(LOG_INFO,"[hypershader] Aggregate graph budget: %" PRIu64 " MiB",
+        graph_aggregate_limit/HS_GRAPH_MIB);
+}
+
 /* Clear all graph histories after resize, shader switch or teardown.
  * Caller must be inside the OBS graphics context. */
 static void graph_reset(struct hypershader_data *s)
@@ -140,6 +163,11 @@ static void graph_release_targets(struct hypershader_data *s)
 			*targets[i] = NULL;
 		}
 	}
+    if (s->output_transparent) {
+        gs_texture_destroy(s->output_transparent);
+        s->output_transparent=NULL;
+    }
+    hs_graph_unreserve(&graph_reserved_total,&s->graph_reserved_bytes);
 }
 
 /* Read immutable resource descriptors once, on successful shader replacement.
@@ -1822,27 +1850,11 @@ static void filter_destroy(void *data)
 			s->history[i] = NULL;
 		}
 	}
-	graph_reset(s);
+    graph_release_targets(s);
     if (s->output_compositor) {
         gs_effect_destroy(s->output_compositor);
         s->output_compositor = NULL;
     }
-    if (s->output_composite_fx) {
-        gs_texrender_destroy(s->output_composite_fx);
-        s->output_composite_fx = NULL;
-    }
-    if (s->output_composite_base) {
-        gs_texrender_destroy(s->output_composite_base);
-        s->output_composite_base = NULL;
-    }
-    if (s->output_transparent) {
-        gs_texture_destroy(s->output_transparent);
-        s->output_transparent = NULL;
-    }
-	if (s->feedback_input) {
-		gs_texrender_destroy(s->feedback_input);
-		s->feedback_input = NULL;
-	}
 	for (int i = 0; i < CHANNEL_COUNT; i++) {
 		if (s->channel_renders[i]) {
 			gs_texrender_destroy(s->channel_renders[i]);
@@ -3945,6 +3957,7 @@ static void shader_load_complete_task(void *param)
 			graph_reset(s);
 		s->graph = res->graph;
 		s->graph_budget_rejected = false;
+        s->graph_aggregate_rejected = false;
 		s->ep_graph_frame = gs_effect_get_param_by_name(s->effect, "hs_graph_frame");
 		if (s->graph.enabled && s->graph.valid) {
 			if (s->graph.named)
@@ -5697,8 +5710,10 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
         output_bpp,s->graph.divisor,buffer_bpp,
         s->graph.transient,s->graph.owner,s->graph.count,&bytes);
 	if (!valid || bytes > limit) {
+        if (s->graph_reserved_bytes || s->graph_width)
+            graph_release_targets(s);
+        s->graph_aggregate_rejected=false;
 		if (!s->graph_budget_rejected) {
-			graph_release_targets(s);
 			blog(LOG_WARNING, "[hypershader] Graph resource budget exceeded (%ux%u, bytes=%" PRIu64
 			     ", limit=%" PRIu64 ", overflow=%d); %s",
 			     width, height, bytes, limit, !valid,
@@ -5711,7 +5726,35 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 		s->graph_budget_rejected = false;
 		blog(LOG_INFO, "[hypershader] Graph resource budget recovered (%ux%u)", width, height);
 	}
-	return true;
+    /* Release incompatible physical storage BEFORE replacing its
+     * reservation. A nested upstream graph sees the new reservation before
+     * this instance captures it or allocates its own first texture. */
+    if (s->graph_width!=width || s->graph_height!=height ||
+        s->graph_format!=format || s->graph_scale_percent!=s->render_scale_percent) {
+        graph_release_targets(s);
+        s->graph_width=width;
+        s->graph_height=height;
+        s->graph_format=format;
+        s->graph_scale_percent=s->render_scale_percent;
+    }
+    if (s->graph_reserved_bytes!=bytes &&
+        !hs_graph_reserve(&graph_reserved_total,&s->graph_reserved_bytes,bytes,graph_aggregate_limit)) {
+        if (s->graph_reserved_bytes)
+            graph_release_targets(s);
+        if (!s->graph_aggregate_rejected) {
+            blog(LOG_WARNING,"[hypershader] Aggregate graph budget exceeded (requested=%" PRIu64
+                ", reserved=%" PRIu64 ", limit=%" PRIu64 "); %s",
+                bytes,graph_reserved_total,graph_aggregate_limit,
+                s->kind==HYPER_KIND_SOURCE ? "drawing no output" : "passing upstream source");
+            s->graph_aggregate_rejected=true;
+        }
+        return false;
+    }
+    if (s->graph_aggregate_rejected) {
+        blog(LOG_INFO,"[hypershader] Aggregate graph budget recovered (%ux%u)",width,height);
+        s->graph_aggregate_rejected=false;
+    }
+    return true;
 }
 
 static bool graph_render(struct hypershader_data *s, obs_source_t *target,
@@ -5719,14 +5762,6 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 {
     const uint32_t rw=hs_render_scale_extent(width,s->render_scale_percent);
     const uint32_t rh=hs_render_scale_extent(height,s->render_scale_percent);
-	if (s->graph_width != width || s->graph_height != height ||
-	    s->graph_format != format || s->graph_scale_percent!=s->render_scale_percent) {
-		graph_release_targets(s);
-		s->graph_width = width;
-		s->graph_height = height;
-		s->graph_format = format;
-        s->graph_scale_percent=s->render_scale_percent;
-	}
 
 	if (target && !s->feedback_input)
 		s->feedback_input = gs_texrender_create(format, GS_ZS_NONE);
@@ -6006,6 +6041,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 			return;
 		}
 		if (!graph_render(s, target, width, height, format)) {
+            graph_release_targets(s);
 			blog(LOG_WARNING, "[hypershader] Graph render failed; passing upstream source");
 			obs_source_skip_video_filter(s->context);
 		}
@@ -6402,8 +6438,9 @@ static void source_video_render(void *data, gs_effect_t *effect)
 	/* Use the same persistent scheduler as the filter lane. On rejection
 	 * a generator has no upstream image to pass through: draw nothing. */
 	if (s->graph.enabled) {
-		if (s->graph.valid && graph_budget_allows(s, width, height, format))
-			graph_render(s, NULL, width, height, format);
+		if (s->graph.valid && graph_budget_allows(s, width, height, format) &&
+            !graph_render(s, NULL, width, height, format))
+            graph_release_targets(s);
 		update_performance_stats(s, (double)(os_gettime_ns() - start_time) / 1000000.0);
 		return;
 	}

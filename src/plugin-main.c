@@ -48,6 +48,7 @@ OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("hypershader", "en-US")
 
 extern void hs_include_cache_clear(void);
+extern void hs_graph_budget_init(void);
 extern struct obs_source_info hypershader_filter_info;
 extern struct obs_source_info hypershader_source_info;
 extern struct obs_source_info hypershader_transition_info;
@@ -72,6 +73,7 @@ bool obs_module_load(void)
 	if (!hs_channel_image_runtime_init())
 		blog(LOG_WARNING, "[hypershader] Image-file channels are unavailable on this OBS runtime");
 
+    hs_graph_budget_init();
 	hyper_ui_init();
 	obs_register_source(&hypershader_filter_info);
 	obs_register_source(&hypershader_source_info);
