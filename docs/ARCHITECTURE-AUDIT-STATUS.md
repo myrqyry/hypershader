@@ -18,7 +18,7 @@ or partial below remain open for inspection and implementation.
 - [ ] 9. Reset History action, hotkey and proc.
 - [ ] 10. Subdivided mesh / instanced geometry.
 ## Performance and concurrency
-- [ ] 11. Zero-allocation update-time parameter snapshot — partial 46ba064: resolve once per render instead of once per technique; settings read still per render.
+- [x] 11. Update-time typed parameter snapshots — 46ba064 + bd524b1: cache numeric/color controls, modulation, reaction and animation/atlas config at update or compiled-effect swap; live signals evaluated once per render. Native interposition probe: 60/60 correct draws, settings retrieval 120 -> 0, value API calls 780 -> 0. This establishes the settings hot-path contract, not a whole-render zero-allocation or frame-time claim.
 - [x] 12. Cache listed per-frame effect handles — 46ba064, graph and compositor tests.
 - [ ] 13. Double-buffered MediaPipe readback; establish actual GPU readiness.
 - [x] 14. SPSC audio race — af2940a, producer/consumer queue and worker-owned history, concurrent and real PCM probes.
@@ -131,8 +131,10 @@ Evidence: /tmp/hs-audit-shipped-full.log, /tmp/hs-audit-cache-graph.log,
 /tmp/hs-audit-compositor.log, /tmp/hs-audit-panel-final.log,
 /tmp/hs-audit-meta-green.log, /tmp/hs-audit-final-*.log.
 
-Next: continue update-time parameter snapshots after verified audio source teardown and lazy scene
-allocation, then complete update-time control snapshots and GPU staging.
+Next: backend-safe GPU staging and worker backpressure. The installed libobs OpenGL
+implementation maps the PBO synchronously; public gs_sync_wait is a GPU-side wait,
+not a portable CPU readiness poll. Do not equate double buffering with nonblocking
+readback. Native model-enabled verification requires an appropriate ONNX build and fixture.
 Graph lifetime/transient admission before expanding render scale and
 transition scheduler. Universal spatial mask should reuse the existing
 Sight path and preserve temporal history. No duplicate inference engine.
@@ -141,3 +143,5 @@ No throughput measurements, TSAN qualification, live installation, model
 inference, Windows/macOS validation, merge or push in this pass.
 
 2026-11-28 second batch: 86fb457 and 2d91f24; evidence /tmp/hs-lifetime-red.log, /tmp/hs-lifetime-green.log, /tmp/hs-entity-red.log, /tmp/hs-entity-green.log, /tmp/hs-entity-catalog-full.log. Isolated Qt build, no install/push. Weak-only audio ownership intentionally not implemented; removed-source detach depends on running audio worker.
+
+2026-11-28 third batch: bd524b1 update-time settings cache. Native Qt build; 39/39 catalog, 14/14 graph, 7/7 compositor, performance Qt/PCM/LFO/live edits, URL Source integration, entity lifecycle, audio oscilloscope/lifetime passed. All 21 reactive-sprite behavior assertions passed; script exit 1 from temporary-directory cleanup race after final PASS (not a render failure). New native call-count probe red 120 settings/780 value calls, green zero/zero, identical expected pixels 60/60 each. Evidence /tmp/hs-settings-{red,build,panel-green,data,two-buffer-graph,reactive-sprite,catalog,global-compositor,entity-lifecycle,audio-oscilloscope,call-count}.log. No production GPU benchmark, model-enabled inference, install, push or cross-platform qualification. Settings changes publish at libobs video update callback, not immediate synchronous obs_source_update.
