@@ -295,11 +295,13 @@ installation, activation, or model transfer is performed.
 | Area | Current state |
 | --- | --- |
 | Linux | Primary development and real libobs/OpenGL verification target |
-| Windows | Build/package workflow configured; no hosted result for this curated repository yet |
-| macOS | Universal build workflow configured; no hosted result for this curated repository yet |
+| Windows | Both OBS32/33 native build/package targets passed |
+| macOS | Both Intel and Apple Silicon targets failed in the latest shared run; no current qualified package |
 | OBS 31 / 32 | Main development compatibility baseline |
-| OBS 33 | Image API compatibility bridge and shared native build matrix; hosted qualification pending |
+| OBS 33 | Linux and Windows passed the shared OBS33 SDK build; macOS qualification pending |
 | HDR / 4K / diverse GPUs | Not comprehensively characterized yet |
+
+At `593a4a1`, the [verified Actions run](https://github.com/myrqyry/hypershader/actions/runs/45915623946) produced four downloadable Linux/Windows test packages across OBS 32.2.0 and 33.0.3. All four macOS jobs failed. These packages are preview artifacts, not fully qualified interactive runtimes.
 
 Generated platform variants are currently local-only pending review. Their previously documented direct-load include limitations remain unresolved.
 
