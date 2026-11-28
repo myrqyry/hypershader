@@ -2,6 +2,8 @@
 #include <atomic>
 #include <mutex>
 #include <utility>
+#include <cstdlib>
+#include <cstdint>
 #include <obs.h>
 #include <obs-module.h>
 #include <graphics/graphics.h>
@@ -18,6 +20,42 @@ constexpr unsigned W=256,H=256;
 static thread_local bool count_capture=false;
 static thread_local unsigned captures=0;
 static std::atomic<unsigned> allCaptures{0};
+// Linux GL driver test: force a bounded number of zero-timeout polls to
+// report NOT_READY, then forward to the real GL implementation.
+static std::atomic<unsigned> forceTimeouts{0}, delayedPolls{0}, readyPolls{0}, prematureMaps{0}, waitingPolls{0}, discardedFences{0};
+static std::atomic<bool> fenceReady{false};
+extern "C" unsigned glClientWaitSync(void* sync,unsigned flags,uint64_t timeout){
+ using Fn=unsigned(*)(void*,unsigned,uint64_t);
+ static void* gl=dlopen("libOpenGL.so.0",RTLD_LAZY|RTLD_LOCAL);
+ static auto real=gl?reinterpret_cast<Fn>(dlsym(gl,"glClientWaitSync")):nullptr;
+ if(!real)return 0x911d; // GL_WAIT_FAILED
+ if(timeout!=0) waitingPolls.fetch_add(1);
+ unsigned remaining=forceTimeouts.load();
+ if(remaining&&forceTimeouts.compare_exchange_strong(remaining,remaining-1)){
+    fenceReady.store(false);delayedPolls.fetch_add(1);return 0x911b; // GL_TIMEOUT_EXPIRED
+ }
+ const auto result=real(sync,flags,timeout);
+ bool ready=result==0x911a||result==0x911c;
+ fenceReady.store(ready);
+ if(ready)readyPolls.fetch_add(1);
+ return result;
+}
+extern "C" void glDeleteSync(void* sync){
+ using Fn=void(*)(void*);
+ static void* gl=dlopen("libOpenGL.so.0",RTLD_LAZY|RTLD_LOCAL);
+ static auto real=gl?reinterpret_cast<Fn>(dlsym(gl,"glDeleteSync")):nullptr;
+ if(!fenceReady.load())discardedFences.fetch_add(1);
+ if(real)real(sync);
+}
+extern "C" bool gs_stagesurface_map(gs_stagesurf_t* surface,uint8_t** pixels,uint32_t* pitch){
+ using Fn=bool(*)(gs_stagesurf_t*,uint8_t**,uint32_t*);
+ static auto real=reinterpret_cast<Fn>(dlsym(RTLD_NEXT,"gs_stagesurface_map"));
+ if(gs_stagesurface_get_width(surface)==192&&gs_stagesurface_get_height(surface)==192&&
+    std::getenv("HS_MP_TEST_EXPECT_FENCE")&&!fenceReady.load())
+    prematureMaps.fetch_add(1);
+ return real(surface,pixels,pitch);
+}
+
 static std::mutex heldMutex;
 static bool holdResults=false;
 static std::vector<std::pair<obs_task_t,void*>> heldResults;
@@ -45,6 +83,7 @@ extern "C" void gs_stage_texture(gs_stagesurf_t* dst,gs_texture_t* src){
  static auto real=reinterpret_cast<Fn>(dlsym(RTLD_NEXT,"gs_stage_texture"));
  if(gs_stagesurface_get_width(dst)==192&&gs_stagesurface_get_height(dst)==192){
     allCaptures.fetch_add(1);
+    fenceReady.store(false);
     if(count_capture) ++captures;
  }
  real(dst,src);
@@ -122,6 +161,8 @@ int main(int argc,char**argv){
  auto* videoSource=obs_source_create("mp_audit_fixture","Public face input",nullptr,nullptr);
  auto* opts=obs_data_create();obs_data_set_string(opts,"shader_file",argv[3]);
  obs_data_set_int(opts,"mp_controlnet_model",2);
+ if(std::getenv("HS_MP_TEST_COMPOSITE"))
+    obs_data_set_double(opts,"compose_base_opacity",0.0);
  auto* filter=obs_source_create("hypershader_filter","Face GPU readback",opts,nullptr);
  obs_data_release(opts);
  if(!videoSource||!filter){obs_shutdown();return 7;}
@@ -130,6 +171,10 @@ int main(int argc,char**argv){
  std::vector<uint8_t> blank(W*H*4,0);
  for(size_t i=3;i<blank.size();i+=4)blank[i]=255;
  obs_enter_graphics();gs_texture_set_image(active->texture,face.data(),W*4,false);obs_leave_graphics();
+ const bool expectFence=std::getenv("HS_MP_TEST_EXPECT_FENCE")!=nullptr;
+ // Hold GPU readiness longer than the bounded capture lifetime, so
+ // the stale fence must be destroyed and a new capture can recover.
+ if(expectFence)forceTimeouts.store(16);
  float initial=0,faceLast=0;
  bool modeUi=false;
  for(int i=0;i<90;i++){float x=render(videoSource);if(i==20)initial=x;if(i>70)faceLast=x;std::this_thread::sleep_for(35ms);}
@@ -185,7 +230,11 @@ int main(int argc,char**argv){
  if(properties)obs_properties_destroy(properties);
  // The face fixture is centered in its native 256x256 frame. Capturing
  // only its upper-left 192x192 corner shifts the detected nose far right.
- bool pass=admitted&&backpressure&&faceLast>0.25f&&faceLast<0.75f&&blankLast<0.05f&&blankBright<10&&modeUi;
+ const bool fenceWorks=!expectFence||(delayedPolls.load()==16&&discardedFences.load()>0&&readyPolls.load()>0&&
+      prematureMaps.load()==0&&waitingPolls.load()==0);
+ printf("MP_CAPTURE_FENCE required=%d delayed=%u ready=%u premature_maps=%u blocking_polls=%u expired_fences=%u PASS=%d\n",
+        expectFence,delayedPolls.load(),readyPolls.load(),prematureMaps.load(),waitingPolls.load(),discardedFences.load(),fenceWorks);
+ bool pass=admitted&&backpressure&&fenceWorks&&faceLast>0.25f&&faceLast<0.75f&&blankLast<0.05f&&blankBright<10&&modeUi;
  printf("MP_FILTER_GPU initial=%.4f face=%.4f blank=%.4f blank_bright=%u mode_ui=%d PASS=%d\n",initial,faceLast,blankLast,blankBright,modeUi,pass);
  obs_set_output_source(0,nullptr);
 

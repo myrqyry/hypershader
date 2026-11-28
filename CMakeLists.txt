@@ -56,6 +56,7 @@ set(
   PLUGIN_SOURCES
   src/filter-hypershader.c
   src/interop/data_driver.cpp
+  src/interop/readback_fence.c
   src/channel_image_compat.c
   src/shader/shader_metadata.c
   src/shader/shader_visibility.c
@@ -83,6 +84,7 @@ if(MSVC)
     HYPERSHADER_MSVC_C_SOURCES
     src/plugin-main.c
     src/filter-hypershader.c
+    src/interop/readback_fence.c
     src/channel_image_compat.c
     src/shader/shader_visibility.c
     src/shader/shader_metadata.c
@@ -120,6 +122,14 @@ find_package(Threads REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Threads::Threads)
 
 if(OS_LINUX)
+  # GLVND dispatch into the already-current OBS context. Optional so
+  # builds without development GL headers keep their existing backend.
+  find_package(OpenGL QUIET COMPONENTS OpenGL)
+  if(TARGET OpenGL::OpenGL)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OpenGL::OpenGL)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE HS_HAVE_GL_READBACK_FENCE)
+    message(STATUS "OpenGL GPU-readiness polling enabled")
+  endif()
   find_package(X11 QUIET)
   if(X11_FOUND)
     message(STATUS "X11 found — enabling global cursor support")

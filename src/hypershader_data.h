@@ -601,6 +601,10 @@ struct hypershader_data {
 
 	/* Staging buffer for GPU->CPU readback */
 	gs_stagesurf_t *mp_staging_tex;
+    void *mp_readback_fence; /* Graphics-context-only fence for the staged pixels */
+    uint64_t mp_readback_started_ns;
+    bool mp_readback_backend_known, mp_readback_can_poll;
+    bool mp_readback_failure_logged;
 	gs_texrender_t *mp_scaler; /* Resize to 192x192 on GPU before download */
 
 	/* Pre-allocated MediaPipe task (avoids allocation in render callback) */

@@ -57,6 +57,7 @@ static inline int hs_access_exists(const char *path)
 #include "interop/sight_client.h"
 #include "interop/sight_subject_stats.h"
 #include "interop/sight_gpu.h"
+#include "interop/readback_fence.h"
 #include "interop/sight_flow_step.h"
 #include "shader/graph-budget.h"
 #include <inttypes.h>
@@ -1540,6 +1541,22 @@ static void entity_scene_configure(struct hypershader_data *s)
     }
 }
 
+/* Pending GPU readback has not been handed to the worker yet.
+ * Destroy the old staging resource instead of reusing an in-flight PBO. */
+static void mp_cancel_pending_readback(struct hypershader_data *s)
+{
+    if (!s->mp_readback_fence)
+        return;
+    hs_readback_fence_destroy(s->mp_readback_fence);
+    s->mp_readback_fence = NULL;
+    s->mp_readback_started_ns = 0;
+    if (s->mp_staging_tex) {
+        gs_stagesurface_destroy(s->mp_staging_tex);
+        s->mp_staging_tex = NULL;
+    }
+    atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
+}
+
 static void filter_destroy(void *data)
 {
 	struct hypershader_data *s = data;
@@ -1664,6 +1681,7 @@ static void filter_destroy(void *data)
 		hs_face_surface_destroy(s->mp_face_surface);
 		s->mp_face_surface = NULL;
 	}
+	mp_cancel_pending_readback(s);
 	if (s->mp_staging_tex) {
 		gs_stagesurface_destroy(s->mp_staging_tex);
 		s->mp_staging_tex = NULL;
@@ -2390,14 +2408,17 @@ static void filter_update(void *data, obs_data_t *settings)
 	 * Native graph remains available if the user switches back. */
 	if (!sight_requested && !s->mp_runner)
 		hs_ensure_native_mediapipe(s);
+	bool native_graph_changed = false;
 	if (s->mp_runner && !sight_requested) {
 		int graph = (int)obs_data_get_int(settings, "mp_controlnet_model");
 		if (graph == 0)
 			graph = MP_GRAPH_FACE_MESH; // Start default
 
 		bool graph_ready = mp_get_current_graph(s->mp_runner) == (mp_graph_type_t)graph;
-		if (!graph_ready)
+		if (!graph_ready) {
+			native_graph_changed = true;
 			graph_ready = mp_start_graph(s->mp_runner, (mp_graph_type_t)graph);
+		}
 		s->mp_enabled = s->mp_thread_run && graph_ready && graph != MP_GRAPH_NONE;
 		if (!graph_ready)
 			blog(LOG_WARNING, "[hypershader] MediaPipe mode %d unavailable; processing disabled", graph);
@@ -2408,6 +2429,8 @@ static void filter_update(void *data, obs_data_t *settings)
 	/* Apply dynamic parameters (custom uniforms) from settings */
 	/* Protect access to s->effect with graphics context lock */
 	obs_enter_graphics();
+	if (!s->mp_enabled || native_graph_changed)
+		mp_cancel_pending_readback(s);
 	if (s->effect && s->metadata_rc) {
 		size_t count = gs_effect_get_num_params(s->effect);
 		for (size_t i = 0; i < count; i++) {
@@ -5202,6 +5225,77 @@ static gs_texture_t *output_capture_filter_base(struct hypershader_data *s,
     return gs_texrender_get_texture(s->output_composite_base);
 }
 
+/* Called only for an admitted synchronous capture or a signaled GPU fence. */
+static bool mp_submit_staged_frame(struct hypershader_data *s)
+{
+    const int mp_w=192, mp_h=192;
+    uint8_t *pixels=NULL;
+    uint32_t pitch=0;
+    if (!gs_stagesurface_map(s->mp_staging_tex,&pixels,&pitch))
+        return false;
+    const bool valid=pixels && pitch >= (uint32_t)mp_w*4;
+    if (valid) {
+        for (int row=0;row<mp_h;row++)
+            memcpy(s->mp_preallocated_frame+(size_t)row*mp_w*4,
+                   pixels+(size_t)row*pitch,mp_w*4);
+    }
+    gs_stagesurface_unmap(s->mp_staging_tex);
+    if (!valid)
+        return false;
+
+    /* Worker owns the reservation once queued. Never wait on its mutex
+     * while holding the graphics context, even for a short submission. */
+    if (pthread_mutex_trylock(&s->mp_mutex)!=0)
+        return false;
+    if (!s->mp_thread_run || !s->mp_enabled) {
+        pthread_mutex_unlock(&s->mp_mutex);
+        return false;
+    }
+    s->mp_pending_task_storage=(struct mp_process_task_data){
+        .s=s,.frame_data=s->mp_preallocated_frame,.width=mp_w,.height=mp_h};
+    s->mp_pending_task_active=true;
+    pthread_cond_signal(&s->mp_cond);
+    pthread_mutex_unlock(&s->mp_mutex);
+    return true;
+
+}
+
+static void mp_readback_failed(struct hypershader_data *s)
+{
+    if (!s->mp_readback_failure_logged) {
+        blog(LOG_WARNING, "[hypershader] Native GL readback fence failed; dropping capture");
+        s->mp_readback_failure_logged = true;
+    }
+    if (s->mp_readback_fence)
+        mp_cancel_pending_readback(s);
+    else if (s->mp_staging_tex) {
+        gs_stagesurface_destroy(s->mp_staging_tex);
+        s->mp_staging_tex = NULL;
+    }
+}
+
+static void mp_poll_pending_readback(struct hypershader_data *s, bool flush)
+{
+    const uint64_t now = os_gettime_ns();
+    /* A hidden source may resume much later. Never deliver its old frame. */
+    if (now < s->mp_readback_started_ns || now-s->mp_readback_started_ns > 250000000ULL) {
+        mp_cancel_pending_readback(s);
+        return;
+    }
+    enum hs_readback_status status = hs_readback_fence_poll(s->mp_readback_fence,flush);
+    if (status == HS_READBACK_PENDING)
+        return;
+    if (status == HS_READBACK_FAILED) {
+        mp_readback_failed(s);
+        return;
+    }
+    hs_readback_fence_destroy(s->mp_readback_fence);
+    s->mp_readback_fence = NULL;
+    s->mp_readback_started_ns = 0;
+    if (!mp_submit_staged_frame(s))
+        atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
+}
+
 /* At most one native inference capture/result may be outstanding. Reserve
  * before any scaling, readback or mutex access. A busy worker or duplicate
  * video frame is a cheap drop, not a synchronous graphics stall. */
@@ -5209,8 +5303,18 @@ static void process_mediapipe_frame(struct hypershader_data *s,
                                     gs_texture_t *explicit_source)
 {
     if (!s->mp_runner || !s->mp_enabled || !s->mp_thread_run ||
-        !s->mp_preallocated_frame)
+        !s->mp_preallocated_frame) {
+        mp_cancel_pending_readback(s);
         return;
+    }
+    const uint64_t frame = obs_get_video_frame_time();
+    if (s->mp_capture_frame_valid && s->mp_last_capture_frame == frame)
+        return;
+    if (s->mp_readback_fence) {
+        s->mp_last_capture_frame = frame;
+        mp_poll_pending_readback(s, false);
+        return;
+    }
     obs_source_t *target = obs_filter_get_target(s->context);
     if (!target)
         return;
@@ -5219,9 +5323,6 @@ static void process_mediapipe_frame(struct hypershader_data *s,
     if (!sw || !sh)
         return;
 
-    const uint64_t frame = obs_get_video_frame_time();
-    if (s->mp_capture_frame_valid && s->mp_last_capture_frame == frame)
-        return;
     bool expected = false;
     if (!atomic_compare_exchange_strong_explicit(&s->mp_frame_buffer_in_use,
             &expected,true,memory_order_acquire,memory_order_relaxed))
@@ -5266,37 +5367,26 @@ static void process_mediapipe_frame(struct hypershader_data *s,
     if (!s->mp_staging_tex)
         goto drop;
 
-    /* This portable libobs map can still block on an admitted capture.
-     * The admission gate deliberately does not pretend to be a GPU fence. */
+    if (!s->mp_readback_backend_known) {
+        s->mp_readback_can_poll = hs_readback_fence_supported();
+        s->mp_readback_backend_known = true;
+        blog(LOG_INFO, "[hypershader] Native inference readback: %s",
+             s->mp_readback_can_poll ? "zero-timeout OpenGL fence polling" :
+             "bounded synchronous staging (backend readiness unavailable)");
+    }
     gs_stage_texture(s->mp_staging_tex,scaled);
-    uint8_t *pixels=NULL;
-    uint32_t pitch=0;
-    if (!gs_stagesurface_map(s->mp_staging_tex,&pixels,&pitch))
-        goto drop;
-    const bool valid=pixels && pitch >= (uint32_t)mp_w*4;
-    if (valid) {
-        for (int row=0;row<mp_h;row++)
-            memcpy(s->mp_preallocated_frame+(size_t)row*mp_w*4,
-                   pixels+(size_t)row*pitch,mp_w*4);
+    if (s->mp_readback_can_poll) {
+        s->mp_readback_fence = hs_readback_fence_insert();
+        if (!s->mp_readback_fence) {
+            mp_readback_failed(s);
+            goto drop;
+        }
+        s->mp_readback_started_ns = os_gettime_ns();
+        mp_poll_pending_readback(s, true);
+        return;
     }
-    gs_stagesurface_unmap(s->mp_staging_tex);
-    if (!valid)
-        goto drop;
-
-    /* Worker owns the reservation once queued. Never wait on its mutex
-     * while holding the graphics context, even for a short submission. */
-    if (pthread_mutex_trylock(&s->mp_mutex)!=0)
-        goto drop;
-    if (!s->mp_thread_run || !s->mp_enabled) {
-        pthread_mutex_unlock(&s->mp_mutex);
-        goto drop;
-    }
-    s->mp_pending_task_storage=(struct mp_process_task_data){
-        .s=s,.frame_data=s->mp_preallocated_frame,.width=mp_w,.height=mp_h};
-    s->mp_pending_task_active=true;
-    pthread_cond_signal(&s->mp_cond);
-    pthread_mutex_unlock(&s->mp_mutex);
-    return;
+    if (mp_submit_staged_frame(s))
+        return;
 
 drop:
     atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);

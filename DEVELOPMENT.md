@@ -202,3 +202,28 @@ command for a local bundled runtime, then inspect the installed module's
 `RUNPATH`/`RPATH` and dependencies (for example, `readelf -d` and `ldd` on
 Linux). Build-time success alone does not establish deploy-time loading.
 See README.md for the local install steps.
+
+
+### Native inference readback
+
+Native tracking admits one capture/result at a time and drops repeated draws
+of the same OBS video timestamp before scaling or staging. The slot is not
+released until the result upload is consumed (or the capture/inference fails).
+
+When Linux's OpenGL development package provides OpenGL::OpenGL, the
+module links the GLVND OpenGL dispatch library and uses a fence in the
+current OBS graphics context. The staging buffer is mapped only after a
+zero-timeout readiness poll signals completion. A pending capture expires
+after 250 ms rather than delivering an old frame. Unsupported backends and
+builds without that optional dependency retain the bounded synchronous
+staging path and log it explicitly. This is not a guarantee of zero driver
+overhead or nonblocking behavior on D3D11/Metal.
+
+For actual ONNX face tracking verification, use
+scripts/verify-mediapipe-filter-obs.sh with the staged module, a public
+256x256 RGBA face fixture, and the probe effect from staged data. Set
+HS_MP_TEST_DATA to that data directory (including the paired model graphs
+and external data) and HS_MP_TEST_EXPECT_FENCE=1 to require GL readiness
+polling. Set HS_MP_TEST_COMPOSITE=1 to exercise explicit composited input.
+The Linux probe exercises real pixels and deliberately delays fence
+readiness and result publication; it does not measure production frame time.
