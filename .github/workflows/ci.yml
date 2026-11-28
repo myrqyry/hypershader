@@ -41,6 +41,8 @@ jobs:
         run: |
           cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-jsmn.c src/jsmn.c -o "$RUNNER_TEMP/hs-json-test"
           "$RUNNER_TEMP/hs-json-test"
+      - name: Verify render-control hot-path contract
+        run: python3 scripts/test-render-control-cache.py
       - name: Verify graph allocation budget
         run: |
           cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-graph-budget.c -o "$RUNNER_TEMP/hs-graph-budget-test"

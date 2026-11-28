@@ -128,6 +128,13 @@ struct shader_param_meta {
 	/* Cached effect parameter for runtime binding */
 	gs_eparam_t *cached_param;
 
+	/* Graphics-thread-only binding descriptor and per-render value. */
+	enum gs_shader_param_type render_type;
+	char render_key[256];
+	bool render_valid, render_default_color_valid;
+	struct vec4 render_default_color, render_color;
+	union { float scalar; int integer; bool boolean; } render_value;
+
 	/* Default value support */
 	float default_val;
 	char *default_val_str; /* For non-scalar defaults (e.g. "0.5,0.5,0.5") */
@@ -214,6 +221,8 @@ struct hypershader_data {
     float compose_effect_opacity;
     int compose_blend_mode;
     gs_effect_t *output_compositor;
+    gs_eparam_t *compose_base_image, *compose_fx_image, *compose_base_alpha,
+        *compose_fx_alpha, *compose_mode;
     gs_texrender_t *output_composite_fx;
     gs_texrender_t *output_composite_base;
     gs_texture_t *output_transparent;
@@ -262,6 +271,7 @@ struct hypershader_data {
 	gs_texture_t *channel_textures[4]; /* The final texture to bind (either from image or source) */
 
 	/* Cached effect params (NULL if not present in the effect) */
+	gs_eparam_t *ep_image, *ep_transition_progress, *ep_animation_playback;
 	gs_eparam_t *ep_time;
 	gs_eparam_t *ep_scale; /* RESTORED */
 	gs_eparam_t *ep_resolution;

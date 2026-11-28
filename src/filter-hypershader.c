@@ -3633,7 +3633,29 @@ static void shader_load_complete_task(void *param)
 		res->rc = NULL;
 		res->audio_values = NULL;
 
+		/* Resolve binding descriptors once per accepted compiled effect. */
+		for (size_t i = 0; i < s->metadata_rc->meta.num; ++i) {
+			struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
+			if (!m->name || !m->cached_param || hs_runtime_uniform(s, m->name))
+				continue;
+			struct gs_effect_param_info info;
+			gs_effect_get_param_info(m->cached_param, &info);
+			m->render_type = info.type;
+			snprintf(m->render_key, sizeof(m->render_key), "param_%s", m->name);
+			if (m->has_default && m->default_val_str) {
+				struct vec4 *v = &m->render_default_color;
+				if (info.type == GS_SHADER_PARAM_VEC3)
+					m->render_default_color_valid = sscanf(m->default_val_str, "%f,%f,%f",
+						&v->x, &v->y, &v->z) == 3;
+				else if (info.type == GS_SHADER_PARAM_VEC4)
+					m->render_default_color_valid = sscanf(m->default_val_str, "%f,%f,%f,%f",
+						&v->x, &v->y, &v->z, &v->w) == 4;
+			}
+		}
 		/* Update cached standard params for NEW effect */
+		s->ep_image = gs_effect_get_param_by_name(s->effect, "image");
+		s->ep_transition_progress = gs_effect_get_param_by_name(s->effect, "hs_transition_progress");
+		s->ep_animation_playback = gs_effect_get_param_by_name(s->effect, "animation_playback");
 		s->ep_time = gs_effect_get_param_by_name(s->effect, "hs_time");
 		s->ep_scale = gs_effect_get_param_by_name(s->effect, "hs_scale");
 		s->ep_resolution = gs_effect_get_param_by_name(s->effect, "hs_resolution");
@@ -4060,6 +4082,7 @@ static void dynamics_update(struct shader_param_meta *m, float dt)
 /* Regular Draw techniques clear uniforms between frames just like graph
  * BufferA/BufferB techniques. They must not rely on one-time load defaults. */
 static void graph_bind_controls(struct hypershader_data *s);
+static void graph_snapshot_controls(struct hypershader_data *s);
 
 /* Opt-in native response envelope. Only an effect declaring audio_reaction_state
  * pays for this work; state belongs to the instance, not to a shared shader. */
@@ -4159,7 +4182,7 @@ static void update_animated_channels(struct hypershader_data *s)
 
     enum hs_image_playback mode = HS_IMAGE_CONTINUOUS;
     bool reactive = s->ep_audio_reaction_state && s->effect &&
-        gs_effect_get_param_by_name(s->effect, "animation_playback");
+        s->ep_animation_playback;
     if (reactive) {
         obs_data_t *settings = obs_source_get_settings(s->context);
         if (settings) {
@@ -4703,6 +4726,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
     pthread_mutex_unlock(&s->mutex);
     /* Reassert saved/default shader parameters before every native Draw,
      * including regular filters, feedback, sources and transitions. */
+    graph_snapshot_controls(s);
     graph_bind_controls(s);
 }
 
@@ -4800,65 +4824,94 @@ static float performance_modulated_value(struct hypershader_data *s, obs_data_t 
 		base + signal * fminf(depth, 1.f) * (m->max - m->min)));
 }
 
-static void graph_bind_controls(struct hypershader_data *s)
+/* Snapshot settings once per render, not once per technique. Graphics
+ * serialization also protects descriptor lifetime across effect replacement. */
+static void graph_snapshot_controls(struct hypershader_data *s)
 {
 	if (!s->metadata_rc)
 		return;
 	obs_data_t *settings = obs_source_get_settings(s->context);
-	if (!settings)
-		return;
 	for (size_t i = 0; i < s->metadata_rc->meta.num; i++) {
 		struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
-		if (!m->name || !m->cached_param || hs_runtime_uniform(s, m->name))
+		m->render_valid = false;
+		if (!settings || !m->render_key[0])
 			continue;
-		struct gs_effect_param_info info;
-		gs_effect_get_param_info(m->cached_param, &info);
-		char prop[256];
-		snprintf(prop, sizeof(prop), "param_%s", m->name);
+		const char *prop = m->render_key;
 		if (m->audio_tag && s->meta_audio_values && i < s->meta_audio_count) {
-			if (info.type == GS_SHADER_PARAM_FLOAT)
-				gs_effect_set_float(m->cached_param, s->meta_audio_values[i]);
+			if (m->render_type == GS_SHADER_PARAM_FLOAT) {
+				m->render_value.scalar = s->meta_audio_values[i];
+				m->render_valid = true;
+			}
 			continue;
 		}
-		switch (info.type) {
+		const bool user = obs_data_has_user_value(settings, prop);
+		switch (m->render_type) {
 		case GS_SHADER_PARAM_FLOAT: {
-			float base = (float)(obs_data_has_user_value(settings, prop) ||
-				!m->has_default ? obs_data_get_double(settings, prop) : m->default_val);
-			gs_effect_set_float(m->cached_param,
-				performance_modulated_value(s, settings, m, prop, base));
+			float base = (float)(user || !m->has_default ?
+				obs_data_get_double(settings, prop) : m->default_val);
+			m->render_value.scalar = performance_modulated_value(s, settings, m, prop, base);
+			m->render_valid = true;
 			break;
 		}
 		case GS_SHADER_PARAM_INT:
-			gs_effect_set_int(m->cached_param,
-				(int)(obs_data_has_user_value(settings, prop) ||
-					!m->has_default ? obs_data_get_int(settings, prop) : (int)m->default_val));
+			m->render_value.integer = (int)(user || !m->has_default ?
+				obs_data_get_int(settings, prop) : (int)m->default_val);
+			m->render_valid = true;
 			break;
 		case GS_SHADER_PARAM_BOOL:
-			gs_effect_set_bool(m->cached_param,
-				obs_data_has_user_value(settings, prop) || !m->has_default ?
-				obs_data_get_bool(settings, prop) : m->default_val != 0.0f);
+			m->render_value.boolean = user || !m->has_default ?
+				obs_data_get_bool(settings, prop) : m->default_val != 0.0f;
+			m->render_valid = true;
 			break;
 		case GS_SHADER_PARAM_VEC3:
 		case GS_SHADER_PARAM_VEC4:
-			if (obs_data_has_user_value(settings, prop)) {
-				struct vec4 color;
-				vec4_from_rgba(&color, (uint32_t)obs_data_get_int(settings, prop));
-				if (info.type == GS_SHADER_PARAM_VEC4)
-					gs_effect_set_vec4(m->cached_param, &color);
-				else {
-					struct vec3 rgb;
-					vec3_set(&rgb, color.x, color.y, color.z);
-					gs_effect_set_vec3(m->cached_param, &rgb);
-				}
-			} else {
-				apply_parameter_default(m->cached_param, m);
+			if (user) {
+				vec4_from_rgba(&m->render_color, (uint32_t)obs_data_get_int(settings, prop));
+				m->render_valid = true;
+			} else if (m->render_default_color_valid) {
+				m->render_color = m->render_default_color;
+				m->render_valid = true;
 			}
 			break;
 		default:
 			break;
 		}
 	}
-	obs_data_release(settings);
+	if (settings)
+		obs_data_release(settings);
+}
+
+static void graph_bind_controls(struct hypershader_data *s)
+{
+	if (!s->metadata_rc)
+		return;
+	for (size_t i = 0; i < s->metadata_rc->meta.num; i++) {
+		const struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
+		if (!m->render_valid)
+			continue;
+		switch (m->render_type) {
+		case GS_SHADER_PARAM_FLOAT:
+			gs_effect_set_float(m->cached_param, m->render_value.scalar);
+			break;
+		case GS_SHADER_PARAM_INT:
+			gs_effect_set_int(m->cached_param, m->render_value.integer);
+			break;
+		case GS_SHADER_PARAM_BOOL:
+			gs_effect_set_bool(m->cached_param, m->render_value.boolean);
+			break;
+		case GS_SHADER_PARAM_VEC3: {
+			struct vec3 rgb;
+			vec3_set(&rgb, m->render_color.x, m->render_color.y, m->render_color.z);
+			gs_effect_set_vec3(m->cached_param, &rgb);
+			break;
+		}
+		case GS_SHADER_PARAM_VEC4:
+			gs_effect_set_vec4(m->cached_param, &m->render_color);
+			break;
+		default:
+			break;
+		}
+	}
 }
 
 /* Built-in uniforms have the same lifetime issue as custom scalars:
@@ -4975,6 +5028,11 @@ static bool output_compositor_prepare(struct hypershader_data *s, enum gs_color_
         bfree(filename);
         if (!s->output_compositor)
             return false;
+        s->compose_base_image = gs_effect_get_param_by_name(s->output_compositor, "baseImage");
+        s->compose_fx_image = gs_effect_get_param_by_name(s->output_compositor, "effectImage");
+        s->compose_base_alpha = gs_effect_get_param_by_name(s->output_compositor, "baseOpacity");
+        s->compose_fx_alpha = gs_effect_get_param_by_name(s->output_compositor, "effectOpacity");
+        s->compose_mode = gs_effect_get_param_by_name(s->output_compositor, "blendMode");
     }
     if (s->output_composite_fx && s->output_composite_format != format) {
         gs_texrender_destroy(s->output_composite_fx);
@@ -5017,7 +5075,7 @@ static gs_texture_t *output_render_effect(struct hypershader_data *s,
     struct vec4 clear;
     vec4_zero(&clear);
     gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
-    gs_eparam_t *param = gs_effect_get_param_by_name(s->effect, "image");
+    gs_eparam_t *param = s->ep_image;
     if (param)
         gs_effect_set_texture(param, image);
     while (gs_effect_loop(s->effect, "Draw"))
@@ -5036,11 +5094,11 @@ static bool output_draw_composited(struct hypershader_data *s,
     if (!effect || !output_compositor_prepare(s, format))
         return false;
     gs_effect_t *compositor = s->output_compositor;
-    gs_eparam_t *base_param = gs_effect_get_param_by_name(compositor, "baseImage");
-    gs_eparam_t *fx_param = gs_effect_get_param_by_name(compositor, "effectImage");
-    gs_eparam_t *base_a = gs_effect_get_param_by_name(compositor, "baseOpacity");
-    gs_eparam_t *fx_a = gs_effect_get_param_by_name(compositor, "effectOpacity");
-    gs_eparam_t *blend = gs_effect_get_param_by_name(compositor, "blendMode");
+    gs_eparam_t *base_param = s->compose_base_image;
+    gs_eparam_t *fx_param = s->compose_fx_image;
+    gs_eparam_t *base_a = s->compose_base_alpha;
+    gs_eparam_t *fx_a = s->compose_fx_alpha;
+    gs_eparam_t *blend = s->compose_mode;
     if (!base_param || !fx_param || !base_a || !fx_a || !blend)
         return false;
     gs_effect_set_texture(base_param, base ? base : s->output_transparent);
@@ -5334,7 +5392,7 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 		    gs_texture_get_color_format(previous[i]) != (s->graph.float16[i] ? GS_RGBA16F : format))
 			return false;
 	}
-	gs_eparam_t *image = gs_effect_get_param_by_name(s->effect, "image");
+	gs_eparam_t *image = s->ep_image;
 	for (unsigned pass = 0; pass < s->graph.count; pass++) {
 		gs_texrender_t *destination = s->graph_history[pass][write];
 		const uint32_t pass_width = hs_graph_extent(width, s->graph.divisor[pass]);
@@ -5571,7 +5629,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 					gs_matrix_push();
 					gs_matrix_identity();
 					gs_ortho(0,(float)width,0,(float)height,-100,100);
-					gs_eparam_t *image=gs_effect_get_param_by_name(s->effect,"image");
+					gs_eparam_t *image=s->ep_image;
 					if (image)gs_effect_set_texture(image,input);
 					gs_effect_set_texture(s->ep_history,previous ? previous : input);
 					while (gs_effect_loop(s->effect,"Draw"))
@@ -5849,7 +5907,7 @@ static void source_video_render(void *data, gs_effect_t *effect)
 	}
 
 	/* Source specific: We are the root, so clear 'image' input or bind the black texture */
-	gs_eparam_t *image_param = gs_effect_get_param_by_name(s->effect, "image");
+	gs_eparam_t *image_param = s->ep_image;
 	if (image_param)
 		gs_effect_set_texture(image_param, s->dummy_texture);
 
@@ -6004,7 +6062,7 @@ static void mix_render_callback(void *data, gs_texture_t *a, gs_texture_t *b, fl
 		update_shader_uniforms(s, width, height);
 
 		/* Set Transition Progress 'hs_transition_progress' */
-		gs_eparam_t *ep_progress = gs_effect_get_param_by_name(s->effect, "hs_transition_progress");
+		gs_eparam_t *ep_progress = s->ep_transition_progress;
 		if (ep_progress)
 			gs_effect_set_float(ep_progress, t);
 
