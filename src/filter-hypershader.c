@@ -60,6 +60,7 @@ static inline int hs_access_exists(const char *path)
 #include "interop/readback_fence.h"
 #include "interop/sight_flow_step.h"
 #include "shader/graph-budget.h"
+#include "shader/glsl-translate.h"
 #include <inttypes.h>
 
 /* Reset logical state without reallocating compatible GPU surfaces. */
@@ -547,97 +548,6 @@ static void include_guard_add(struct include_guard *guard, const char *path)
  * OBS doesn't have a C preprocessor, so #define macros don't work.
  * We perform the GLSL->HLSL type/function translations ourselves.
  * ============================================================================ */
-
-/* Safer string replacement using dstr would be ideal, but let's make this manual version robust first */
-static char *replace_word(const char *source, const char *find, const char *replace)
-{
-	if (!source || !find || !replace)
-		return NULL;
-
-	struct dstr buffer = {0};
-	size_t find_len = strlen(find);
-	const char *p = source;
-	const char *next_match;
-
-	while ((next_match = strstr(p, find)) != NULL) {
-		/* Check word boundary */
-		bool start_ok = (next_match == source) ||
-				(!isalnum((unsigned char)*(next_match - 1)) && *(next_match - 1) != '_');
-		bool end_ok = !isalnum((unsigned char)*(next_match + find_len)) && *(next_match + find_len) != '_';
-
-		if (start_ok && end_ok) {
-			/* Append everything before match */
-			dstr_ncat(&buffer, p, next_match - p);
-			/* Append replacement */
-			dstr_cat(&buffer, replace);
-			/* Advance */
-			p = next_match + find_len;
-		} else {
-			/* Append everything up to and including the "false alarm" match start */
-			dstr_ncat(&buffer, p, (next_match - p) + 1);
-			p = next_match + 1;
-		}
-	}
-
-	/* Append remainder */
-	dstr_cat(&buffer, p);
-
-	if (!buffer.array)
-		return bstrdup("");
-
-	return buffer.array; /* Caller must bfree */
-}
-
-/* Perform GLSL -> OBS HLSL translations */
-/* Translate code tokens without rewriting C preprocessor directives.
- * Translating '#define vec2 float2' into '#define float2 float2' caused
- * self-referential definitions and crashed the OBS effect compiler. */
-static char *translate_glsl_to_obs(char *source)
-{
-    if (!source)
-        return NULL;
-
-    static const char *translations[][2] = {
-        {"vec2", "float2"}, {"vec3", "float3"}, {"vec4", "float4"},
-        {"ivec2", "int2"}, {"ivec3", "int3"}, {"ivec4", "int4"},
-        {"mat2", "float2x2"}, {"mat3", "float3x3"}, {"mat4", "float4x4"},
-        {"sampler2D", "texture2d"},
-        {"fract", "frac"}, {"mix", "lerp"}, {"mod", "fmod"},
-        {NULL, NULL}
-    };
-    struct dstr output = {0};
-    const char *line = source;
-    while (*line) {
-        const char *end = strchr(line, '\n');
-        size_t length = end ? (size_t)(end - line) : strlen(line);
-        const char *trimmed = line;
-        while (trimmed < line + length && (*trimmed == ' ' || *trimmed == '\t'))
-            ++trimmed;
-
-        if (trimmed < line + length && *trimmed == '#') {
-            dstr_ncat(&output, line, length);
-        } else {
-            char *current = bmalloc(length + 1);
-            memcpy(current, line, length);
-            current[length] = '\0';
-            for (int i = 0; translations[i][0]; ++i) {
-                char *translated = replace_word(current, translations[i][0], translations[i][1]);
-                if (!translated) {
-                    bfree(current);
-                    dstr_free(&output);
-                    return NULL;
-                }
-                bfree(current);
-                current = translated;
-            }
-            dstr_cat(&output, current);
-            bfree(current);
-        }
-        dstr_cat(&output, "\n");
-        line = end ? end + 1 : line + length;
-    }
-    return output.array ? output.array : bstrdup("");
-}
 
 /* Boilerplate expansion for SHADERTOY_MAINIMAGE_WRAPPER / HYPERSHADER_PIXEL_WRAPPER.
  * OBS effect compiler does not expand C preprocessor macros, so we emit the
@@ -1582,8 +1492,7 @@ static char *preprocess_shader(const char *path)
 	char *result = preprocess_shader_with_guard(path, 0, &guard);
 
 	if (result) {
-		/* Perform GLSL -> OBS HLSL translation (DISABLED DEBUG: Native macros should handle this) */
-		/* Perform GLSL -> OBS HLSL translation */
+		/* Normalize the supported compatibility vocabulary in one lexical pass. */
 		char *translated = translate_glsl_to_obs(result);
 		if (translated) {
 			bfree(result);

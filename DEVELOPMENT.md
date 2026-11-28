@@ -299,3 +299,20 @@ Run the isolated native regression on Linux:
 The test interposes real file opens, checks rendered pixels and metadata
 defaults, same-size edits with restored mtime, missing/restored dependencies,
 changed include order, managed revisions, and LRU eviction.
+
+### GLSL vocabulary normalization
+
+The shader worker uses a single lexical pass to normalize the existing 13
+GLSL compatibility tokens. Native identifiers and comments, strings and
+preprocessor directives (including continuation lines) are left intact.
+This is vocabulary normalization, not a full GLSL parser or compiler.
+The output retains the existing final-newline normalization.
+
+Run the UBSan lexical regression and isolated CPU benchmark:
+
+    bash scripts/verify-glsl-translation.sh
+
+For comparison with the previous multi-scan implementation, supply its
+commit (3467eb4); the benchmark also compares the output fingerprint.
+
+    bash scripts/verify-glsl-translation.sh 3467eb4
