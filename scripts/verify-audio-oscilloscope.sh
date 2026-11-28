@@ -17,5 +17,5 @@ g++ -std=c++17 -O2 -I"$inc" "$repo/scripts/verify-audio-oscilloscope.cpp" \
     tail -45 "$work/result.log"
     exit 1
 }
-grep '^AUDIO_SCOPE' "$work/result.log"
+grep -E '^(AUDIO_SCOPE|AUDIO_SOURCE_LIFETIME)' "$work/result.log"
 grep -q 'AUDIO_SCOPE .*PASS=1' "$work/result.log"

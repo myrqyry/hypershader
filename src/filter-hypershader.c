@@ -1796,6 +1796,7 @@ static void filter_destroy(void *data)
 
 	/* Destroy mutexes (note: mutex was unlocked earlier to prevent deadlock) */
 	pthread_mutex_destroy(&s->mutex);
+	pthread_mutex_destroy(&s->audio_route_lock);
 
 	log_debug_direct("filter_destroy: bfree(s)");
 	bfree(s);
@@ -2537,6 +2538,7 @@ static void filter_update(void *data, obs_data_t *settings)
 	}
 
 	/* Read input mode and optional audio source */
+	pthread_mutex_lock(&s->audio_route_lock);
 	s->input_mode = (int)obs_data_get_int(settings, "input_mode");
 	const char *audio_src = obs_data_get_string(settings, "audio_source");
 	bool audio_source_changed = (s->audio_source == NULL) != (audio_src == NULL || !audio_src[0]) ||
@@ -2587,10 +2589,13 @@ static void filter_update(void *data, obs_data_t *settings)
 		stop_obs_audio_connection(s);
 	if (!wants_source_audio && s->source_audio_connected)
 		stop_source_audio_connection(s);
+	if (wants_source_audio && s->selected_audio_source && obs_source_removed(s->selected_audio_source))
+		stop_source_audio_connection(s);
 	if (wants_source_audio && !s->source_audio_connected)
 		start_source_audio_connection(s);
 	if (wants_mix_audio && !s->audio_connected)
 		start_obs_audio_connection(s);
+	pthread_mutex_unlock(&s->audio_route_lock);
 
 	/* Read user mappings */
 	for (int i = 0; i < AUDIO_MAP_SLOTS; i++) {
@@ -2791,6 +2796,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
 	pthread_mutex_init(&s->mutex, &attr);
 	pthread_mutexattr_destroy(&attr);
+	pthread_mutex_init(&s->audio_route_lock, NULL);
 
 	/* Initialize Basic State */
 

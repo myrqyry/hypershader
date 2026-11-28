@@ -202,6 +202,31 @@ int main(int argc,char**argv) {
  printf("AUDIO_SCOPE source_defaults=%d controls=%d active_pixels=%zu tone_response=%zu frequency_response=%zu gain_response=%zu disconnected_response=%zu restored_response=%zu graticule_response=%zu transparent=%d PASS=%d\n",
   defaults,controls,active,response,harmonicResponse,gainResponse,
   disconnectedResponse,restoredResponse,graticuleResponse,transparent,ok);
+ // Removing the selected source must release it without editing the shader.
+ auto* weak=obs_source_get_weak_source(input);
+ obs_set_output_source(1,nullptr);
+ obs_source_dec_showing(input);
+ obs_source_remove(input);
+ obs_source_release(input);
+ input=nullptr;
+ bool released=false;
+ for(int i=0;i<80;i++){
+   render(viz);
+   if(obs_weak_source_expired(weak)){released=true;break;}
+   std::this_thread::sleep_for(25ms);
+ }
+ obs_weak_source_release(weak);
+ // A new source with the same legacy name must bind on an explicit update.
+ input=obs_source_create("hyper_visualizer_pcm_fixture","Visualizer Test Tone",nullptr,nullptr);
+ if(!input)return 8;
+ obs_source_inc_showing(input);obs_set_output_source(1,input);
+ auto* refresh=obs_source_get_settings(viz);
+ obs_source_update(viz,refresh);obs_data_release(refresh);
+ auto replacementLow=settle(35,440);
+ auto replacementHigh=settle(35,880);
+ bool rebound=changed(replacementLow,replacementHigh)>150;
+ printf("AUDIO_SOURCE_LIFETIME released=%d rebound=%d PASS=%d\n",released,rebound,released&&rebound);
+ ok=ok&&released&&rebound;
  // Disconnect the selected PCM callback while both sources are still alive.
  auto* cleanup=obs_source_get_settings(viz);
  obs_data_set_string(cleanup,"audio_source","");

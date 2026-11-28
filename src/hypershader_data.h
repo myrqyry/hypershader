@@ -452,7 +452,8 @@ struct hypershader_data {
 	audio_t *obs_audio;   /* handle returned by obs_get_audio() */
 	bool audio_connected; /* whether we connected via audio_output_connect */
 	size_t audio_mix_idx; /* mix index we're connected to (default 0) */
-	obs_source_t *selected_audio_source; /* held ref for per-source capture */
+	pthread_mutex_t audio_route_lock; /* serializes settings and worker detach; never held by PCM callback */
+	obs_source_t *selected_audio_source; /* held only until route disconnect/removal */
 	bool source_audio_connected;
 
 	/* Mapping slots (map computed feature -> shader uniform) */

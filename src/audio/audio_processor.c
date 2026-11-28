@@ -293,11 +293,10 @@ void stop_source_audio_connection(struct hypershader_data *s)
 	if (!s || !s->selected_audio_source)
 		return;
 
-	reset_beat_state(s);
-
 	obs_source_remove_audio_capture_callback(s->selected_audio_source, source_audio_callback, s);
 	hs_audio_ring_request_reset(&s->audio_lockfree_ring);
 	atomic_store_explicit(&s->last_audio_capture_ns, 0, memory_order_release);
+	reset_beat_state(s);
 	blog(LOG_INFO, "[hypershader] Disconnected from OBS audio source %s",
 	     obs_source_get_name(s->selected_audio_source));
 	obs_source_release(s->selected_audio_source);
@@ -624,6 +623,17 @@ void *audio_worker(void *p)
 			pthread_cond_timedwait(&s->audio_cv, &s->audio_lock, &ts);
 		}
 		pthread_mutex_unlock(&s->audio_lock);
+
+        /* A removed source must not be kept alive by the capture route.
+         * Hold a strong ref until libobs synchronously removes our callback:
+         * an expired weak ref alone cannot establish callback quiescence.
+         * Never wait on settings from this worker (or on the render thread).
+         * The worker is joined before final teardown. */
+        if (pthread_mutex_trylock(&s->audio_route_lock) == 0) {
+            if (s->selected_audio_source && obs_source_removed(s->selected_audio_source))
+                stop_source_audio_connection(s);
+            pthread_mutex_unlock(&s->audio_route_lock);
+        }
 
 		/* Timestamp validation - prevent over-sampling */
 		uint64_t current_ts = os_gettime_ns();
