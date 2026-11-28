@@ -414,6 +414,11 @@ struct hypershader_data {
 	uint64_t last_audio_ts; /* Last processed audio timestamp (ns) */
 	atomic_uint_fast64_t last_audio_capture_ns; /* Fresh incoming PCM, not repeated FFT windows */
 	atomic_uint_fast64_t live_render_ns;
+    atomic_bool workload_active, workload_showing;
+    atomic_uint_fast64_t workload_last_draw_ns;
+    atomic_bool audio_capture_admitted;
+    atomic_uint audio_capture_inflight;
+    atomic_uint workload_epoch, audio_capture_epoch;
 	atomic_uint live_signal_flags;
 	atomic_uint live_audio_permille;
 

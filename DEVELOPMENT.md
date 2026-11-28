@@ -227,3 +227,33 @@ and external data) and HS_MP_TEST_EXPECT_FENCE=1 to require GL readiness
 polling. Set HS_MP_TEST_COMPOSITE=1 to exercise explicit composited input.
 The Linux probe exercises real pixels and deliberately delays fence
 readiness and result publication; it does not measure production frame time.
+
+### Inactive workload scheduling
+
+Visible auxiliary/preview views count as demand just like program output.
+Filters use OBS parent show/hide and attach/detach notifications (private
+filter show_refs are not equivalent to the parent's). A valid direct draw
+renews a 250 ms demand lease. Disabled effects cannot renew it.
+The video tick leaves animation time and persistent shader history alone,
+but skips Sight reads and entity physics while inactive. Cached Sight
+presence is invalidated until a fresh snapshot is read on resume.
+
+Audio callbacks remain registered for safe source lifetime and cheap resume,
+but reject PCM before conversion while inactive. The analysis worker sleeps
+at a 100 ms maintenance cadence instead of 21 ms; it still detects removed
+audio sources. An activity epoch and callback-inflight count allow the
+worker to discard queued PCM and clear feature, spectrum and waveform
+state before reopening admission. No thread join or worker mutex wait is
+introduced on the visibility or render path. FFT reconfiguration can be
+deferred until demand returns. Sound-test preview is independent.
+
+Native MediaPipe capture is already draw-driven, but this change does
+not cancel a running inference or qualify the lifetime of a queued result
+across a suspend/resume. Model resources and GPU allocations are retained.
+
+Run the isolated native lifecycle/PCM/Sight-provider fixture:
+
+    bash scripts/verify-inactive-workload.sh MODULE DATA
+
+This test uses real libobs audio capture and native rendered pixels; the
+Sight provider is a deterministic test endpoint (not real inference).

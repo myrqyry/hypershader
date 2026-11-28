@@ -235,16 +235,34 @@ static void receive_audio_samples(struct hypershader_data *s, const struct audio
 	hs_audio_ring_write(&s->audio_lockfree_ring, mono_buf, use_frames);
 }
 
+/* No locks, allocation, or PCM conversion on the inactive callback.
+ * The worker closes admission before discarding the old queue. A producer
+ * already inside the callback is allowed to finish before admission opens. */
+static void receive_admitted_audio(struct hypershader_data *s,const struct audio_data *data,bool muted)
+{
+    if (!s) return;
+    const unsigned epoch=atomic_load_explicit(&s->workload_epoch,memory_order_seq_cst);
+    if (!atomic_load_explicit(&s->workload_active,memory_order_acquire) ||
+        !atomic_load_explicit(&s->audio_capture_admitted,memory_order_acquire)) return;
+    atomic_fetch_add_explicit(&s->audio_capture_inflight,1,memory_order_seq_cst);
+    if (atomic_load_explicit(&s->audio_capture_admitted,memory_order_seq_cst) &&
+        atomic_load_explicit(&s->workload_active,memory_order_acquire) &&
+        atomic_load_explicit(&s->audio_capture_epoch,memory_order_acquire)==epoch &&
+        atomic_load_explicit(&s->workload_epoch,memory_order_seq_cst)==epoch)
+        receive_audio_samples(s,data,muted);
+    atomic_fetch_sub_explicit(&s->audio_capture_inflight,1,memory_order_seq_cst);
+}
+
 static void obs_audio_callback(void *param, size_t mix_idx, struct audio_data *data)
 {
 	(void)mix_idx;
-	receive_audio_samples(param, data, false);
+	receive_admitted_audio(param, data, false);
 }
 
 static void source_audio_callback(void *param, obs_source_t *source, const struct audio_data *data, bool muted)
 {
 	(void)source;
-	receive_audio_samples(param, data, muted);
+	receive_admitted_audio(param, data, muted);
 }
 
 bool start_source_audio_connection(struct hypershader_data *s)
@@ -600,17 +618,38 @@ void compute_audio_features(struct hypershader_data *s, float *window, int n)
 	pthread_mutex_unlock(&s->audio_results_lock);
 }
 
+/* Worker-owned reset; never join or clear the FFT buffers from video_tick. */
+static void reset_suspended_audio(struct hypershader_data *s)
+{
+    hs_audio_ring_discard(&s->audio_lockfree_ring);
+    atomic_store_explicit(&s->last_audio_capture_ns,0,memory_order_release);
+    s->last_audio_ts=0;
+    pthread_mutex_lock(&s->audio_results_lock);
+    s->audio_level=s->audio_peak=s->audio_beat=s->audio_envelope=0.f;
+    s->beat_average=s->beat_cooldown=0.f;
+    memset(s->audio_bands,0,sizeof(s->audio_bands));
+    memset(s->audio_music,0,sizeof(s->audio_music));
+    hs_music_reset(&s->music_timing);
+    memset(s->audio_texture_data,0,AUDIO_TEX_WIDTH);
+    memset(s->audio_texture_data+AUDIO_TEX_WIDTH,128,AUDIO_TEX_WIDTH);
+    if(s->fft_texture_history)
+        memset(s->fft_texture_history,0,AUDIO_TEX_WIDTH*sizeof(float));
+    pthread_mutex_unlock(&s->audio_results_lock);
+}
+
 void *audio_worker(void *p)
 {
 	struct hypershader_data *s = p;
 	uint64_t last_process_ts = 0;
+    bool needs_reset=true;
+    unsigned applied_epoch=0;
 
 	/* Signal that worker thread is fully initialized */
 	audio_thread_set_running(&s->audio_thread_mgr);
 
 	while (!audio_thread_should_stop(&s->audio_thread_mgr)) {
 		/* Use 21ms tick matching libobs audio tick rate (1024 samples @ 48kHz) */
-		int sleep_ms = 21;
+		int sleep_ms = atomic_load_explicit(&s->workload_active,memory_order_acquire) ? 21 : 100;
 
 		/* Use condition variable for efficient sleep that can be interrupted */
 		pthread_mutex_lock(&s->audio_lock);
@@ -633,6 +672,28 @@ void *audio_worker(void *p)
             if (s->selected_audio_source && obs_source_removed(s->selected_audio_source))
                 stop_source_audio_connection(s);
             pthread_mutex_unlock(&s->audio_route_lock);
+        }
+
+        const bool active=atomic_load_explicit(&s->workload_active,memory_order_acquire);
+        const unsigned epoch=atomic_load_explicit(&s->workload_epoch,memory_order_seq_cst);
+        if (!active || epoch!=applied_epoch) {
+            if (atomic_exchange_explicit(&s->audio_capture_admitted,false,memory_order_seq_cst))
+                needs_reset=true;
+            if (epoch!=applied_epoch) needs_reset=true;
+        }
+        if (needs_reset) {
+            if (atomic_load_explicit(&s->audio_capture_inflight,memory_order_seq_cst))
+                continue;
+            reset_suspended_audio(s);
+            needs_reset=false;
+            applied_epoch=epoch;
+            last_process_ts=0;
+        }
+        if (!active || epoch!=atomic_load_explicit(&s->workload_epoch,memory_order_seq_cst))
+            continue;
+        if (!atomic_load_explicit(&s->audio_capture_admitted,memory_order_relaxed)) {
+            atomic_store_explicit(&s->audio_capture_epoch,epoch,memory_order_release);
+            atomic_store_explicit(&s->audio_capture_admitted,true,memory_order_seq_cst);
         }
 
 		/* Timestamp validation - prevent over-sampling */
@@ -825,6 +886,7 @@ void *audio_worker(void *p)
 			bfree(localbuf);
 		}
 	}
+    atomic_store_explicit(&s->audio_capture_admitted,false,memory_order_seq_cst);
 	audio_thread_set_stopped(&s->audio_thread_mgr);
 	return NULL;
 }

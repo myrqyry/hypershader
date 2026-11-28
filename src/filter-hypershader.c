@@ -2882,6 +2882,50 @@ extern void *mp_worker_thread(void *data);
 /* Replaces filter_create to fix initialization bug */
 /* Read-only live status. No source settings writes, GPU calls or inference
  * on the dock thread; render publishes a compact atomic snapshot. */
+/* Filters receive showing notifications from their parent; their own
+ * show_refs are not a reliable visibility predicate. A real draw also
+ * leases the workload for consumers that render outside an OBS view. */
+#define HS_WORKLOAD_DRAW_GRACE_NS UINT64_C(250000000)
+
+static void workload_set_active(struct hypershader_data *s, bool active)
+{
+    bool previous=atomic_exchange_explicit(&s->workload_active,active,memory_order_acq_rel);
+    if (previous && !active)
+        atomic_fetch_add_explicit(&s->workload_epoch,1,memory_order_seq_cst);
+    if (previous!=active && s->audio_lockfree_ring.data)
+        pthread_cond_signal(&s->audio_cv);
+}
+
+static void workload_show(void *data)
+{
+    struct hypershader_data *s=data;
+    atomic_store_explicit(&s->workload_showing,true,memory_order_release);
+}
+
+static void workload_hide(void *data)
+{
+    struct hypershader_data *s=data;
+    atomic_store_explicit(&s->workload_showing,false,memory_order_release);
+}
+
+static void workload_touch_draw(struct hypershader_data *s)
+{
+    if (!obs_source_enabled(s->context)) return;
+    atomic_store_explicit(&s->workload_last_draw_ns,os_gettime_ns(),memory_order_release);
+    workload_set_active(s,true);
+}
+
+static bool workload_demand(struct hypershader_data *s)
+{
+    if (!obs_source_enabled(s->context)) return false;
+    if (s->kind == HYPER_KIND_FILTER) {
+        if (atomic_load_explicit(&s->workload_showing,memory_order_acquire)) return true;
+    } else if (obs_source_showing(s->context)) return true;
+    const uint64_t last=atomic_load_explicit(&s->workload_last_draw_ns,memory_order_acquire);
+    const uint64_t now=os_gettime_ns();
+    return last && now>=last && now-last<=HS_WORKLOAD_DRAW_GRACE_NS;
+}
+
 static void hs_live_status(void *data, calldata_t *out)
 {
 	struct hypershader_data *s = data;
@@ -2889,7 +2933,11 @@ static void hs_live_status(void *data, calldata_t *out)
 	const uint64_t render = atomic_load_explicit(&s->live_render_ns, memory_order_acquire);
 	const uint64_t pcm = atomic_load_explicit(&s->last_audio_capture_ns, memory_order_acquire);
 	const bool fresh = render && now >= render && now - render < 1000000000ULL;
-	const bool audio = pcm && now >= pcm && now - pcm < 1000000000ULL;
+	const bool audio = atomic_load_explicit(&s->workload_active,memory_order_acquire) &&
+        atomic_load_explicit(&s->audio_capture_admitted,memory_order_acquire) &&
+        atomic_load_explicit(&s->audio_capture_epoch,memory_order_acquire)==
+        atomic_load_explicit(&s->workload_epoch,memory_order_seq_cst) &&
+        pcm && now >= pcm && now - pcm < 1000000000ULL;
 	calldata_set_bool(out, "rendering", fresh);
 	calldata_set_bool(out, "audio", audio);
 	calldata_set_int(out, "level", audio && fresh ? atomic_load(&s->live_audio_permille) : 0);
@@ -2911,6 +2959,13 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
     atomic_init(&s->mp_enabled, false);
     atomic_init(&s->mp_analyze_trigger, false);
 	atomic_init(&s->live_render_ns, 0);
+    atomic_init(&s->workload_active,false);
+    atomic_init(&s->workload_showing,false);
+    atomic_init(&s->workload_last_draw_ns,0);
+    atomic_init(&s->audio_capture_admitted,false);
+    atomic_init(&s->audio_capture_inflight,0);
+    atomic_init(&s->workload_epoch,1);
+    atomic_init(&s->audio_capture_epoch,0);
 	atomic_init(&s->live_signal_flags, 0);
 	atomic_init(&s->live_audio_permille, 0);
 	s->context = context;
@@ -3473,10 +3528,27 @@ static void filter_tick(void *data, float seconds)
 		return;
 	s->last_tick_delta = seconds;
 	s->frame_count += 1;
-	sight_tick(s);
+    const bool active=workload_demand(s);
+    workload_set_active(s,active);
+    if (active) {
+        sight_tick(s);
+    } else {
+        /* Drop presence immediately, but keep compatible GPU allocations.
+         * The next active tick reads a fresh provider snapshot. */
+        s->sight_point_count=0;
+        s->sight_sequence=0;
+        s->sight_matte_present=s->sight_motion_present=s->sight_depth_present=false;
+        s->sight_flow_present=s->sight_surface_present=false;
+        s->sight_text_present=s->sight_semantic_present=false;
+        if (s->sight_touch.sequence) hs_touch_reset(&s->sight_touch);
+        if (s->sight_surface_uploaded) {
+            hs_surface_reset(&s->sight_surface);
+            s->sight_surface_uploaded=0;
+        }
+    }
     /* A scene with an active entityTexture shader has actual evolving physics.
      * Do not spend cycles updating unused demo scenes in every filter. */
-    if (seconds > 0.0f && pthread_mutex_trylock(&s->mutex) == 0) {
+    if (active && seconds > 0.0f && pthread_mutex_trylock(&s->mutex) == 0) {
         if (s->scene && (s->ep_entityTexture || s->ep_entities))
             scene_update(s->scene, s->mp_runner, seconds * 1000.0f);
         pthread_mutex_unlock(&s->mutex);
@@ -4351,6 +4423,7 @@ static void update_sprite_atlases(struct hypershader_data *s)
 /* Helper: Update all standard uniforms and parameters shared by Filter and Source */
 static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, uint32_t height)
 {
+    if (s->effect && width && height) workload_touch_draw(s);
 	capture_live_channels(s);
 	float dt = s->last_tick_delta;
 	if (dt < 0.0f)
@@ -6121,6 +6194,20 @@ static void filter_mouse_click(void *data, const struct obs_mouse_event *event, 
 	}
 }
 
+static void workload_filter_added(void *data, obs_source_t *parent)
+{
+    struct hypershader_data *s=data;
+    atomic_store_explicit(&s->workload_showing,obs_source_showing(parent),memory_order_release);
+}
+
+static void workload_filter_removed(void *data, obs_source_t *parent)
+{
+    UNUSED_PARAMETER(parent);
+    struct hypershader_data *s=data;
+    workload_hide(s);
+    atomic_store_explicit(&s->workload_last_draw_ns,0,memory_order_release);
+}
+
 struct obs_source_info hypershader_filter_info = {
 	.id = "hypershader_filter",
 	.type = OBS_SOURCE_TYPE_FILTER,
@@ -6130,6 +6217,10 @@ struct obs_source_info hypershader_filter_info = {
 	.destroy = filter_destroy,
 	.update = filter_update,
 	.video_tick = filter_tick,
+    .show = workload_show,
+    .hide = workload_hide,
+    .filter_add = workload_filter_added,
+    .filter_remove = workload_filter_removed,
 	.video_render = filter_video_render,
 	.get_properties = hyper_ui_get_properties,
 	.get_defaults = hyper_ui_get_defaults,

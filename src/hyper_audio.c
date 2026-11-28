@@ -168,6 +168,22 @@ void hyper_audio_snapshot(struct hypershader_data *s, float *out_level, float *o
 	if (!s)
 		return;
 
+    if (!atomic_load_explicit(&s->workload_active,memory_order_acquire) ||
+        !atomic_load_explicit(&s->audio_capture_admitted,memory_order_acquire) ||
+        atomic_load_explicit(&s->audio_capture_epoch,memory_order_acquire)!=
+        atomic_load_explicit(&s->workload_epoch,memory_order_seq_cst)) {
+        if(out_level)*out_level=0;
+        if(out_peak)*out_peak=0;
+        if(out_bands)memset(out_bands,0,8*sizeof(float));
+        if(out_beat)*out_beat=0;
+        if(out_envelope)*out_envelope=0;
+        if(out_music)memset(out_music,0,HS_MUSIC_FIELDS*sizeof(float));
+        if(out_texture){
+            memset(out_texture,0,AUDIO_TEX_WIDTH);
+            memset(out_texture+AUDIO_TEX_WIDTH,128,AUDIO_TEX_WIDTH);
+        }
+        return;
+    }
 	pthread_mutex_lock(&s->audio_results_lock);
 
 	if (out_level)
