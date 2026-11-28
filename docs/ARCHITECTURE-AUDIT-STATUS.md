@@ -20,7 +20,7 @@ or partial below remain open for inspection and implementation.
 ## Performance and concurrency
 - [x] 11. Update-time typed parameter snapshots — 46ba064 + bd524b1: cache numeric/color controls, modulation, reaction and animation/atlas config at update or compiled-effect swap; live signals evaluated once per render. Native interposition probe: 60/60 correct draws, settings retrieval 120 -> 0, value API calls 780 -> 0. This establishes the settings hot-path contract, not a whole-render zero-allocation or frame-time claim.
 - [x] 12. Cache listed per-frame effect handles — 46ba064, graph and compositor tests.
-- [ ] 13. Double-buffered MediaPipe readback; establish actual GPU readiness.
+- [ ] 13. Backend-safe MediaPipe readback — partial: c29f99e bounds capture/inference/upload to one outstanding slot and deduplicates video timestamps. 4f0242e uses a real Linux OpenGL fence, zero-timeout polling, map only after signal and 250 ms expiry; no double-buffering claim. Actual ONNX + llvmpipe native regular/composited filter probes passed, including forced readiness delays and held upload results. Other backends retain bounded synchronous staging, not qualified as nonblocking.
 - [x] 14. SPSC audio race — af2940a, producer/consumer queue and worker-owned history, concurrent and real PCM probes.
 - [x] 15. Audio source lifetime and teardown — 86fb457: worker detaches removed sources; strong ref retained only while callback registered for safe libobs teardown. Native deletion/replacement regression passes; intentionally not an unsynchronized weak-reference conversion.
 - [x] 16. Lazy EnTT allocation — 2d91f24: allocate on compatible effect load, release on switch/teardown, GPU texture creation outside render. Native entity animation and allocation lifecycle regression passed; full catalog 39/39.
@@ -131,10 +131,10 @@ Evidence: /tmp/hs-audit-shipped-full.log, /tmp/hs-audit-cache-graph.log,
 /tmp/hs-audit-compositor.log, /tmp/hs-audit-panel-final.log,
 /tmp/hs-audit-meta-green.log, /tmp/hs-audit-final-*.log.
 
-Next: backend-safe GPU staging and worker backpressure. The installed libobs OpenGL
-implementation maps the PBO synchronously; public gs_sync_wait is a GPU-side wait,
-not a portable CPU readiness poll. Do not equate double buffering with nonblocking
-readback. Native model-enabled verification requires an appropriate ONNX build and fixture.
+Next: qualify additional graphics backends for actual GPU readiness; Linux OpenGL
+fence and bounded worker admission now verified with actual ONNX. D3D11/Metal
+readiness and production hardware frame-time measurements remain open. Native
+model initialization/mode changes still need separate lifecycle and thread review.
 Graph lifetime/transient admission before expanding render scale and
 transition scheduler. Universal spatial mask should reuse the existing
 Sight path and preserve temporal history. No duplicate inference engine.
@@ -145,3 +145,5 @@ inference, Windows/macOS validation, merge or push in this pass.
 2026-11-28 second batch: 86fb457 and 2d91f24; evidence /tmp/hs-lifetime-red.log, /tmp/hs-lifetime-green.log, /tmp/hs-entity-red.log, /tmp/hs-entity-green.log, /tmp/hs-entity-catalog-full.log. Isolated Qt build, no install/push. Weak-only audio ownership intentionally not implemented; removed-source detach depends on running audio worker.
 
 2026-11-28 third batch: bd524b1 update-time settings cache. Native Qt build; 39/39 catalog, 14/14 graph, 7/7 compositor, performance Qt/PCM/LFO/live edits, URL Source integration, entity lifecycle, audio oscilloscope/lifetime passed. All 21 reactive-sprite behavior assertions passed; script exit 1 from temporary-directory cleanup race after final PASS (not a render failure). New native call-count probe red 120 settings/780 value calls, green zero/zero, identical expected pixels 60/60 each. Evidence /tmp/hs-settings-{red,build,panel-green,data,two-buffer-graph,reactive-sprite,catalog,global-compositor,entity-lifecycle,audio-oscilloscope,call-count}.log. No production GPU benchmark, model-enabled inference, install, push or cross-platform qualification. Settings changes publish at libobs video update callback, not immediate synchronous obs_source_update.
+
+2026-11-28 fourth batch: c29f99e and 4f0242e. Native ONNX 1.17.1 with existing local paired face models (staged only) + existing local face fixture. Baseline same timestamp six stages; new one or zero if busy. Deliberate upload hold: 15 results and 16 extra stages before, one and zero after. Linux OpenGL forced 16 not-ready polls, zero early maps/positive-timeout waits, two expired fences, recovered normalized face x=.4980 then blank=0. Regular and composited input pass, optional no-fence ONNX build passes, final Qt no-model build 39/39 catalog. Mesa llvmpipe rather than hardware GPU; no frame-time or Windows/macOS qualification. Optional GLVND link when OpenGL::OpenGL available; unsupported builds keep logged bounded synchronous path. Evidence /tmp/hs-readback-{red,green,pressure-red,pressure-green}.log, /tmp/hs-fence-{red,green,expiry,composite,fallback,catalog-full}.log. No install/push or model asset publication.
