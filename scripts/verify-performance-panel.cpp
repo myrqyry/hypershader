@@ -69,6 +69,28 @@ int main(int argc,char**argv){
  if(!buttons||!controls){std::cerr<<"PANEL controls="<<controls<<" buttons="<<buttons<<" status="<<(status?status->text().toStdString():"missing")<<std::endl;return 7;}
  auto*spin=gain->findChild<QDoubleSpinBox*>();auto*lock=gain->findChild<QCheckBox*>();
  bool lockExists=spin&&lock;if(!lockExists)return 8;
+ // External settings edits and explicit refresh must retain the actual editor
+ // widgets when the compiled property schema is unchanged.
+ QPointer<QWidget> originalRow=gain;
+ QPointer<QDoubleSpinBox> originalSpin=spin;
+ const double external=std::min(spin->maximum(),before+.25);
+ auto*externalSettings=obs_source_get_settings(a);
+ obs_data_set_double(externalSettings,"param_gain",external);
+ obs_source_update(a,externalSettings);obs_data_release(externalSettings);
+ if(auto*focus=QApplication::focusWidget())focus->clearFocus();
+ panel.refresh(false);drain();
+ auto*currentRow=panel.findChild<QWidget*>("hsLive_param_gain");
+ auto*currentSpin=currentRow?currentRow->findChild<QDoubleSpinBox*>():nullptr;
+ bool inPlace=originalRow&&originalSpin&&currentRow==originalRow&&currentSpin==originalSpin&&
+   std::abs(currentSpin->value()-external)<.001;
+ externalSettings=obs_source_get_settings(a);
+ obs_data_set_double(externalSettings,"param_gain",before);
+ obs_source_update(a,externalSettings);obs_data_release(externalSettings);
+ panel.refresh(true);drain();
+ gain=panel.findChild<QWidget*>("hsLive_param_gain");
+ spin=gain->findChild<QDoubleSpinBox*>();lock=gain->findChild<QCheckBox*>();
+ inPlace &= originalRow&&originalSpin&&gain==originalRow&&spin==originalSpin&&std::abs(spin->value()-before)<.001;
+ std::cout<<"PERFORMANCE_IN_PLACE same_widgets="<<inPlace<<std::endl;
  setA->click();lock->setChecked(true);
  random->click();drain();bool locked=get(a,"param_gain")==before;
  gain=panel.findChild<QWidget*>("hsLive_param_gain");spin=gain->findChild<QDoubleSpinBox*>();lock=gain->findChild<QCheckBox*>();lock->setChecked(false);
@@ -129,7 +151,7 @@ int main(int argc,char**argv){
  bool modulated=pcmWorks&&baseline>55&&baseline<75&&lfo>baseline+80&&std::abs(absentAudio-baseline)<3&&std::abs(wrong-baseline)<3&&get(c,"param_amount")==.25&&modPicker;
  std::cout<<"PERFORMANCE_MODULATION base="<<baseline<<" lfo="<<lfo<<" missing_audio="<<absentAudio<<" wrong_shader="<<wrong<<" audio_picker="<<modPicker<<" PASS="<<modulated<<std::endl;
  obs_source_dec_showing(c);obs_source_remove(c);obs_source_release(c);
- ok=modulated&&modUi&&controls&&buttons&&locked&&edit&&middle&&undoWorks&&paused&&resumed&&disabled&&enabled&&telemetry&&switchWorks;
+ ok=inPlace&&modulated&&modUi&&controls&&buttons&&locked&&edit&&middle&&undoWorks&&paused&&resumed&&disabled&&enabled&&telemetry&&switchWorks;
  std::cout<<"PERFORMANCE_PANEL controls="<<controls<<" locked="<<locked<<" edit="<<edit<<" morph="<<middle<<" undo="<<undoWorks<<" pause="<<paused<<" resume="<<resumed<<" bypass="<<(disabled&&enabled)<<" telemetry="<<telemetry<<" mod_ui="<<modUi<<" target_switch="<<switchWorks<<" PASS="<<ok<<std::endl;
  }
  obs_source_dec_showing(a);obs_source_dec_showing(b);obs_source_remove(a);obs_source_remove(b);obs_source_release(a);obs_source_release(b);drain();obs_wait_for_destroy_queue();drain();obs_shutdown();return ok?0:1;

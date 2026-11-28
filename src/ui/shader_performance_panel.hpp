@@ -25,6 +25,9 @@
 #include <QStandardItemModel>
 #include <QApplication>
 #include <QPointer>
+#include <QDataStream>
+#include <QIODevice>
+#include <vector>
 #include <QProgressBar>
 #include <callback/calldata.h>
 #include <callback/proc.h>
@@ -98,22 +101,27 @@ public:
    meter->setVisible(audio);meter->setValue(int(calldata_int(&cd,"level")));
   }else{signalLabel->clear();meter->hide();}
   calldata_free(&cd);
-  if(next!=identity){identity=next;clearLooks();signature.clear();force=true;}
+  if(next!=identity){identity=next;clearLooks();signature.clear();formShape.clear();force=true;}
   if(!ready){if(formReady){replaceForm(nullptr,nullptr);formReady=false;}setReady(false);return;}
   if(!force&&formReady&&sig==signature)return;
   // Do not replace a control while its editor has focus or a drag is active.
   auto*focus=QApplication::focusWidget();
   if(!force&&focus&&scroll->isAncestorOf(focus)&&(qobject_cast<QAbstractSpinBox*>(focus)||qobject_cast<QLineEdit*>(focus)))return;
+  if(!force)for(auto*slider:scroll->findChildren<QSlider*>())if(slider->isSliderDown())return;
   std::unique_ptr<obs_properties_t,decltype(&obs_properties_destroy)> props(obs_source_properties(src.get()),obs_properties_destroy);
   if(!props){setReady(false);return;}
   fields=hsPerformanceFields(props.get());
-  replaceForm(props.get(),s.get());signature=sig;formReady=true;setReady(true);
+  auto shape=shapeOf(props.get(),s.get());
+  if(formReady&&shape==formShape){for(const auto&sync:fieldSync)sync(s.get());}
+  else {replaceForm(props.get(),s.get());formShape=shape;}
+  signature=sig;formReady=true;setReady(true);
  }
 private:
  using Source=std::unique_ptr<obs_source_t,decltype(&obs_source_release)>;
  using Data=std::unique_ptr<obs_data_t,decltype(&obs_data_release)>;
  Target targetUuid;
- QString identity,signature;bool formReady=false;double resumeSpeed=1;
+ QString identity,signature;QByteArray formShape;bool formReady=false;double resumeSpeed=1;
+ std::vector<std::function<void(obs_data_t*)>> fieldSync;
  QVector<HSPerformanceField> fields;QSet<QString> locks;HSLook lookA,lookB,undo;
  QLabel*status,*lookStatus,*signalLabel;QProgressBar*meter;QPushButton*enabled,*freeze,*refreshButton,*undoButton;QGroupBox*looks;
  QSlider*strength,*morph;QScrollArea*scroll;QTimer*timer;
@@ -159,7 +167,55 @@ private:
   });
   if(changed)QTimer::singleShot(0,this,[this]{refresh(true);});
  }
+ // Compare the live native property schema, not widget identity or values.
+ // Rebuild only for a different target/revision, a changed conditional schema,
+ // or a changed modulation binding. Regular values are synchronized in place.
+ static void appendShape(QDataStream&out,obs_properties_t*p){
+  for(auto*v=obs_properties_first(p);v;obs_property_next(&v)){
+   if(!obs_property_visible(v))continue;
+   auto type=obs_property_get_type(v);
+   out<<QString::fromUtf8(obs_property_name(v))<<QString::fromUtf8(obs_property_description(v))
+      <<qint32(type)<<obs_property_enabled(v);
+   switch(type){
+   case OBS_PROPERTY_GROUP:appendShape(out,obs_property_group_content(v));break;
+   case OBS_PROPERTY_FLOAT:out<<obs_property_float_min(v)<<obs_property_float_max(v)<<obs_property_float_step(v)<<qint32(obs_property_float_type(v));break;
+   case OBS_PROPERTY_INT:out<<obs_property_int_min(v)<<obs_property_int_max(v)<<obs_property_int_step(v)<<qint32(obs_property_int_type(v));break;
+   case OBS_PROPERTY_TEXT:out<<qint32(obs_property_text_type(v));break;
+   case OBS_PROPERTY_PATH:out<<QString::fromUtf8(obs_property_path_filter(v));break;
+   case OBS_PROPERTY_LIST:{
+    auto fmt=obs_property_list_format(v);out<<qint32(fmt)<<quint64(obs_property_list_item_count(v));
+    for(size_t i=0;i<obs_property_list_item_count(v);++i){
+     out<<QString::fromUtf8(obs_property_list_item_name(v,i))<<obs_property_list_item_disabled(v,i);
+     if(fmt==OBS_COMBO_FORMAT_INT)out<<qint64(obs_property_list_item_int(v,i));
+     else if(fmt==OBS_COMBO_FORMAT_STRING)out<<QString::fromUtf8(obs_property_list_item_string(v,i));
+    }break;
+   }
+   default:break;
+   }
+  }
+  out<<QString(); // end of this property group
+ }
+ static QByteArray shapeOf(obs_properties_t*p,obs_data_t*s){
+  QByteArray shape;QDataStream out(&shape,QIODevice::WriteOnly);appendShape(out,p);
+  out<<string(s,"perf_mod_shader")<<string(s,"perf_mod_param")<<string(s,"perf_mod_data_uuid")
+     <<qint64(obs_data_get_int(s,"perf_mod_source"))<<qint64(obs_data_get_int(s,"perf_mod_data_age_ms"))
+     <<obs_data_get_double(s,"perf_mod_depth")<<obs_data_get_double(s,"perf_mod_hz");
+  QStringList providers;
+  obs_enum_sources([](void*data,obs_source_t*source){
+   if(!obs_source_removed(source)&&!strcmp(obs_source_get_id(source),"url_source")){
+    auto*list=static_cast<QStringList*>(data);
+    *list<<QString::fromUtf8(obs_source_get_uuid(source))+"\n"+QString::fromUtf8(obs_source_get_name(source));
+   }return true;
+  },&providers);
+  providers.sort();out<<providers;return shape;
+ }
+ static QColor currentColor(obs_data_t*s,const QByteArray&k,bool&has){
+  has=obs_data_has_user_value(s,k.constData())||obs_data_has_default_value(s,k.constData());
+  auto val=uint32_t(obs_data_get_int(s,k.constData()));
+  return QColor(val&255,(val>>8)&255,(val>>16)&255,(val>>24)&255);
+ }
  void replaceForm(obs_properties_t*p,obs_data_t*s){
+  fieldSync.clear();
   int y=scroll->verticalScrollBar()->value();
   auto*body=new QWidget;auto*l=new QVBoxLayout(body);l->setContentsMargins(0,0,0,0);l->setSpacing(5);
   if(p&&s){
@@ -268,7 +324,7 @@ private:
  void addField(QFormLayout*l,obs_property_t*p,obs_data_t*s){
   const QString key=QString::fromUtf8(obs_property_name(p)),label=QString::fromUtf8(obs_property_description(p)),token=identity;
   const QByteArray k=key.toUtf8();auto type=obs_property_get_type(p);QWidget*w=nullptr;
-  if(type==OBS_PROPERTY_BOOL){auto*c=new QCheckBox;c->setChecked(obs_data_get_bool(s,k.constData()));connect(c,&QCheckBox::toggled,this,[=](bool v){write(key,v,token);});w=c;}
+  if(type==OBS_PROPERTY_BOOL){auto*c=new QCheckBox;c->setChecked(obs_data_get_bool(s,k.constData()));connect(c,&QCheckBox::toggled,this,[=](bool v){write(key,v,token);});fieldSync.push_back([=](obs_data_t*d){QSignalBlocker b(c);c->setChecked(obs_data_get_bool(d,k.constData()));});w=c;}
   else if(type==OBS_PROPERTY_FLOAT||type==OBS_PROPERTY_INT){
    auto*row=new QWidget;auto*r=new QHBoxLayout(row);r->setContentsMargins(0,0,0,0);r->setSpacing(3);
    auto*spin=new QDoubleSpinBox;bool integer=type==OBS_PROPERTY_INT;
@@ -277,11 +333,13 @@ private:
    spin->setDecimals(integer?0:4);spin->setRange(lo,hi);spin->setSingleStep(step>0?step:1);spin->setKeyboardTracking(false);
    spin->setValue(integer?obs_data_get_int(s,k.constData()):obs_data_get_double(s,k.constData()));
    connect(spin,&QDoubleSpinBox::editingFinished,this,[=]{write(key,integer?QVariant::fromValue((qlonglong)spin->value()):QVariant(spin->value()),token);});
+   fieldSync.push_back([=](obs_data_t*d){QSignalBlocker b(spin);spin->setValue(integer?obs_data_get_int(d,k.constData()):obs_data_get_double(d,k.constData()));});
    auto it=std::find_if(fields.begin(),fields.end(),[&](const auto&f){return f.key==key;});
    if(it!=fields.end()){
     auto*slider=new QSlider(Qt::Horizontal);slider->setRange(0,1000);slider->setValue(qRound((spin->value()-lo)/(hi-lo)*1000));r->addWidget(slider,1);
     connect(slider,&QSlider::valueChanged,spin,[=](int v){QSignalBlocker b(spin);spin->setValue(lo+(hi-lo)*v/1000.);});
     connect(slider,&QSlider::sliderReleased,this,[=]{write(key,spin->value(),token);});
+    fieldSync.push_back([=](obs_data_t*){QSignalBlocker b(slider);slider->setValue(qRound((spin->value()-lo)/(hi-lo)*1000));});
     auto*lock=new QCheckBox;lock->setToolTip("Protect from random variations");lock->setChecked(locks.contains(key));
     connect(lock,&QCheckBox::toggled,this,[=](bool checked){if(token!=identity)return;if(checked)locks.insert(key);else locks.remove(key);syncLooks();});
     r->addWidget(lock);
@@ -298,19 +356,20 @@ private:
     c->addItem(QString::fromUtf8(obs_property_list_item_name(p,i)),val);
     if(obs_property_list_item_disabled(p,i))if(auto*m=qobject_cast<QStandardItemModel*>(c->model()))m->item(int(i))->setEnabled(false);
    }
-   c->setCurrentIndex(c->findData(current));connect(c,qOverload<int>(&QComboBox::activated),this,[=](int i){if(i>=0)write(key,c->itemData(i),token);});w=c;
+   c->setCurrentIndex(c->findData(current));connect(c,qOverload<int>(&QComboBox::activated),this,[=](int i){if(i>=0)write(key,c->itemData(i),token);});
+   fieldSync.push_back([=](obs_data_t*d){QSignalBlocker b(c);QVariant value=fmt==OBS_COMBO_FORMAT_INT?QVariant::fromValue((qlonglong)obs_data_get_int(d,k.constData())):QVariant(string(d,k.constData()));c->setCurrentIndex(c->findData(value));});w=c;
   }else if(type==OBS_PROPERTY_TEXT&&obs_property_text_type(p)!=OBS_TEXT_INFO){
-   auto*e=new QLineEdit(string(s,k.constData()));connect(e,&QLineEdit::editingFinished,this,[=]{write(key,e->text(),token);});w=e;
+   auto*e=new QLineEdit(string(s,k.constData()));connect(e,&QLineEdit::editingFinished,this,[=]{write(key,e->text(),token);});fieldSync.push_back([=](obs_data_t*d){QSignalBlocker b(e);e->setText(string(d,k.constData()));});w=e;
   }else if(type==OBS_PROPERTY_PATH){
    auto*b=new QPushButton(QFileInfo(string(s,k.constData())).fileName());if(b->text().isEmpty())b->setText("Choose file");
-   auto filter=QString::fromUtf8(obs_property_path_filter(p));connect(b,&QPushButton::clicked,this,[=]{auto path=QFileDialog::getOpenFileName(this,label,QString(),filter);if(!path.isEmpty())write(key,path,token);});w=b;
+   auto filter=QString::fromUtf8(obs_property_path_filter(p));connect(b,&QPushButton::clicked,this,[=]{auto path=QFileDialog::getOpenFileName(this,label,QString(),filter);if(!path.isEmpty())write(key,path,token);});fieldSync.push_back([=](obs_data_t*d){auto name=QFileInfo(string(d,k.constData())).fileName();b->setText(name.isEmpty()?QString("Choose file"):name);});w=b;
   }else if(type==OBS_PROPERTY_COLOR||type==OBS_PROPERTY_COLOR_ALPHA){
    auto*b=new QPushButton("Choose color");
-   bool has=obs_data_has_user_value(s,k.constData())||obs_data_has_default_value(s,k.constData());
-   auto val=uint32_t(obs_data_get_int(s,k.constData()));
-   QColor color(val&255,(val>>8)&255,(val>>16)&255,(val>>24)&255);
-   if(has)b->setText(color.name());else b->setText("Shader default");
-   connect(b,&QPushButton::clicked,this,[=]{auto selected=QColorDialog::getColor(has?color:QColor(Qt::white),this,label,QColorDialog::ShowAlphaChannel);if(selected.isValid()){
+   auto syncColor=[=](obs_data_t*d){bool has=false;auto color=currentColor(d,k,has);b->setText(has?color.name():QString("Shader default"));};
+   syncColor(s);fieldSync.push_back(syncColor);
+   connect(b,&QPushButton::clicked,this,[=]{
+    QColor initial(Qt::white);withTarget([&](obs_source_t*,obs_data_t*d){bool has=false;auto color=currentColor(d,k,has);if(has)initial=color;});
+    auto selected=QColorDialog::getColor(initial,this,label,QColorDialog::ShowAlphaChannel);if(selected.isValid()){
     quint32 rgba=quint32(selected.red())|(quint32(selected.green())<<8)|(quint32(selected.blue())<<16)|(quint32(selected.alpha())<<24);
     write(key,QVariant::fromValue((qlonglong)rgba),token);}});w=b;
   }
