@@ -510,12 +510,12 @@ struct hypershader_data {
 	mp_runner_t *mp_runner;
 	bool mp_init_attempted;           /* Attempt a native runner only when requested */
 	bool mp_sync_ready;               /* mutex/cond initialized, even without worker */
-	bool mp_enabled;                    /* Toggle in UI */
+	atomic_bool mp_enabled;                    /* Toggle in UI */
 	gs_texture_t *mp_mask_tex;          /* Segmentation mask texture */
 	gs_texture_t *mp_landmarks_tex;     /* Landmark data texture (if used) */
 	gs_texture_t *mp_ref_landmarks_tex; /* Static Reference Landmarks (for puppeteering) */
 	hs_face_surface *mp_face_surface;       /* Per-instance GPU face-surface raster */
-	bool mp_analyze_trigger;            /* Trigger to analyze current frame for reference */
+	atomic_bool mp_analyze_trigger;            /* Trigger to analyze current frame for reference */
 
 	gs_eparam_t *ep_sight_flow, *ep_sight_flow_present, *ep_sight_flow_interval, *ep_sight_flow_coverage, *ep_sight_flow_step;
 	gs_texture_t *sight_flow_texture;
@@ -601,13 +601,14 @@ struct hypershader_data {
 
 	/* Staging buffer for GPU->CPU readback */
 	gs_stagesurf_t *mp_staging_tex;
-	uint8_t *mp_cpu_buffer;
 	gs_texrender_t *mp_scaler; /* Resize to 192x192 on GPU before download */
 
 	/* Pre-allocated MediaPipe task (avoids allocation in render callback) */
 #define MP_FRAME_SIZE (192 * 192 * 4)       /* Fixed 192x192 RGBA buffer */
 	uint8_t *mp_preallocated_frame; /* Pre-allocated frame buffer for worker */
-	bool mp_frame_buffer_in_use;    /* Flag: true when worker is processing */
+	atomic_bool mp_frame_buffer_in_use; /* Reserved through capture, inference and result upload */
+    uint64_t mp_last_capture_frame; /* Graphics-context-only deduplication */
+    bool mp_capture_frame_valid;
 
 	/* Embedded MediaPipe task storage (avoids bzalloc in video_render) */
 	struct mp_process_task_data {
@@ -622,7 +623,7 @@ struct hypershader_data {
 	pthread_t mp_thread;
 	pthread_mutex_t mp_mutex;
 	pthread_cond_t mp_cond;
-	bool mp_thread_run;
+	atomic_bool mp_thread_run;
 
 	/* Pre-allocated buffer for audio worker (avoids bzalloc per iteration) */
 	float *audio_localbuf;

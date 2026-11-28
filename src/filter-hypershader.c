@@ -1668,10 +1668,6 @@ static void filter_destroy(void *data)
 		gs_stagesurface_destroy(s->mp_staging_tex);
 		s->mp_staging_tex = NULL;
 	}
-	if (s->mp_cpu_buffer) {
-		bfree(s->mp_cpu_buffer);
-		s->mp_cpu_buffer = NULL;
-	}
 	if (s->mp_scaler) {
 		gs_texrender_destroy(s->mp_scaler);
 		s->mp_scaler = NULL;
@@ -2318,11 +2314,20 @@ static bool hs_ensure_native_mediapipe(struct hypershader_data *s)
 		blog(LOG_WARNING, "[hypershader] Native MediaPipe unavailable; Sight mode can still work");
 		return false;
 	}
+    /* A Sight-only or unavailable-native instance owns no inference pixel buffer. */
+    s->mp_preallocated_frame = bzalloc(MP_FRAME_SIZE);
+    if (!s->mp_preallocated_frame) {
+        mp_destroy(s->mp_runner);
+        s->mp_runner = NULL;
+        return false;
+    }
 	s->mp_thread_run = true; /* Worker checks this immediately after pthread_create. */
 	if (pthread_create(&s->mp_thread, NULL, mp_worker_thread, s) != 0) {
 		s->mp_thread_run = false;
 		mp_destroy(s->mp_runner);
 		s->mp_runner = NULL;
+        bfree(s->mp_preallocated_frame);
+        s->mp_preallocated_frame = NULL;
 		blog(LOG_WARNING, "[hypershader] Failed to create native MediaPipe worker thread");
 		return false;
 	}
@@ -2815,6 +2820,10 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	}
 	atomic_init(&s->last_audio_capture_ns, 0);
 	atomic_init(&s->mod_motion_requested, false);
+    atomic_init(&s->mp_frame_buffer_in_use, false);
+    atomic_init(&s->mp_thread_run, false);
+    atomic_init(&s->mp_enabled, false);
+    atomic_init(&s->mp_analyze_trigger, false);
 	atomic_init(&s->live_render_ns, 0);
 	atomic_init(&s->live_signal_flags, 0);
 	atomic_init(&s->live_audio_permille, 0);
@@ -2913,13 +2922,6 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->mp_enabled = false;
 	s->mp_analyze_trigger = false;
 	s->mp_landmarks_tex = NULL;
-
-	/* Pre-allocate MediaPipe frame buffer (libobs: avoid allocations in render callback) */
-	s->mp_preallocated_frame = bzalloc(MP_FRAME_SIZE);
-	s->mp_frame_buffer_in_use = false;
-	if (!s->mp_preallocated_frame) {
-		blog(LOG_WARNING, "[hypershader] Failed to pre-allocate MediaPipe frame buffer");
-	}
 
 	/* Native models load below only when the instance requests them. */
 
@@ -3417,6 +3419,7 @@ static void mp_update_textures_task(void *param)
 			bfree(task->landmark_data);
 		if (task->ref_landmark_data)
 			bfree(task->ref_landmark_data);
+        atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
 		obs_source_release(s->context);
 		bfree(task);
 		return;
@@ -3498,6 +3501,7 @@ static void mp_update_textures_task(void *param)
 		bfree(task->landmark_data);
 	if (task->ref_landmark_data)
 		bfree(task->ref_landmark_data);
+    atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
 	obs_source_release(s->context);
 	bfree(task);
 }
@@ -3979,8 +3983,7 @@ void *mp_worker_thread(void *data)
 
 		/* Copy task data locally so render thread can reuse storage immediately */
 		struct mp_process_task_data task = s->mp_pending_task_storage;
-		bool analyze_reference = s->mp_analyze_trigger;
-		s->mp_analyze_trigger = false;
+		bool analyze_reference = atomic_exchange_explicit(&s->mp_analyze_trigger,false,memory_order_relaxed);
 		s->mp_pending_task_active = false;
 		pthread_mutex_unlock(&s->mp_mutex);
 
@@ -4025,14 +4028,19 @@ void *mp_worker_thread(void *data)
 				}
 			}
 
-			obs_source_get_ref(s->context);
-			obs_queue_task(OBS_TASK_GRAPHICS, mp_update_textures_task, update_data, false);
-		}
+            if (obs_source_get_ref(s->context)) {
+                obs_queue_task(OBS_TASK_GRAPHICS, mp_update_textures_task, update_data, false);
+                /* The upload task releases the reservation; never queue a
+                 * second result until the first has been consumed. */
+                continue;
+            }
+            bfree(update_data->mask_buffer);
+            bfree(update_data->landmark_data);
+            bfree(update_data->ref_landmark_data);
+            bfree(update_data);
+        }
 
-		/* Mark pre-allocated buffer as available for next frame (no bfree - it's reused) */
-		pthread_mutex_lock(&s->mp_mutex);
-		s->mp_frame_buffer_in_use = false;
-		pthread_mutex_unlock(&s->mp_mutex);
+        atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
 
 		/* Task struct is embedded - no bfree needed */
 	}
@@ -5194,118 +5202,104 @@ static gs_texture_t *output_capture_filter_base(struct hypershader_data *s,
     return gs_texrender_get_texture(s->output_composite_base);
 }
 
+/* At most one native inference capture/result may be outstanding. Reserve
+ * before any scaling, readback or mutex access. A busy worker or duplicate
+ * video frame is a cheap drop, not a synchronous graphics stall. */
 static void process_mediapipe_frame(struct hypershader_data *s,
                                     gs_texture_t *explicit_source)
 {
+    if (!s->mp_runner || !s->mp_enabled || !s->mp_thread_run ||
+        !s->mp_preallocated_frame)
+        return;
     obs_source_t *target = obs_filter_get_target(s->context);
-	/* When explicit_source is NULL, this helper is called after
-     * process_filter_begin so the filter's implicit sprite is valid. When
-     * compositing, it samples our actual captured input texture explicitly. */
-	if (s->mp_runner && s->mp_enabled) {
-		/* Real backend path: capture source texture to CPU for MediaPipe processing */
-		const char *backend = mp_get_backend_name();
-		bool backend_available = backend && strcmp(backend, "Unavailable") != 0;
+    if (!target)
+        return;
+    const uint32_t sw = obs_source_get_base_width(target);
+    const uint32_t sh = obs_source_get_base_height(target);
+    if (!sw || !sh)
+        return;
 
-		if (backend_available) {
-			/* Capture source texture to CPU for MediaPipe processing */
-			if (target) {
-				uint32_t sw = obs_source_get_base_width(target);
-				uint32_t sh = obs_source_get_base_height(target);
+    const uint64_t frame = obs_get_video_frame_time();
+    if (s->mp_capture_frame_valid && s->mp_last_capture_frame == frame)
+        return;
+    bool expected = false;
+    if (!atomic_compare_exchange_strong_explicit(&s->mp_frame_buffer_in_use,
+            &expected,true,memory_order_acquire,memory_order_relaxed))
+        return;
 
-				if (sw > 0 && sh > 0) {
-					if (!s->mp_scaler)
-						s->mp_scaler = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+    s->mp_last_capture_frame = frame;
+    s->mp_capture_frame_valid = true;
+    const int mp_w=192, mp_h=192;
+    if (!s->mp_scaler)
+        s->mp_scaler=gs_texrender_create(GS_RGBA,GS_ZS_NONE);
+    if (!s->mp_scaler)
+        goto drop;
+    gs_texrender_reset(s->mp_scaler);
+    if (!gs_texrender_begin(s->mp_scaler,mp_w,mp_h))
+        goto drop;
 
-					if (s->mp_scaler) {
-						const int mp_w = 192;
-						const int mp_h = 192;
-						/* A completed texrender cannot begin again until reset.
-						 * Preserve projection and matrix state around nested capture. */
-						gs_texrender_reset(s->mp_scaler);
-						if (gs_texrender_begin(s->mp_scaler, mp_w, mp_h)) {
-							gs_projection_push();
-							gs_matrix_push();
-							gs_matrix_identity();
-							gs_ortho(0.0f, (float)mp_w, 0.0f, (float)mp_h, -100.0f, 100.0f);
-							gs_effect_t *basic = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-							if (explicit_source) {
-								gs_eparam_t *param = gs_effect_get_param_by_name(basic, "image");
-								if (param)
-									gs_effect_set_texture(param, explicit_source);
-								while (gs_effect_loop(basic, "Draw"))
-									gs_draw_sprite(explicit_source, 0, mp_w, mp_h);
-							} else {
-								/* Scale the complete upstream source to the inference
-								 * frame; otherwise a larger camera is cropped. */
-								gs_matrix_scale3f((float)mp_w / (float)sw,
-								                 (float)mp_h / (float)sh, 1.0f);
-								while (gs_effect_loop(basic, "Draw"))
-									obs_source_video_render(target);
-							}
-							gs_matrix_pop();
-							gs_projection_pop();
-							gs_texrender_end(s->mp_scaler);
+    gs_projection_push();
+    gs_matrix_push();
+    gs_matrix_identity();
+    gs_ortho(0.0f,(float)mp_w,0.0f,(float)mp_h,-100.0f,100.0f);
+    gs_effect_t *basic=obs_get_base_effect(OBS_EFFECT_DEFAULT);
+    if (explicit_source) {
+        gs_eparam_t *param=gs_effect_get_param_by_name(basic,"image");
+        if (param)
+            gs_effect_set_texture(param,explicit_source);
+        while (gs_effect_loop(basic,"Draw"))
+            gs_draw_sprite(explicit_source,0,mp_w,mp_h);
+    } else {
+        gs_matrix_scale3f((float)mp_w/(float)sw,(float)mp_h/(float)sh,1.0f);
+        while (gs_effect_loop(basic,"Draw"))
+            obs_source_video_render(target);
+    }
+    gs_matrix_pop();
+    gs_projection_pop();
+    gs_texrender_end(s->mp_scaler);
 
-							gs_texture_t *scaled_tex =
-								gs_texrender_get_texture(s->mp_scaler);
-							if (scaled_tex) {
-								if (!s->mp_staging_tex)
-									s->mp_staging_tex = gs_stagesurface_create(
-										mp_w, mp_h, GS_RGBA);
+    gs_texture_t *scaled=gs_texrender_get_texture(s->mp_scaler);
+    if (!scaled)
+        goto drop;
+    if (!s->mp_staging_tex)
+        s->mp_staging_tex=gs_stagesurface_create(mp_w,mp_h,GS_RGBA);
+    if (!s->mp_staging_tex)
+        goto drop;
 
-								if (s->mp_staging_tex) {
-									gs_stage_texture(s->mp_staging_tex, scaled_tex);
+    /* This portable libobs map can still block on an admitted capture.
+     * The admission gate deliberately does not pretend to be a GPU fence. */
+    gs_stage_texture(s->mp_staging_tex,scaled);
+    uint8_t *pixels=NULL;
+    uint32_t pitch=0;
+    if (!gs_stagesurface_map(s->mp_staging_tex,&pixels,&pitch))
+        goto drop;
+    const bool valid=pixels && pitch >= (uint32_t)mp_w*4;
+    if (valid) {
+        for (int row=0;row<mp_h;row++)
+            memcpy(s->mp_preallocated_frame+(size_t)row*mp_w*4,
+                   pixels+(size_t)row*pitch,mp_w*4);
+    }
+    gs_stagesurface_unmap(s->mp_staging_tex);
+    if (!valid)
+        goto drop;
 
-									uint8_t *data;
-									uint32_t linesize;
-									if (gs_stagesurface_map(s->mp_staging_tex,
-												&data, &linesize)) {
-										/* Check if pre-allocated buffer is available (not in use by worker) */
-										pthread_mutex_lock(&s->mp_mutex);
+    /* Worker owns the reservation once queued. Never wait on its mutex
+     * while holding the graphics context, even for a short submission. */
+    if (pthread_mutex_trylock(&s->mp_mutex)!=0)
+        goto drop;
+    if (!s->mp_thread_run || !s->mp_enabled) {
+        pthread_mutex_unlock(&s->mp_mutex);
+        goto drop;
+    }
+    s->mp_pending_task_storage=(struct mp_process_task_data){
+        .s=s,.frame_data=s->mp_preallocated_frame,.width=mp_w,.height=mp_h};
+    s->mp_pending_task_active=true;
+    pthread_cond_signal(&s->mp_cond);
+    pthread_mutex_unlock(&s->mp_mutex);
+    return;
 
-										if (!s->mp_frame_buffer_in_use &&
-										    s->mp_preallocated_frame) {
-											/* Copy frame data to pre-allocated buffer (no allocation!) */
-											for (int row = 0; row < mp_h;
-											     row++) {
-												memcpy(s->mp_preallocated_frame +
-													       row * mp_w *
-														       4,
-												       data + row * linesize,
-												       mp_w * 4);
-											}
-											s->mp_frame_buffer_in_use =
-												true;
-
-											/* Use embedded task storage (no bzalloc!) */
-											/* Drop previous unprocessed task by just resetting */
-											struct mp_process_task_data *task_data =
-												&s->mp_pending_task_storage;
-											task_data->s = s;
-											task_data->width = mp_w;
-											task_data->height = mp_h;
-											task_data->frame_data =
-												s->mp_preallocated_frame;
-											s->mp_pending_task_active =
-												true;
-											pthread_cond_signal(
-												&s->mp_cond);
-										}
-										/* If buffer is in use, skip this frame (worker is still processing) */
-
-										pthread_mutex_unlock(&s->mp_mutex);
-										gs_stagesurface_unmap(
-											s->mp_staging_tex);
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
+drop:
+    atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
 }
 
 static bool output_render_composited_filter(struct hypershader_data *s,

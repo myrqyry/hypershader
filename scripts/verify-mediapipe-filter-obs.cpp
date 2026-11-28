@@ -1,3 +1,7 @@
+#include <dlfcn.h>
+#include <atomic>
+#include <mutex>
+#include <utility>
 #include <obs.h>
 #include <obs-module.h>
 #include <graphics/graphics.h>
@@ -10,6 +14,42 @@
 #include <cstring>
 using namespace std::chrono_literals;
 constexpr unsigned W=256,H=256;
+// Native Linux test: observe real libobs staging calls, not a fake model.
+static thread_local bool count_capture=false;
+static thread_local unsigned captures=0;
+static std::atomic<unsigned> allCaptures{0};
+static std::mutex heldMutex;
+static bool holdResults=false;
+static std::vector<std::pair<obs_task_t,void*>> heldResults;
+static std::atomic<unsigned> heldCount{0};
+using QueueFn=void(*)(enum obs_task_type,obs_task_t,void*,bool);
+static QueueFn realQueue(){
+ static auto real=reinterpret_cast<QueueFn>(dlsym(RTLD_NEXT,"obs_queue_task"));
+ return real;
+}
+extern "C" void obs_queue_task(enum obs_task_type type,obs_task_t task,void*param,bool wait){
+ if(type==OBS_TASK_GRAPHICS&&!wait){
+  std::lock_guard<std::mutex> lock(heldMutex);
+  Dl_info info{};
+  if(holdResults&&dladdr(reinterpret_cast<void*>(task),&info)&&info.dli_fname&&
+      std::strstr(info.dli_fname,"hypershader.so")){
+   heldResults.emplace_back(task,param);
+   heldCount.fetch_add(1);
+   return;
+  }
+ }
+ realQueue()(type,task,param,wait);
+}
+extern "C" void gs_stage_texture(gs_stagesurf_t* dst,gs_texture_t* src){
+ using Fn=void(*)(gs_stagesurf_t*,gs_texture_t*);
+ static auto real=reinterpret_cast<Fn>(dlsym(RTLD_NEXT,"gs_stage_texture"));
+ if(gs_stagesurface_get_width(dst)==192&&gs_stagesurface_get_height(dst)==192){
+    allCaptures.fetch_add(1);
+    if(count_capture) ++captures;
+ }
+ real(dst,src);
+}
+
 struct Fixture {gs_texture_t *texture=nullptr;};
 Fixture *active=nullptr;
 const char* fixture_name(void*){return "MediaPipe face fixture";}
@@ -94,6 +134,38 @@ int main(int argc,char**argv){
  bool modeUi=false;
  for(int i=0;i<90;i++){float x=render(videoSource);if(i==20)initial=x;if(i>70)faceLast=x;std::this_thread::sleep_for(35ms);}
  obs_enter_graphics();gs_texture_set_image(active->texture,blank.data(),W*4,false);obs_leave_graphics();
+ // Hold actual model result uploads while OBS keeps rendering. This
+ // deliberately creates downstream backpressure, not simulated inference.
+ {std::lock_guard<std::mutex> lock(heldMutex);holdResults=true;}
+ for(int i=0;i<50&&heldCount.load()==0;i++){
+    render(videoSource);
+    std::this_thread::sleep_for(35ms);
+ }
+ const unsigned stagedBefore=allCaptures.load();
+ for(int i=0;i<8;i++){
+    render(videoSource);
+    std::this_thread::sleep_for(35ms);
+ }
+ const unsigned extraStages=allCaptures.load()-stagedBefore;
+ unsigned results=0;
+ std::vector<std::pair<obs_task_t,void*>> release;
+ {std::lock_guard<std::mutex> lock(heldMutex);
+    holdResults=false;results=heldCount.load();release.swap(heldResults);}
+ for(auto&entry:release) realQueue()(OBS_TASK_GRAPHICS,entry.first,entry.second,false);
+ const bool backpressure=results==1&&extraStages==0;
+ printf("MP_CAPTURE_BACKPRESSURE held_results=%u extra_stages=%u PASS=%d\n",results,extraStages,backpressure);
+ // Six draws at one video timestamp must not queue six identical
+ // inference captures. The graphics lock prevents an OBS video tick
+ // from interleaving; explicitly verify the timestamp remained stable.
+ obs_enter_graphics();
+ const uint64_t frame=obs_get_video_frame_time();
+ count_capture=true;
+ for(int i=0;i<6;i++) render(videoSource);
+ count_capture=false;
+ const bool sameFrame=frame==obs_get_video_frame_time();
+ obs_leave_graphics();
+ const bool admitted=sameFrame&&captures<=1;
+ printf("MP_CAPTURE_ADMISSION draws=6 same_frame=%d stages=%u PASS=%d\n",sameFrame,captures,admitted);
  float blankLast=0;
  unsigned blankBright=0;
  for(int i=0;i<90;i++){
@@ -113,7 +185,7 @@ int main(int argc,char**argv){
  if(properties)obs_properties_destroy(properties);
  // The face fixture is centered in its native 256x256 frame. Capturing
  // only its upper-left 192x192 corner shifts the detected nose far right.
- bool pass=faceLast>0.25f&&faceLast<0.75f&&blankLast<0.05f&&blankBright<10&&modeUi;
+ bool pass=admitted&&backpressure&&faceLast>0.25f&&faceLast<0.75f&&blankLast<0.05f&&blankBright<10&&modeUi;
  printf("MP_FILTER_GPU initial=%.4f face=%.4f blank=%.4f blank_bright=%u mode_ui=%d PASS=%d\n",initial,faceLast,blankLast,blankBright,modeUi,pass);
  obs_set_output_source(0,nullptr);
 
