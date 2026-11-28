@@ -14,6 +14,8 @@ uniform texture2d image;
 uniform float audio_level;    // @audio "level" @gain 1.0
 uniform float audio_snare;
 uniform float audio_flux;
+uniform float alias_snare; // @audio "snare" @gain 1 @smooth 0
+uniform float alias_flux; // @audio "flux" @gain 1 @smooth 0
 
 sampler_state def_sampler
 {
@@ -38,7 +40,7 @@ VertData VSDefault(VertData v_in)
 
 float4 PSBeat(VertData v_in) : TARGET
 {
-    return float4(saturate(audio_level), saturate(audio_snare), saturate(audio_flux), 1.0);
+    return float4(saturate(audio_level), saturate(min(audio_snare,alias_snare)), saturate(min(audio_flux,alias_flux)), 1.0);
 }
 
 technique Draw
@@ -69,7 +71,7 @@ assert "two_pi * 440.0 / 48000.0" in source
 (work/"bass.cpp").write_text(source.replace("two_pi * 440.0 / 48000.0","two_pi * 94.0 / 48000.0"))
 shader=(work/"data/shaders/root/music_probe.effect").read_text()
 assert "audio_snare" in shader
-(work/"data/shaders/root/bass_probe.effect").write_text(shader.replace("audio_snare","audio_kick").replace("uniform float audio_kick;", 'uniform float audio_kick; // @audio "kick"'))
+(work/"data/shaders/root/bass_probe.effect").write_text(shader.replace("audio_snare","audio_kick").replace("alias_snare","alias_kick").replace('@audio "snare"','@audio "kick"').replace("uniform float audio_kick;", 'uniform float audio_kick; // @audio "kick"'))
 PYINNER
 g++ -std=c++17 -O2 -I"$inc" "$work/bass.cpp" -o "$work/bass"   $(pkg-config --libs libobs) -Wl,-rpath,"$libdir"
 if ! (cd "$work" && xvfb-run -a -s '-screen 0 1280x720x24' timeout 90  "$work/bass" "$module" "$work/data" "$work/data/shaders/root/bass_probe.effect")  >"$work/bass.log" 2>&1;then tail -45 "$work/bass.log";exit 1;fi

@@ -6,6 +6,7 @@
 #include <obs-module.h>
 #include "audio_thread.h"
 #include "audio/music_timing.h"
+#include "audio/metadata_signal.h"
 #include "audio/audio_ring.h"
 #include "audio/reaction_dynamics.h"
 #include "sprite_atlas.h"
@@ -130,6 +131,7 @@ struct shader_param_meta {
 
 	/* Graphics-thread-only binding descriptor and per-render value. */
 	enum gs_shader_param_type render_type;
+	enum hs_metadata_signal render_audio_signal;
 	char render_key[256];
 	bool render_valid, render_default_color_valid;
 	struct vec4 render_default_color, render_color;

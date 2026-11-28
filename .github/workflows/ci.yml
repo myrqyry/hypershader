@@ -37,6 +37,10 @@ jobs:
         run: |
           cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-audio-ring.c -pthread -o "$RUNNER_TEMP/hs-audio-ring-test"
           "$RUNNER_TEMP/hs-audio-ring-test"
+      - name: Verify audio metadata signals
+        run: |
+          cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-metadata-signal.c -o "$RUNNER_TEMP/hs-meta-signal-test"
+          "$RUNNER_TEMP/hs-meta-signal-test"
       - name: Verify bounded JSON parser
         run: |
           cc -std=c17 -Wall -Wextra -Werror -Isrc scripts/test-jsmn.c src/jsmn.c -o "$RUNNER_TEMP/hs-json-test"

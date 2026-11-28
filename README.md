@@ -448,7 +448,7 @@ uniform float intensity; // @min 0.0 @max 3.0 @default 1.0 @step 0.01 @label "In
 uniform float pulse; // @audio "bass" @gain 3.0 @smooth 0.95
 ```
 
-Supported high-level audio tags include `bass`, `mid`, `treble`, and `level`.
+Supported audio tags: `bass`, `mid`, `treble`, `level`, `peak`, `beat`, `envelope`, `band0` through `band7`, `kick`, `snare`, `flux`, `bpm`, `beat_phase`, `bar_phase`, and `beat_confidence`. These read the same native worker snapshot as the built-in audio uniforms; tags apply only to shader-owned float uniforms. BPM is in beats per minute, not normalized.
 
 For the full authoring contract, see:
 

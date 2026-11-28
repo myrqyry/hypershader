@@ -3641,6 +3641,7 @@ static void shader_load_complete_task(void *param)
 			struct gs_effect_param_info info;
 			gs_effect_get_param_info(m->cached_param, &info);
 			m->render_type = info.type;
+			m->render_audio_signal = hs_metadata_signal_resolve(m->audio_tag);
 			snprintf(m->render_key, sizeof(m->render_key), "param_%s", m->name);
 			if (m->has_default && m->default_val_str) {
 				struct vec4 *v = &m->render_default_color;
@@ -4682,24 +4683,10 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 
 			/* The host-owned audio uniforms have already received their real
 			 * worker snapshot. Metadata may modulate only shader-owned floats. */
-			if (m->audio_tag && m->cached_param && !hs_runtime_uniform(s, m->name)) {
-				struct gs_effect_param_info audio_info;
-				gs_effect_get_param_info(m->cached_param, &audio_info);
-				if (audio_info.type != GS_SHADER_PARAM_FLOAT)
-					continue;
-				float target = 0.0f;
-				const char *tag = m->audio_tag;
-				if (hs_strcasecmp(tag, "bass") == 0)
-					target = bands_snap[0];
-				else if (hs_strcasecmp(tag, "mid") == 0)
-					target = bands_snap[3];
-				else if (hs_strcasecmp(tag, "treble") == 0)
-					target = bands_snap[6];
-				else if (hs_strcasecmp(tag, "level") == 0)
-					target = level_snap;
-				else if (hs_strcasecmp(tag, "peak") == 0)
-					target = peak_snap;
-				target *= m->audio_gain;
+			if (m->audio_tag && m->render_key[0] && m->render_type == GS_SHADER_PARAM_FLOAT) {
+                float target = hs_metadata_signal_value(m->render_audio_signal,
+                    level_snap, peak_snap, beat_snap, envelope_snap, bands_snap, music_snap);
+                target *= m->audio_gain;
 
 				float final_value;
 
