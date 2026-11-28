@@ -123,6 +123,25 @@ metadata controls are rebound before each stage because effect parameters
 can be reset by OBS technique loops. A real libobs test checks that
 a saved output-gain control actually changes the final rendered pixels.
 
+## Reset history while live
+
+For a source or filter, Global Overrides > Reset History requests a fresh
+simulation frame without recompiling or resetting the shader clock, controls,
+or any other effect instance. The next valid draw consumes the request;
+requests before that draw coalesce. A named or A/B graph starts again at
+hs_graph_frame = 0 with opaque-black, full-sized prior textures. Single-pass
+feedback uses the normal initial seed (transparent for a source, incoming
+video for a filter). Compatible physical surfaces remain allocated.
+
+OBS hotkey bindings are per instance: Reset effect history, and Cancel
+pending history reset. Bind distinct keys if using both. The cancel action
+only cancels a request not yet consumed; it cannot restore discarded history.
+
+A native OBS integration may call the source's proc handler with the void
+procedure hypershader_reset_history (no arguments). A successful procedure
+call indicates submission, not completion. Hidden/disabled effects consume
+the request when they next draw. Transitions do not implement this action.
+
 ## Independent buffer size and precision
 
 The following optional shader declarations are allocation descriptors, not

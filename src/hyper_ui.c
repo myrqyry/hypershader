@@ -519,6 +519,16 @@ static void properties_add_compositing_controls(obs_properties_t *group)
         "Blend the effect with the incoming base video. A source has no base video.");
 }
 
+static bool reset_history_clicked(obs_properties_t *props, obs_property_t *button, void *data)
+{
+    UNUSED_PARAMETER(props);
+    UNUSED_PARAMETER(button);
+    struct hypershader_data *s = data;
+    if (s)
+        atomic_store_explicit(&s->history_reset_requested, true, memory_order_release);
+    return false;
+}
+
 void properties_add_global_overrides(obs_properties_t *props, struct hypershader_data *s)
 {
     obs_properties_t *global = obs_properties_create();
@@ -529,6 +539,11 @@ void properties_add_global_overrides(obs_properties_t *props, struct hypershader
         "0.0 pauses time, 1.0 is realtime, and higher values accelerate it.");
     obs_properties_add_button2(global, "reset_time", obs_module_text("ResetShaderTimer"),
                                reset_time_clicked, s);
+    if (!s || s->kind != HYPER_KIND_TRANSITION) {
+        obs_property_t *reset = obs_properties_add_button2(global, "reset_history",
+            obs_module_text("ResetHistory"), reset_history_clicked, s);
+        obs_property_set_long_description(reset, obs_module_text("ResetHistory.Description"));
+    }
     properties_add_compositing_controls(global);
     obs_properties_add_group(props, "global_overrides_group", "Global Overrides",
                              OBS_GROUP_NORMAL, global);

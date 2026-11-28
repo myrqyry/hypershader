@@ -220,6 +220,7 @@ struct hypershader_data {
 	/* Internal */
 	obs_source_t *context;
 	obs_hotkey_pair_id effect_hotkeys;
+	obs_hotkey_pair_id history_reset_hotkeys;
 	gs_effect_t *effect;
 	float time_scale;
 	float time_accumulator;
@@ -339,6 +340,8 @@ struct hypershader_data {
 	gs_texrender_t *history[2];
 	gs_texrender_t *feedback_input;
 	int history_idx;
+	atomic_bool history_reset_requested; /* UI/proc/hotkey -> graphics owner */
+	bool history_needs_seed; /* graphics context only */
 	uint32_t feedback_width, feedback_height;
 	bool feedback_first_render_logged;
 	gs_eparam_t *ep_history;

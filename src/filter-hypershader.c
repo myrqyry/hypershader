@@ -62,6 +62,54 @@ static inline int hs_access_exists(const char *path)
 #include "shader/graph-budget.h"
 #include <inttypes.h>
 
+/* Reset logical state without reallocating compatible GPU surfaces. */
+static void graph_invalidate_history(struct hypershader_data *s)
+{
+    s->graph_write_idx = 0;
+    s->graph_frame = 0;
+    s->graph_flow_sequence = 0;
+    s->graph_flow_announced = false;
+    s->graph_valid = false;
+}
+
+/* Called only by the graphics owner, before a real draw. Requests coalesce
+ * while hidden or disabled; no UI callback takes a graphics lock. */
+static void consume_history_reset(struct hypershader_data *s)
+{
+    if (!atomic_exchange_explicit(&s->history_reset_requested, false, memory_order_acq_rel))
+        return;
+    graph_invalidate_history(s);
+    s->history_idx = 0;
+    s->history_needs_seed = true;
+}
+
+static void request_history_reset_proc(void *data, calldata_t *args)
+{
+    UNUSED_PARAMETER(args);
+    struct hypershader_data *s = data;
+    if (s)
+        atomic_store_explicit(&s->history_reset_requested, true, memory_order_release);
+}
+
+static bool history_reset_pressed(void *data, obs_hotkey_pair_id id, obs_hotkey_t *key, bool pressed)
+{
+    UNUSED_PARAMETER(id);
+    UNUSED_PARAMETER(key);
+    struct hypershader_data *s = data;
+    if (!pressed || !s)
+        return false;
+    atomic_store_explicit(&s->history_reset_requested, true, memory_order_release);
+    return true;
+}
+
+static bool history_cancel_pressed(void *data, obs_hotkey_pair_id id, obs_hotkey_t *key, bool pressed)
+{
+    UNUSED_PARAMETER(id);
+    UNUSED_PARAMETER(key);
+    struct hypershader_data *s = data;
+    return pressed && s && atomic_exchange_explicit(&s->history_reset_requested, false, memory_order_acq_rel);
+}
+
 /* Clear all graph histories after resize, shader switch or teardown.
  * Caller must be inside the OBS graphics context. */
 static void graph_reset(struct hypershader_data *s)
@@ -74,12 +122,8 @@ static void graph_reset(struct hypershader_data *s)
 			}
 		}
 	}
-	s->graph_write_idx = 0;
-	s->graph_frame = 0;
-	s->graph_flow_sequence = 0;
-	s->graph_flow_announced = false;
+    graph_invalidate_history(s);
 	s->graph_width = s->graph_height = 0;
-	s->graph_valid = false;
 }
 
 /* Release only the graph's render targets. Shared effect, channels and
@@ -1583,6 +1627,7 @@ static void filter_destroy(void *data)
 	hs_data_driver_destroy(s->data_driver);
 	s->data_driver = NULL;
 	effect_hotkeys_unregister(s->effect_hotkeys);
+	effect_hotkeys_unregister(s->history_reset_hotkeys);
 	log_debug_direct("filter_destroy: START");
 
 	/* 1. Stop worker thread FIRST */
@@ -2860,6 +2905,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	}
 	atomic_init(&s->last_audio_capture_ns, 0);
 	atomic_init(&s->mod_motion_requested, false);
+	atomic_init(&s->history_reset_requested, false);
     atomic_init(&s->mp_frame_buffer_in_use, false);
     atomic_init(&s->mp_thread_run, false);
     atomic_init(&s->mp_enabled, false);
@@ -2870,6 +2916,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	s->context = context;
 	s->data_driver = hs_data_driver_create();
 	s->effect_hotkeys = OBS_INVALID_HOTKEY_PAIR_ID;
+	s->history_reset_hotkeys = OBS_INVALID_HOTKEY_PAIR_ID;
 	s->kind = kind;
 	s->scene = NULL;
 
@@ -3019,6 +3066,17 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	proc_handler_add(obs_source_get_proc_handler(context),
 		"void hypershader_live_status(out bool rendering, out bool audio, out int level, out int signals)",
 		hs_live_status, s);
+    if (kind != HYPER_KIND_TRANSITION) {
+        proc_handler_add(obs_source_get_proc_handler(context),
+            "void hypershader_reset_history()", request_history_reset_proc, s);
+        /* OBS marks filters private and rejects the single-hotkey API.
+         * A source-scoped pair works for both filters and generators. */
+        s->history_reset_hotkeys = obs_hotkey_pair_register_source(context,
+            "effect.reset_history", obs_module_text("Effect.ResetHistory"),
+            "effect.cancel_history_reset", obs_module_text("Effect.CancelHistoryReset"),
+            history_reset_pressed, history_cancel_pressed, s, s);
+    }
+
 
 	/* Ensure sound settings follow any updated 'audio_mix' setting as default */
 	if (settings) {
@@ -5723,6 +5781,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 		return;
 	}
 
+	consume_history_reset(s);
 	update_shader_uniforms(s, width, height);
 
 	/* Modern Color Space Handling (Rule 8) */
@@ -5788,7 +5847,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 				gs_texture_t *input=gs_texrender_get_texture(s->feedback_input);
 				int ping=s->history_idx;
 				int pong=(ping+1)%2;
-				gs_texture_t *previous=gs_texrender_get_texture(s->history[pong]);
+				gs_texture_t *previous=s->history_needs_seed ? NULL : gs_texrender_get_texture(s->history[pong]);
 				gs_texrender_reset(s->history[ping]);
 				if (input && gs_texrender_begin(s->history[ping],width,height)) {
 					gs_projection_push();
@@ -5821,6 +5880,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
                             gs_draw_sprite(result,0,width,height);
                         } /* default raw output */
 						s->history_idx=pong;
+                        s->history_needs_seed=false;
 						update_performance_stats(s,(double)(os_gettime_ns()-start_time)/1000000.0);
 						if(!s->feedback_first_render_logged) {
 							blog(LOG_INFO,"[hypershader] ACTIVE_FEEDBACK_CAPTURE_20261010: %ux%u",width,height);
@@ -6065,6 +6125,8 @@ static void source_video_render(void *data, gs_effect_t *effect)
 	/* Single mutex scope for shader state access */
 	/* pthread_mutex_lock(&s->mutex); - REMOVED (High Contention) */
 
+	if (s->effect && width && height)
+		consume_history_reset(s);
 	update_shader_uniforms(s, width, height);
 
 	if (!s->effect) {
@@ -6119,7 +6181,7 @@ static void source_video_render(void *data, gs_effect_t *effect)
 		 * initialize the read surface to transparent, including on resize,
 		 * instead of sampling a null texture (opaque black on GL). */
 		gs_texture_t *previous = gs_texrender_get_texture(prev);
-		if (!previous || gs_texture_get_width(previous) != width ||
+		if (s->history_needs_seed || !previous || gs_texture_get_width(previous) != width ||
 		    gs_texture_get_height(previous) != height) {
 			gs_texrender_reset(prev);
 			if (!gs_texrender_begin(prev, width, height))
@@ -6144,6 +6206,8 @@ static void source_video_render(void *data, gs_effect_t *effect)
 				gs_draw_sprite(s->dummy_texture, 0, width, height);
 			}
 			gs_texrender_end(curr);
+		} else {
+			return;
 		}
 
 		/* Draw the produced frame: the default effect does not implicitly
@@ -6165,6 +6229,7 @@ static void source_video_render(void *data, gs_effect_t *effect)
 
 		/* Update history index (atomic write, no mutex needed) */
 		s->history_idx = !hist_idx;
+		s->history_needs_seed = false;
 	} else {
 		/* Standard Render (No Persistence) */
         if (output_composition_enabled(s)) {

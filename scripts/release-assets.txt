@@ -6,7 +6,7 @@ include 4046ce7082b27e03041e6f5e6e39230b36a4be6c data/licenses/README.md
 include d159169d1050894d3ea3b98e1c965c4058208fe1 data/licenses/Shadertastic.txt
 include c84fb2e973dd885ea5fd426aedf6e5a1849feeaa data/licenses/jsmn.txt
 include 6d30b9daa14ff7eaa721a509e67235a6bbb7699a data/licenses/miniaudio.txt
-include b7c38fb7c19ab7389dc606b6bc5ef1e1291613aa data/locale/en-US.ini
+include 20d46e232d402716a8fb8064fa6771242850e791 data/locale/en-US.ini
 include 1935fc8538182d0db23d9a86b19278c45d54c7d3 data/shaders/OBS_SHADER_SYNTAX.md
 include 2bc661310fa1093cf85d7f72aa82cd02c8ffc004 data/shaders/OPTICAL_HALATION.md
 include 0e912aa1a67527127465a80e99363da5d8f1c8e0 data/shaders/PFRAME_DRIFT.md
