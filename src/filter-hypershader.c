@@ -2880,7 +2880,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	/* Native models load below only when the instance requests them. */
 
 	/* Pre-allocate audio worker local buffer (avoids bzalloc per iteration) */
-	s->audio_localbuf_size = 8192;
+	s->audio_localbuf_size = 16384;
 	s->audio_localbuf = bzalloc(s->audio_localbuf_size * sizeof(float));
 	if (!s->audio_localbuf) {
 		blog(LOG_WARNING, "[hypershader] Failed to allocate audio worker buffer, using fallback");

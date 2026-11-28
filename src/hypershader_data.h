@@ -6,6 +6,7 @@
 #include <obs-module.h>
 #include "audio_thread.h"
 #include "audio/music_timing.h"
+#include "audio/audio_ring.h"
 #include "audio/reaction_dynamics.h"
 #include "sprite_atlas.h"
 #include "shader/graph-budget.h"
@@ -384,13 +385,7 @@ struct hypershader_data {
 	atomic_uint live_audio_permille;
 
 
-	/* Lock-free audio ring buffer (replaces mutex-protected version) */
-	struct {
-		float *data;
-		size_t capacity; /* Power of 2 for fast modulo */
-		atomic_size_t write_pos;
-		atomic_size_t read_pos;
-	} audio_lockfree_ring;
+	struct hs_audio_ring audio_lockfree_ring;
 
 	/* Latency monitoring for graceful degradation */
 	struct {

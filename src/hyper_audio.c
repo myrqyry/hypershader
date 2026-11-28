@@ -56,8 +56,12 @@ bool hyper_audio_init(struct hypershader_data *s)
 
 	s->audio_lockfree_ring.data = bzalloc(actual_capacity * sizeof(float));
 	s->audio_lockfree_ring.capacity = actual_capacity;
+	s->audio_lockfree_ring.history_capacity = 16384;
+	s->audio_lockfree_ring.history = bzalloc(16384 * sizeof(float));
 	atomic_store(&s->audio_lockfree_ring.write_pos, 0);
 	atomic_store(&s->audio_lockfree_ring.read_pos, 0);
+	atomic_store(&s->audio_lockfree_ring.reset_pos, 0);
+	atomic_store(&s->audio_lockfree_ring.reset_pending, false);
 
 	/* Initialize timestamp and latency monitoring */
 	s->last_audio_ts = 0;
@@ -69,7 +73,7 @@ bool hyper_audio_init(struct hypershader_data *s)
 	}
 
 	/* Check lock-free ring allocation */
-	if (!s->audio_lockfree_ring.data) {
+	if (!s->audio_lockfree_ring.data || !s->audio_lockfree_ring.history) {
 		blog(LOG_ERROR, "[hypershader] Failed to allocate lock-free audio ring buffer");
 		goto fail;
 	}
@@ -111,6 +115,9 @@ void hyper_audio_destroy(struct hypershader_data *s)
 	bfree(s->audio_lockfree_ring.data);
 	s->audio_lockfree_ring.data = NULL;
 	s->audio_lockfree_ring.capacity = 0;
+	bfree(s->audio_lockfree_ring.history);
+	s->audio_lockfree_ring.history = NULL;
+	s->audio_lockfree_ring.history_capacity = 0;
 
 	/* Free pre-allocated audio worker buffer */
 	bfree(s->audio_localbuf);
@@ -131,7 +138,9 @@ void hyper_audio_update_settings(struct hypershader_data *s, obs_data_t *setting
 	if (!s || !settings)
 		return;
 
-	int new_fft = (int)obs_data_get_int(settings, "audio_fft_size");
+	long long requested_fft = obs_data_get_int(settings, "audio_fft_size");
+	int new_fft = requested_fft >= 2 && requested_fft <= 16384 &&
+		!(requested_fft & (requested_fft - 1)) ? (int)requested_fft : 1024;
 	int new_window = (int)obs_data_get_int(settings, "audio_window_type");
 	if (new_fft <= 0)
 		new_fft = 1024;

@@ -19,99 +19,6 @@
  * Eliminates mutex contention between OBS audio callback and worker thread
  * ============================================================================ */
 
-/* Initialize lock-free ring buffer (capacity must be power of 2) */
-static bool audio_lockfree_ring_init(struct hypershader_data *s, size_t capacity)
-{
-	/* Ensure capacity is power of 2 for fast modulo */
-	size_t actual_capacity = 1;
-	while (actual_capacity < capacity)
-		actual_capacity <<= 1;
-
-	s->audio_lockfree_ring.data = bzalloc(actual_capacity * sizeof(float));
-	if (!s->audio_lockfree_ring.data)
-		return false;
-
-	s->audio_lockfree_ring.capacity = actual_capacity;
-	atomic_store(&s->audio_lockfree_ring.write_pos, 0);
-	atomic_store(&s->audio_lockfree_ring.read_pos, 0);
-	return true;
-}
-
-/* Lock-free write from OBS audio callback (producer) */
-static void audio_lockfree_ring_write(struct hypershader_data *s, const float *samples, size_t count)
-{
-	size_t capacity = s->audio_lockfree_ring.capacity;
-	size_t mask = capacity - 1;
-	size_t write_pos = atomic_load(&s->audio_lockfree_ring.write_pos);
-	size_t read_pos = atomic_load(&s->audio_lockfree_ring.read_pos);
-
-	/* Check available space (leave 1 slot to distinguish full from empty) */
-	size_t used = (write_pos - read_pos) & mask;
-	size_t available = capacity - 1 - used;
-
-	if (count > available) {
-		/* Buffer overflow - drop oldest samples by advancing read pointer */
-		size_t overflow = count - available;
-		atomic_store(&s->audio_lockfree_ring.read_pos, (read_pos + overflow) & mask);
-	}
-
-	/* Write samples */
-	for (size_t i = 0; i < count; i++) {
-		s->audio_lockfree_ring.data[(write_pos + i) & mask] = samples[i];
-	}
-
-	atomic_store(&s->audio_lockfree_ring.write_pos, (write_pos + count) & mask);
-}
-
-/* Lock-free read from worker thread (consumer) */
-static size_t audio_lockfree_ring_read(struct hypershader_data *s, float *out, size_t count)
-{
-	size_t capacity = s->audio_lockfree_ring.capacity;
-	size_t mask = capacity - 1;
-	size_t write_pos = atomic_load(&s->audio_lockfree_ring.write_pos);
-	size_t read_pos = atomic_load(&s->audio_lockfree_ring.read_pos);
-
-	size_t available = (write_pos - read_pos) & mask;
-	if (count > available)
-		count = available;
-
-	for (size_t i = 0; i < count; i++) {
-		out[i] = s->audio_lockfree_ring.data[(read_pos + i) & mask];
-	}
-
-	atomic_store(&s->audio_lockfree_ring.read_pos, (read_pos + count) & mask);
-	return count;
-}
-
-/* Peek at recent samples without consuming (for FFT window) */
-static size_t audio_lockfree_ring_peek(struct hypershader_data *s, float *out, size_t count)
-{
-	size_t capacity = s->audio_lockfree_ring.capacity;
-	size_t mask = capacity - 1;
-	size_t write_pos = atomic_load(&s->audio_lockfree_ring.write_pos);
-	size_t read_pos = atomic_load(&s->audio_lockfree_ring.read_pos);
-
-	size_t available = (write_pos - read_pos) & mask;
-	if (count > available)
-		count = available;
-
-	/* Read from end of buffer (most recent samples) */
-	size_t start = (write_pos - count) & mask;
-	for (size_t i = 0; i < count; i++) {
-		out[i] = s->audio_lockfree_ring.data[(start + i) & mask];
-	}
-
-	return count;
-}
-
-/* Free lock-free ring buffer */
-static void audio_lockfree_ring_free(struct hypershader_data *s)
-{
-	bfree(s->audio_lockfree_ring.data);
-	s->audio_lockfree_ring.data = NULL;
-	s->audio_lockfree_ring.capacity = 0;
-}
-
 /* Probe callback used during mix enumeration */
 static void probe_audio_callback(void *param, size_t mix_idx, struct audio_data *data)
 {
@@ -307,13 +214,13 @@ static void receive_audio_samples(struct hypershader_data *s, const struct audio
 	if (!mono_buf || frames > s->audio_mono_scratch_size) {
 		/* Fallback: write directly to ring without stereo-to-mono conversion */
 		if (pl0 && !muted)
-			audio_lockfree_ring_write(s, pl0, frames);
+			hs_audio_ring_write(&s->audio_lockfree_ring, pl0, frames);
 		else if (muted) {
 			/* Silence rather than retaining another source's last FFT window. */
 			static const float zeros[256] = {0};
 			for (size_t offset = 0; offset < frames; offset += 256) {
 				size_t n = frames - offset < 256 ? frames - offset : 256;
-				audio_lockfree_ring_write(s, zeros, n);
+				hs_audio_ring_write(&s->audio_lockfree_ring, zeros, n);
 			}
 		}
 		return;
@@ -325,7 +232,7 @@ static void receive_audio_samples(struct hypershader_data *s, const struct audio
 			v = (v + pl1[i]) * 0.5f;
 		mono_buf[i] = v;
 	}
-	audio_lockfree_ring_write(s, mono_buf, use_frames);
+	hs_audio_ring_write(&s->audio_lockfree_ring, mono_buf, use_frames);
 }
 
 static void obs_audio_callback(void *param, size_t mix_idx, struct audio_data *data)
@@ -389,6 +296,7 @@ void stop_source_audio_connection(struct hypershader_data *s)
 	reset_beat_state(s);
 
 	obs_source_remove_audio_capture_callback(s->selected_audio_source, source_audio_callback, s);
+	hs_audio_ring_request_reset(&s->audio_lockfree_ring);
 	atomic_store_explicit(&s->last_audio_capture_ns, 0, memory_order_release);
 	blog(LOG_INFO, "[hypershader] Disconnected from OBS audio source %s",
 	     obs_source_get_name(s->selected_audio_source));
@@ -435,6 +343,7 @@ void stop_obs_audio_connection(struct hypershader_data *s)
 
 	/* audio_output_disconnect takes (audio_t*, mix_idx, callback, param) in current libobs */
 	audio_output_disconnect(s->obs_audio, s->audio_mix_idx, obs_audio_callback, s);
+	hs_audio_ring_request_reset(&s->audio_lockfree_ring);
 	atomic_store_explicit(&s->last_audio_capture_ns, 0, memory_order_release);
 	reset_beat_state(s);
 	s->audio_connected = false;
@@ -804,7 +713,7 @@ void *audio_worker(void *p)
 
 		if (s->audio_localbuf && s->audio_localbuf_size >= (size_t)s->audio_window_size) {
 			if (s->audio_lockfree_ring.data) {
-				n = (int)audio_lockfree_ring_peek(s, localbuf, s->audio_window_size);
+				n = (int)hs_audio_ring_latest(&s->audio_lockfree_ring, localbuf, s->audio_window_size);
 			}
 
 			if (n > 0) {
@@ -899,7 +808,7 @@ void *audio_worker(void *p)
 			/* Fallback: allocate per-iteration if pre-allocated buffer unavailable */
 			localbuf = (float *)bzalloc(sizeof(float) * (size_t)s->audio_window_size);
 			if (localbuf && s->audio_lockfree_ring.data) {
-				n = (int)audio_lockfree_ring_peek(s, localbuf, s->audio_window_size);
+				n = (int)hs_audio_ring_latest(&s->audio_lockfree_ring, localbuf, s->audio_window_size);
 				if (n > 0)
 					compute_audio_features(s, localbuf, n);
 			}
