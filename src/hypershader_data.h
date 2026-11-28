@@ -228,6 +228,7 @@ struct hypershader_data {
     float compose_base_opacity;
     float compose_effect_opacity;
     int compose_blend_mode;
+    uint32_t render_scale_percent;
     gs_effect_t *output_compositor;
     gs_eparam_t *compose_base_image, *compose_fx_image, *compose_base_alpha,
         *compose_fx_alpha, *compose_mode;
@@ -342,13 +343,13 @@ struct hypershader_data {
 	int history_idx;
 	atomic_bool history_reset_requested; /* UI/proc/hotkey -> graphics owner */
 	bool history_needs_seed; /* graphics context only */
-	uint32_t feedback_width, feedback_height;
+	uint32_t feedback_width, feedback_height, feedback_scale_percent;
 	bool feedback_first_render_logged;
 	gs_eparam_t *ep_history;
 	/* Persistent render graph: two textures per scheduled pass. */
 	struct hs_graph_plan graph;
 	gs_texrender_t *graph_history[HS_GRAPH_MAX_PASSES][2];
-	uint32_t graph_width, graph_height;
+	uint32_t graph_width, graph_height, graph_scale_percent;
 	enum gs_color_format graph_format;
 	bool graph_budget_rejected;
 

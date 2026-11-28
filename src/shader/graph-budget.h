@@ -7,6 +7,16 @@
 #define HS_GRAPH_MAX_PASSES 8
 #define HS_GRAPH_MIB UINT64_C(1048576)
 
+static inline uint32_t hs_render_scale_percent(int64_t value)
+{
+    return value==25 || value==50 || value==75 || value==100 ? (uint32_t)value : 100U;
+}
+
+static inline uint32_t hs_render_scale_extent(uint32_t full, uint32_t percent)
+{
+    return (uint32_t)(((uint64_t)full * hs_render_scale_percent(percent) + 99) / 100);
+}
+
 static inline uint32_t hs_graph_extent(uint32_t full, uint32_t divisor)
 {
     return full / divisor + (full % divisor != 0);
@@ -74,13 +84,14 @@ static inline bool hs_graph_plan_slots(unsigned count, const uint32_t *divisor,
     return true;
 }
 
-static inline bool hs_graph_planned_bytes(uint32_t width,uint32_t height,
-    uint32_t output_bpp,const uint32_t *divisor,const uint32_t *buffer_bpp,
+static inline bool hs_graph_scaled_bytes(uint32_t width,uint32_t height,
+    uint32_t render_width,uint32_t render_height,uint32_t output_bpp,const uint32_t *divisor,const uint32_t *buffer_bpp,
     const bool *transient,const unsigned *owner,unsigned count,uint64_t *out)
 {
     if (!count || count>HS_GRAPH_MAX_PASSES) return false;
     uint64_t total=4;
-    if (!hs_graph_add_surface(&total,width,height,output_bpp,3)) return false;
+    if (!hs_graph_add_surface(&total,width,height,output_bpp,2) ||
+        !hs_graph_add_surface(&total,render_width,render_height,output_bpp,1)) return false;
     for (unsigned i=0;i<count;i++) {
         if (owner[i]>i || owner[owner[i]]!=owner[i]) return false;
         uint32_t d=divisor[i];
@@ -91,12 +102,20 @@ static inline bool hs_graph_planned_bytes(uint32_t width,uint32_t height,
                 return false;
             continue;
         }
-        if (!hs_graph_add_surface(&total,hs_graph_extent(width,d),
-                hs_graph_extent(height,d),buffer_bpp[i],transient[i]?1:2))
+        if (!hs_graph_add_surface(&total,hs_graph_extent(render_width,d),
+                hs_graph_extent(render_height,d),buffer_bpp[i],transient[i]?1:2))
             return false;
     }
     *out=total;
     return true;
+}
+
+static inline bool hs_graph_planned_bytes(uint32_t width,uint32_t height,
+    uint32_t output_bpp,const uint32_t *divisor,const uint32_t *buffer_bpp,
+    const bool *transient,const unsigned *owner,unsigned count,uint64_t *out)
+{
+    return hs_graph_scaled_bytes(width,height,width,height,output_bpp,divisor,
+        buffer_bpp,transient,owner,count,out);
 }
 
 #endif

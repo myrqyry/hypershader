@@ -37,7 +37,7 @@ contiguous from zero, regardless of declaration or technique order.
 For each persistent id, declare a matching `Pass_<id>` technique, the two texture2d
 bindings, and optionally the float3 resolution binding. Use divisor 1,
 2, 4 or 8 and format 0 (source format) or 1 (RGBA16F), as for A/B.
-The final Draw technique renders at full source resolution.
+The final Draw technique renders at the selected host Render Scale (full source resolution by default).
 
 For persistent passes, before each pass the unsuffixed resource represents the most recently
 completed result: current-frame output for earlier stages, previous
@@ -142,6 +142,38 @@ procedure hypershader_reset_history (no arguments). A successful procedure
 call indicates submission, not completion. Hidden/disabled effects consume
 the request when they next draw. Transitions do not implement this action.
 
+## Host Render Scale
+
+Global Overrides > Render Scale offers 25%, 50%, 75% and 100% (default)
+for standalone sources and filters. The host rounds each internal extent
+up independently; OBS output dimensions remain unchanged. Existing scene
+collections and invalid saved values default to 100%. No scale is chosen
+automatically under memory pressure.
+
+Ordinary shader Draw, single-pass feedback, and graph Draw render at the
+internal extent. Named/A-B pass divisors then apply to that extent.
+hs_resolution describes the active shader target, hs_graph_output_resolution
+the internal Draw extent, and hs_scale the host fraction. Pointer coordinates
+are scaled by the host fraction. Input image and external channels retain
+their original sizes; sample using normalized UVs or their real texture
+dimensions rather than assuming they match hs_resolution.
+
+The original base layer is captured at full resolution, and the scaled
+effect is upsampled at output; global opacity and blend remain postprocesses.
+A 50% scale processes a quarter of the full-resolution shader pixels,
+before pass divisors; this is not a frame-time prediction. Temporal
+histories restart on a changed scale; the animation clock and saved
+controls do not reset. A source feedback seed is transparent; a filter
+feedback seed at reduced scale is the downsampled original input.
+
+Graph admission accounts for actual scaled intermediate sizes while
+conservatively reserving the full-size input and base compositor surfaces.
+The native budget test verifies rejection at 100%, admission at 50%,
+rejection on returning to 100% and a fresh seed on returning to 50%,
+without changing OBS source dimensions. The native render-scale probe
+tests ordinary/feedback/graph effects in both source and filter lanes.
+Transitions currently retain full resolution.
+
 ## Independent buffer size and precision
 
 The following optional shader declarations are allocation descriptors, not
@@ -163,13 +195,12 @@ Divisors must be 1, 2, 4 or 8. The default is 1; each dimension is
 rounded up independently. Format 0 (default) follows the upstream
 capture format; 1 explicitly uses RGBA16F. Invalid descriptor types,
 missing initializers or values cause the graph to pass the upstream
-source through with a logged diagnostic. The final Draw stage remains
-full resolution and uses the source/output format. The original image
+source through with a logged diagnostic. The final Draw stage uses the host Render Scale and the source/output format. The original image
 remains full resolution in every stage.
 
 All resolution vectors contain width, height and aspect ratio. Within
 BufferA/B, hs_resolution is that pass's actual target size; within Draw it
-is the full output size. The other three resolution uniforms retain
+is the internal output size before host upscaling. The other three resolution uniforms retain
 their respective resource dimensions across all stages, including the
 first initialized history. Use those sizes for integer texel fetches
 and texel offsets rather than assuming the viewport and all textures
@@ -237,7 +268,8 @@ Graph color-target payload is capped per filter instance at 512 MiB.
 The optional shader declaration `uniform int hs_graph_budget_mib = 64;`
 can request a smaller cap (integer 1 through 512). This is immutable
 metadata, not a live control. The calculation reserves the full-size
-input capture, both full-size compositor surfaces, a transparent pixel,
+input capture and base compositor surface, the render-scale-sized effect
+compositor surface, a transparent pixel,
 and two textures per persistent buffer or one per distinct transient
 physical owner, using its actual format and rounded dimensions. Integer arithmetic rejects overflow.
 

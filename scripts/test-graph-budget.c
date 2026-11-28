@@ -48,6 +48,14 @@ int main(void)
     assert(!hs_graph_plan_slots(4,d4,f4,t4,invalid_future,owner));
     const unsigned invalid_owner[]={0,0,2,3};
     assert(!hs_graph_planned_bytes(1920,1080,4,d4,b4,t4,invalid_owner,4,&bytes));
+    assert(hs_render_scale_percent(0)==100 && hs_render_scale_percent(INT64_MAX)==100);
+    assert(hs_render_scale_extent(97,75)==73 && hs_render_scale_extent(73,25)==19);
+    assert(hs_render_scale_extent(UINT32_MAX,100)==UINT32_MAX);
+    assert(hs_render_scale_extent(1,25)==1);
+    assert(hs_graph_plan_slots(4,d4,f4,t4,last,owner));
+    assert(hs_graph_scaled_bytes(1920,1080,960,540,4,d4,b4,t4,owner,4,&bytes));
+    assert(bytes==UINT64_C(1920)*1080*8+UINT64_C(960)*540*4+UINT64_C(480)*270*4*4+4);
+    assert(!hs_graph_scaled_bytes(1920,1080,0,540,4,d4,b4,t4,owner,4,&bytes));
     puts("GRAPH_BUDGET_UNIT_PASS");
     return 0;
 }

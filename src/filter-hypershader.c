@@ -4449,7 +4449,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 	if (s->ep_time)
 		gs_effect_set_float(s->ep_time, s->time_accumulator);
 	if (s->ep_scale)
-		gs_effect_set_float(s->ep_scale, 1.0f);
+		gs_effect_set_float(s->ep_scale, (float)s->render_scale_percent / 100.0f);
 	if (s->ep_delta_time)
 		gs_effect_set_float(s->ep_delta_time, dt * s->time_scale);
 	if (s->ep_frame_rate)
@@ -4497,7 +4497,9 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 	if (s->ep_pointer) {
 		/* Mouse needs to be set (vec4: x, y, click_x, click_y) */
 		struct vec4 v_mouse;
-		vec4_set(&v_mouse, s->mouse_pos.x, s->mouse_pos.y, s->mouse_click.x, s->mouse_click.y);
+		const float scale = (float)s->render_scale_percent / 100.0f;
+        vec4_set(&v_mouse, s->mouse_pos.x * scale, s->mouse_pos.y * scale,
+            s->mouse_click.x * scale, s->mouse_click.y * scale);
 		gs_effect_set_vec4(s->ep_pointer, &v_mouse);
 	}
 
@@ -4892,6 +4894,8 @@ static float performance_modulated_value(struct hypershader_data *s,
 static void cache_runtime_settings(struct hypershader_data *s, obs_data_t *settings)
 {
     if (!settings) return;
+    s->render_scale_percent = s->kind == HYPER_KIND_TRANSITION ? 100 :
+        hs_render_scale_percent(obs_data_get_int(settings,"render_scale_percent"));
     const char *shader = obs_data_get_string(settings,"shader_file");
     const char *mod_shader = obs_data_get_string(settings,"perf_mod_shader");
     const char *mod_param = obs_data_get_string(settings,"perf_mod_param");
@@ -5140,6 +5144,8 @@ static void graph_bind_builtins(struct hypershader_data *s, uint32_t width, uint
 
 	if (s->ep_time)
 		gs_effect_set_float(s->ep_time, s->time_accumulator);
+    if (s->ep_scale)
+        gs_effect_set_float(s->ep_scale, (float)s->render_scale_percent / 100.0f);
 	if (s->ep_resolution) {
 		struct vec3 resolution;
 		vec3_set(&resolution, (float)width, (float)height,
@@ -5239,8 +5245,14 @@ static gs_texture_t *output_render_effect(struct hypershader_data *s,
     gs_eparam_t *param = s->ep_image;
     if (param)
         gs_effect_set_texture(param, image);
+    if (s->render_scale_percent != 100) {
+        gs_blend_state_push();
+        gs_enable_blending(false);
+    }
     while (gs_effect_loop(s->effect, "Draw"))
         gs_draw_sprite(image, 0, width, height);
+    if (s->render_scale_percent != 100)
+        gs_blend_state_pop();
     gs_matrix_pop();
     gs_projection_pop();
     gs_texrender_end(s->output_composite_fx);
@@ -5272,6 +5284,26 @@ static bool output_draw_composited(struct hypershader_data *s,
     return true;
 }
 
+static bool output_draw_raw(gs_texture_t *texture, uint32_t width, uint32_t height)
+{
+    if (!texture) return false;
+    gs_effect_t *base = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+    gs_eparam_t *image = gs_effect_get_param_by_name(base, "image");
+    if (!image) return false;
+    gs_effect_set_texture(image, texture);
+    while (gs_effect_loop(base, "Draw"))
+        gs_draw_sprite(texture, 0, width, height);
+    return true;
+}
+
+static bool output_present_scaled(struct hypershader_data *s, gs_texture_t *base,
+    gs_texture_t *fx, uint32_t width, uint32_t height, enum gs_color_format format)
+{
+    return output_composition_enabled(s)
+        ? output_draw_composited(s, base, fx, width, height, format)
+        : output_draw_raw(fx, width, height);
+}
+
 /* Capture the incoming filter video; this is the *real* upstream frame, not
  * an artificial black fill or the filter's previous output. */
 static gs_texture_t *output_capture_filter_base(struct hypershader_data *s,
@@ -5291,9 +5323,14 @@ static gs_texture_t *output_capture_filter_base(struct hypershader_data *s,
     struct vec4 clear;
     vec4_zero(&clear);
     gs_clear(GS_CLEAR_COLOR, &clear, 0.0f, 0);
-    gs_effect_t *base = obs_get_base_effect(OBS_EFFECT_DEFAULT);
-    while (gs_effect_loop(base, "Draw"))
+    if (obs_source_get_type(target)==OBS_SOURCE_TYPE_FILTER ||
+        (obs_source_get_output_flags(target)&OBS_SOURCE_CUSTOM_DRAW)) {
         obs_source_video_render(target);
+    } else {
+        gs_effect_t *base = obs_get_base_effect(OBS_EFFECT_DEFAULT);
+        while (gs_effect_loop(base, "Draw"))
+            obs_source_video_render(target);
+    }
     gs_matrix_pop();
     gs_projection_pop();
     gs_texrender_end(s->output_composite_base);
@@ -5477,8 +5514,10 @@ static bool output_render_composited_filter(struct hypershader_data *s,
         return false;
     /* Preserve the real MediaPipe capture path in composited filters. */
     process_mediapipe_frame(s, base);
-    gs_texture_t *fx = output_render_effect(s, base, width, height, format);
-    return fx && output_draw_composited(s, base, fx, width, height, format);
+    gs_texture_t *fx = output_render_effect(s, base,
+        hs_render_scale_extent(width,s->render_scale_percent),
+        hs_render_scale_extent(height,s->render_scale_percent), format);
+    return fx && output_present_scaled(s, base, fx, width, height, format);
 }
 
 /* Preflight the complete logical allocation before touching the GPU graph.
@@ -5492,7 +5531,10 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 		buffer_bpp[i] = s->graph.float16[i] ? 8 : output_bpp;
 	const uint64_t limit = (uint64_t)s->graph.budget_mib * HS_GRAPH_MIB;
 	uint64_t bytes = 0;
-	const bool valid = hs_graph_planned_bytes(width,height,output_bpp,s->graph.divisor,buffer_bpp,
+	const bool valid = hs_graph_scaled_bytes(width,height,
+        hs_render_scale_extent(width,s->render_scale_percent),
+        hs_render_scale_extent(height,s->render_scale_percent),
+        output_bpp,s->graph.divisor,buffer_bpp,
         s->graph.transient,s->graph.owner,s->graph.count,&bytes);
 	if (!valid || bytes > limit) {
 		if (!s->graph_budget_rejected) {
@@ -5515,12 +5557,15 @@ static bool graph_budget_allows(struct hypershader_data *s, uint32_t width, uint
 static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 				uint32_t width, uint32_t height, enum gs_color_format format)
 {
+    const uint32_t rw=hs_render_scale_extent(width,s->render_scale_percent);
+    const uint32_t rh=hs_render_scale_extent(height,s->render_scale_percent);
 	if (s->graph_width != width || s->graph_height != height ||
-	    s->graph_format != format) {
+	    s->graph_format != format || s->graph_scale_percent!=s->render_scale_percent) {
 		graph_release_targets(s);
 		s->graph_width = width;
 		s->graph_height = height;
 		s->graph_format = format;
+        s->graph_scale_percent=s->render_scale_percent;
 	}
 
 	if (target && !s->feedback_input)
@@ -5590,8 +5635,8 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 			if (s->graph.transient[i]) continue;
             gs_texrender_t *history = s->graph_history[i][read];
 			gs_texrender_reset(history);
-			if (!gs_texrender_begin(history, hs_graph_extent(width, s->graph.divisor[i]),
-						hs_graph_extent(height, s->graph.divisor[i])))
+			if (!gs_texrender_begin(history, hs_graph_extent(rw, s->graph.divisor[i]),
+						hs_graph_extent(rh, s->graph.divisor[i])))
 				return false;
 			gs_clear(GS_CLEAR_COLOR, &black, 0.0f, 0);
 			gs_texrender_end(history);
@@ -5602,16 +5647,16 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 	for (unsigned i = 0; i < s->graph.count; ++i) {
 		if (s->graph.transient[i]) continue;
         previous[i] = gs_texrender_get_texture(s->graph_history[i][read]);
-		if (!previous[i] || gs_texture_get_width(previous[i]) != hs_graph_extent(width, s->graph.divisor[i]) ||
-		    gs_texture_get_height(previous[i]) != hs_graph_extent(height, s->graph.divisor[i]) ||
+		if (!previous[i] || gs_texture_get_width(previous[i]) != hs_graph_extent(rw, s->graph.divisor[i]) ||
+		    gs_texture_get_height(previous[i]) != hs_graph_extent(rh, s->graph.divisor[i]) ||
 		    gs_texture_get_color_format(previous[i]) != (s->graph.float16[i] ? GS_RGBA16F : format))
 			return false;
 	}
 	gs_eparam_t *image = s->ep_image;
 	for (unsigned pass = 0; pass < s->graph.count; pass++) {
 		gs_texrender_t *destination = s->graph_history[s->graph.owner[pass]][s->graph.transient[pass]?0:write];
-		const uint32_t pass_width = hs_graph_extent(width, s->graph.divisor[pass]);
-		const uint32_t pass_height = hs_graph_extent(height, s->graph.divisor[pass]);
+		const uint32_t pass_width = hs_graph_extent(rw, s->graph.divisor[pass]);
+		const uint32_t pass_height = hs_graph_extent(rh, s->graph.divisor[pass]);
 		gs_texrender_reset(destination);
 		if (!gs_texrender_begin(destination, pass_width, pass_height))
 			return false;
@@ -5640,7 +5685,7 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
 		}
 		graph_bind_controls(s);
 		graph_bind_builtins(s, pass_width, pass_height, flow, flow_step, flow_selected);
-		graph_bind_resolutions(s, width, height);
+		graph_bind_resolutions(s, rw, rh);
         /* Graph buffers store simulation data, not premultiplied output.
          * Alpha blending destroyed private alpha state (e.g. Datamosh's
          * temporal accumulator) when the first frame started at alpha=0.
@@ -5670,11 +5715,11 @@ static bool graph_render(struct hypershader_data *s, obs_source_t *target,
             gs_effect_set_texture(s->graph.previous[i],previous[i]);
 	}
 	graph_bind_controls(s);
-    graph_bind_builtins(s, width, height, flow, flow_step, flow_selected);
-    graph_bind_resolutions(s, width, height);
-    if (output_composition_enabled(s)) {
-        gs_texture_t *fx = output_render_effect(s, input, width, height, format);
-        if (!fx || !output_draw_composited(s, target ? input : NULL, fx, width, height, format))
+    graph_bind_builtins(s, rw, rh, flow, flow_step, flow_selected);
+    graph_bind_resolutions(s, rw, rh);
+    if (output_composition_enabled(s) || s->render_scale_percent != 100) {
+        gs_texture_t *fx = output_render_effect(s, input, rw, rh, format);
+        if (!fx || !output_present_scaled(s, target ? input : NULL, fx, width, height, format))
             return false;
     } else {
         while (gs_effect_loop(s->effect, "Draw"))
@@ -5782,7 +5827,9 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 	}
 
 	consume_history_reset(s);
-	update_shader_uniforms(s, width, height);
+	const uint32_t rw=hs_render_scale_extent(width,s->render_scale_percent);
+    const uint32_t rh=hs_render_scale_extent(height,s->render_scale_percent);
+    update_shader_uniforms(s, rw, rh);
 
 	/* Modern Color Space Handling (Rule 8) */
 	enum gs_color_space space = filter_get_color_space(s, 0, NULL);
@@ -5813,7 +5860,8 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 	 * MediaPipe-aware shaders remain on the existing non-feedback route. */
 	if (s->ep_history && s->effect && s->metadata_rc &&
 	    !s->metadata_rc->capabilities.mediapipe_enabled) {
-		if (s->feedback_width != width || s->feedback_height != height) {
+		if (s->feedback_width != width || s->feedback_height != height ||
+            s->feedback_scale_percent != s->render_scale_percent) {
 			for (int i=0;i<2;i++) {
 				if (s->history[i]) {
 					gs_texrender_destroy(s->history[i]);
@@ -5823,6 +5871,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 			s->history_idx=0;
 			s->feedback_width=width;
 			s->feedback_height=height;
+            s->feedback_scale_percent=s->render_scale_percent;
 		}
 		if (!s->feedback_input)
 			s->feedback_input=gs_texrender_create(format,GS_ZS_NONE);
@@ -5837,9 +5886,14 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 				gs_matrix_push();
 				gs_matrix_identity();
 				gs_ortho(0,(float)width,0,(float)height,-100,100);
-				gs_effect_t *default_fx=obs_get_base_effect(OBS_EFFECT_DEFAULT);
-				while (gs_effect_loop(default_fx,"Draw"))
-					obs_source_video_render(target);
+                if (obs_source_get_type(target)==OBS_SOURCE_TYPE_FILTER ||
+                    (obs_source_get_output_flags(target)&OBS_SOURCE_CUSTOM_DRAW)) {
+                    obs_source_video_render(target);
+                } else {
+                    gs_effect_t *default_fx=obs_get_base_effect(OBS_EFFECT_DEFAULT);
+                    while (gs_effect_loop(default_fx,"Draw"))
+                        obs_source_video_render(target);
+                }
 				gs_matrix_pop();
 				gs_projection_pop();
 				gs_texrender_end(s->feedback_input);
@@ -5848,17 +5902,34 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 				int ping=s->history_idx;
 				int pong=(ping+1)%2;
 				gs_texture_t *previous=s->history_needs_seed ? NULL : gs_texrender_get_texture(s->history[pong]);
-				gs_texrender_reset(s->history[ping]);
-				if (input && gs_texrender_begin(s->history[ping],width,height)) {
+				/* Seed a reduced-resolution history from the full-size upstream
+                 * frame using the same normalized UVs as subsequent frames. */
+                if (!previous && input && s->render_scale_percent!=100) {
+                    gs_texrender_reset(s->history[pong]);
+                    if (!gs_texrender_begin(s->history[pong],rw,rh)) {
+                        obs_source_skip_video_filter(s->context);
+                        return;
+                    }
+                    gs_ortho(0,(float)rw,0,(float)rh,-100,100);
+                    gs_blend_state_push();
+                    gs_enable_blending(false);
+                    bool seeded=output_draw_raw(input,rw,rh);
+                    gs_blend_state_pop();
+                    gs_texrender_end(s->history[pong]);
+                    if (!seeded) {obs_source_skip_video_filter(s->context);return;}
+                    previous=gs_texrender_get_texture(s->history[pong]);
+                }
+                gs_texrender_reset(s->history[ping]);
+				if (input && gs_texrender_begin(s->history[ping],rw,rh)) {
 					gs_projection_push();
 					gs_matrix_push();
 					gs_matrix_identity();
-					gs_ortho(0,(float)width,0,(float)height,-100,100);
+					gs_ortho(0,(float)rw,0,(float)rh,-100,100);
 					gs_eparam_t *image=s->ep_image;
 					if (image)gs_effect_set_texture(image,input);
 					gs_effect_set_texture(s->ep_history,previous ? previous : input);
 					while (gs_effect_loop(s->effect,"Draw"))
-						gs_draw_sprite(input,0,width,height);
+						gs_draw_sprite(input,0,rw,rh);
 					gs_matrix_pop();
 					gs_projection_pop();
 					gs_texrender_end(s->history[ping]);
@@ -5896,7 +5967,7 @@ static void filter_video_render(void *data, gs_effect_t *effect)
 		return;
 	}
 
-    if (output_composition_enabled(s)) {
+    if (output_composition_enabled(s) || s->render_scale_percent != 100) {
         if (!output_render_composited_filter(s, target, width, height, format)) {
             blog(LOG_WARNING, "[hypershader] Composition render failed; passing source");
             obs_source_skip_video_filter(s->context);
@@ -6127,7 +6198,9 @@ static void source_video_render(void *data, gs_effect_t *effect)
 
 	if (s->effect && width && height)
 		consume_history_reset(s);
-	update_shader_uniforms(s, width, height);
+	const uint32_t rw=hs_render_scale_extent(width,s->render_scale_percent);
+    const uint32_t rh=hs_render_scale_extent(height,s->render_scale_percent);
+    update_shader_uniforms(s, rw, rh);
 
 	if (!s->effect) {
 		/* pthread_mutex_unlock(&s->mutex); - REMOVED */
@@ -6181,10 +6254,10 @@ static void source_video_render(void *data, gs_effect_t *effect)
 		 * initialize the read surface to transparent, including on resize,
 		 * instead of sampling a null texture (opaque black on GL). */
 		gs_texture_t *previous = gs_texrender_get_texture(prev);
-		if (s->history_needs_seed || !previous || gs_texture_get_width(previous) != width ||
-		    gs_texture_get_height(previous) != height) {
+		if (s->history_needs_seed || !previous || gs_texture_get_width(previous) != rw ||
+		    gs_texture_get_height(previous) != rh) {
 			gs_texrender_reset(prev);
-			if (!gs_texrender_begin(prev, width, height))
+			if (!gs_texrender_begin(prev, rw, rh))
 				return;
 			struct vec4 seed;
 			vec4_zero(&seed);
@@ -6194,16 +6267,16 @@ static void source_video_render(void *data, gs_effect_t *effect)
 
 		/* A texrender must be reset each time it becomes the write target. */
 		gs_texrender_reset(curr);
-		if (gs_texrender_begin(curr, width, height)) {
+		if (gs_texrender_begin(curr, rw, rh)) {
 			struct vec4 clear_color;
 			vec4_zero(&clear_color);
 			gs_clear(GS_CLEAR_COLOR, &clear_color, 0.0f, 0);
-			gs_ortho(0.0f, (float)width, 0.0f, (float)height, -100.0f, 100.0f);
+			gs_ortho(0.0f, (float)rw, 0.0f, (float)rh, -100.0f, 100.0f);
 
 			gs_effect_set_texture(prev_frame_param, gs_texrender_get_texture(prev));
 
 			while (gs_effect_loop(current_effect, "Draw")) {
-				gs_draw_sprite(s->dummy_texture, 0, width, height);
+				gs_draw_sprite(s->dummy_texture, 0, rw, rh);
 			}
 			gs_texrender_end(curr);
 		} else {
@@ -6232,9 +6305,9 @@ static void source_video_render(void *data, gs_effect_t *effect)
 		s->history_needs_seed = false;
 	} else {
 		/* Standard Render (No Persistence) */
-        if (output_composition_enabled(s)) {
-            gs_texture_t *fx = output_render_effect(s, s->dummy_texture, width, height, format);
-            if (!fx || !output_draw_composited(s, NULL, fx, width, height, format))
+        if (output_composition_enabled(s) || s->render_scale_percent != 100) {
+            gs_texture_t *fx = output_render_effect(s, s->dummy_texture, rw, rh, format);
+            if (!fx || !output_present_scaled(s, NULL, fx, width, height, format))
                 blog(LOG_ERROR, "[hypershader] Standalone source composite failed");
         } else {
             while (gs_effect_loop(current_effect, "Draw"))

@@ -494,6 +494,55 @@ int main(int argc,char** argv) {
   std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<pass<<"\n";
   return pass?0:1;
  }
+ if(mode=="budget-scale"){
+  obs_enter_graphics();
+  gs_texture_set_image(primary->texture,fixed.data(),W*4,false);
+  obs_leave_graphics();
+  auto scale=[&](int percent){
+   auto* cfg=obs_source_get_settings(filter);
+   obs_data_set_int(cfg,"render_scale_percent",percent);
+   obs_source_update(filter,cfg);obs_data_release(cfg);
+  };
+  int bypass=0;
+  for(int i=0;i<40;i++){
+   auto out=render(source);drain_ui();
+   if(i>20&&diff(out,fixed)==0)++bypass;
+   std::this_thread::sleep_for(30ms);
+  }
+  scale(50);
+  int seed=-1,mature=-1,valid=0;
+  size_t pos=4*(H/2*W+W/2);
+  for(int i=0;i<35;i++){
+   auto out=render(source);drain_ui();
+   if(out.size()==W*H*4 && out[pos+2]<=3 && diff(out,fixed)!=0){
+    if(seed<0)seed=out[pos];
+    mature=out[pos];++valid;
+   }
+   std::this_thread::sleep_for(30ms);
+  }
+  scale(100);
+  int again=0;
+  for(int i=0;i<15;i++){
+   auto out=render(source);drain_ui();
+   if(diff(out,fixed)==0)++again;
+   std::this_thread::sleep_for(30ms);
+  }
+  scale(50);
+  int restart=-1;
+  for(int i=0;i<15;i++){
+   auto out=render(source);drain_ui();
+   if(out.size()==W*H*4 && diff(out,fixed)!=0 && out[pos+2]<=3){restart=out[pos];break;}
+   std::this_thread::sleep_for(30ms);
+  }
+  bool pass=bypass==19&&seed>=0&&seed<15&&mature>seed+20&&valid>=25&&again>=10&&restart>=0&&restart<15&&
+      obs_source_get_width(source)==W&&obs_source_get_height(source)==H;
+  std::cout<<"TWO_BUFFER_BUDGET_SCALE bypass="<<bypass<<" seed="<<seed<<" mature="<<mature<<" valid="<<valid
+           <<" bypass_again="<<again<<" restart="<<restart<<" PASS="<<pass<<"\n";
+  obs_source_dec_showing(source);obs_source_filter_remove(source,filter);
+  obs_source_release(filter);obs_source_release(source);drain_ui();obs_shutdown();
+  std::cout<<"TWO_BUFFER_RUNTIME_PASS="<<pass<<"\n";
+  return pass?0:1;
+ }
  if(mode=="budget"){
   obs_enter_graphics();
   gs_texture_set_image(primary->texture,fixed.data(),W*4,false);

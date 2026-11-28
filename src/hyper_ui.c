@@ -544,6 +544,17 @@ void properties_add_global_overrides(obs_properties_t *props, struct hypershader
             obs_module_text("ResetHistory"), reset_history_clicked, s);
         obs_property_set_long_description(reset, obs_module_text("ResetHistory.Description"));
     }
+    if (!s || s->kind != HYPER_KIND_TRANSITION) {
+        obs_property_t *scale = obs_properties_add_list(global, "render_scale_percent",
+            "Render Scale", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+        obs_property_list_add_int(scale, "25%", 25);
+        obs_property_list_add_int(scale, "50%", 50);
+        obs_property_list_add_int(scale, "75%", 75);
+        obs_property_list_add_int(scale, "100%", 100);
+        obs_property_set_long_description(scale,
+            "Internal shader resolution; output and upstream video stay full size. "
+            "Changing scale restarts temporal history. Lower values trade detail for fewer shader pixels.");
+    }
     properties_add_compositing_controls(global);
     obs_properties_add_group(props, "global_overrides_group", "Global Overrides",
                              OBS_GROUP_NORMAL, global);
@@ -3021,6 +3032,7 @@ void hyper_ui_get_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, "preset_schema", 2);
 	obs_data_set_default_int(settings, "input_mode", INPUT_MODE_SOURCE);
 	obs_data_set_default_double(settings, "speed", 1.0);
+    obs_data_set_default_int(settings, "render_scale_percent", 100);
     obs_data_set_default_double(settings, "compose_base_opacity", 1.0);
     obs_data_set_default_double(settings, "compose_effect_opacity", 1.0);
     obs_data_set_default_int(settings, "compose_blend_mode", 0);
