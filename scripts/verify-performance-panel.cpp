@@ -5,6 +5,7 @@
 #include <graphics/vec4.h>
 #include <util/platform.h>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <thread>
 #include <chrono>
@@ -114,14 +115,33 @@ int main(int argc,char**argv){
  // Actual plugin draw: modulated float must differ from saved base; stale
  // PCM and wrong shader identity must preserve the unmodulated value.
  auto*c=make("Modulation fixture","shaders/tests/performance_modulation_probe.effect");
+ // libobs defers video-source updates until the next video tick. Wait for
+ // its actual update signal before sampling a newly published render value.
+ std::atomic<unsigned> applied{0};
+ auto onUpdate=[](void*data,calldata_t*){static_cast<std::atomic<unsigned>*>(data)->fetch_add(1);};
+ auto*sourceSignals=obs_source_get_signal_handler(c);
+ signal_handler_connect(sourceSignals,"update",onUpdate,&applied);
+ bool updateBoundary=true;
+ auto apply=[&](obs_data_t*s){
+   const unsigned before=applied.load();
+   obs_source_update(c,s);obs_data_release(s);
+   for(int i=0;i<100&&applied.load()==before;i++){drain();std::this_thread::sleep_for(5ms);}
+   updateBoundary &= applied.load()!=before;
+ };
  auto configure=[&](int mode,const char*path){auto*s=obs_source_get_settings(c);
  obs_data_set_double(s,"speed",0);obs_data_set_double(s,"param_amount",.25);
  obs_data_set_string(s,"perf_mod_shader",path);obs_data_set_string(s,"perf_mod_param","param_amount");
  obs_data_set_int(s,"perf_mod_source",mode);obs_data_set_double(s,"perf_mod_depth",.5);obs_data_set_double(s,"perf_mod_hz",1);
- obs_source_update(c,s);obs_data_release(s);};
+ apply(s);};
  configure(0,"shaders/tests/performance_modulation_probe.effect");
  for(int i=0;i<65;i++){drain();render(c);std::this_thread::sleep_for(15ms);}
  int baseline=red(c);
+ auto changeBase=[&](double value){
+   auto*d=obs_source_get_settings(c);obs_data_set_double(d,"param_amount",value);apply(d);return red(c);
+ };
+ int explicitZero=changeBase(0.0), changedBase=changeBase(.6), restoredBase=changeBase(.25);
+ bool baseUpdates=updateBoundary&&explicitZero<=2&&std::abs(changedBase-153)<=2&&std::abs(restoredBase-baseline)<=2;
+ std::cout<<"PERFORMANCE_CACHE explicit_zero="<<explicitZero<<" changed="<<changedBase<<" restored="<<restoredBase<<" PASS="<<baseUpdates<<std::endl;
  configure(1,"shaders/tests/performance_modulation_probe.effect");int lfo=red(c);
  configure(2,"shaders/tests/performance_modulation_probe.effect");int absentAudio=red(c);
  auto*props=obs_source_properties(c);auto*ap=obs_properties_get(props,"audio_source");bool modPicker=ap&&obs_property_visible(ap);obs_properties_destroy(props);
@@ -148,8 +168,9 @@ int main(int argc,char**argv){
  configure(1,"shaders/root/other.effect");int wrong=red(c);
  bool pcmWorks=pcmPeak>baseline+8&&pcmLive&&std::abs(stale-baseline)<3;
  std::cout<<"PERFORMANCE_PCM peak="<<pcmPeak<<" baseline="<<baseline<<" stale="<<stale<<" fresh="<<pcmLive<<" PASS="<<pcmWorks<<std::endl;
- bool modulated=pcmWorks&&baseline>55&&baseline<75&&lfo>baseline+80&&std::abs(absentAudio-baseline)<3&&std::abs(wrong-baseline)<3&&get(c,"param_amount")==.25&&modPicker;
+ bool modulated=updateBoundary&&baseUpdates&&pcmWorks&&baseline>55&&baseline<75&&lfo>baseline+80&&std::abs(absentAudio-baseline)<3&&std::abs(wrong-baseline)<3&&get(c,"param_amount")==.25&&modPicker;
  std::cout<<"PERFORMANCE_MODULATION base="<<baseline<<" lfo="<<lfo<<" missing_audio="<<absentAudio<<" wrong_shader="<<wrong<<" audio_picker="<<modPicker<<" PASS="<<modulated<<std::endl;
+ signal_handler_disconnect(sourceSignals,"update",onUpdate,&applied);
  obs_source_dec_showing(c);obs_source_remove(c);obs_source_release(c);
  ok=inPlace&&modulated&&modUi&&controls&&buttons&&locked&&edit&&middle&&undoWorks&&paused&&resumed&&disabled&&enabled&&telemetry&&switchWorks;
  std::cout<<"PERFORMANCE_PANEL controls="<<controls<<" locked="<<locked<<" edit="<<edit<<" morph="<<middle<<" undo="<<undoWorks<<" pause="<<paused<<" resume="<<resumed<<" bypass="<<(disabled&&enabled)<<" telemetry="<<telemetry<<" mod_ui="<<modUi<<" target_switch="<<switchWorks<<" PASS="<<ok<<std::endl;

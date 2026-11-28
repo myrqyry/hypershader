@@ -2358,6 +2358,8 @@ static void hs_source_audio_defaults(struct hypershader_data *s, obs_data_t *set
     obs_data_set_default_int(settings, "channel0_type", texture ? 3 : 0);
 }
 
+static void cache_runtime_settings(struct hypershader_data *s, obs_data_t *settings);
+
 static void filter_update(void *data, obs_data_t *settings)
 {
 	struct hypershader_data *s = data;
@@ -2543,6 +2545,7 @@ static void filter_update(void *data, obs_data_t *settings)
 			}
 		}
 	}
+	cache_runtime_settings(s, settings);
 	obs_leave_graphics();
 
     float requested_speed = (float)obs_data_get_double(settings, "speed");
@@ -2811,6 +2814,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 		return NULL;
 	}
 	atomic_init(&s->last_audio_capture_ns, 0);
+	atomic_init(&s->mod_motion_requested, false);
 	atomic_init(&s->live_render_ns, 0);
 	atomic_init(&s->live_signal_flags, 0);
 	atomic_init(&s->live_audio_permille, 0);
@@ -3316,16 +3320,7 @@ static void sight_tick(struct hypershader_data *s)
 	pthread_mutex_unlock(&s->mutex);
     s->sight_motion_present=false;
     s->sight_motion_energy=0.f;
-    bool mod_motion = false;
-    if (enabled) {
-        obs_data_t *cfg = obs_source_get_settings(s->context);
-        if (cfg) {
-            const char *shader = obs_data_get_string(cfg, "perf_mod_shader");
-            mod_motion = obs_data_get_int(cfg, "perf_mod_source") == 6 && *shader &&
-                strcmp(shader, obs_data_get_string(cfg, "shader_file")) == 0;
-            obs_data_release(cfg);
-        }
-    }
+    bool mod_motion = atomic_load_explicit(&s->mod_motion_requested, memory_order_relaxed);
     if (enabled && (s->ep_sight_motion_present || s->ep_sight_motion_energy || mod_motion)) {
         sight_motion_v1 motion;
         if (hs_sight_motion_read(s->context,&motion)) {
@@ -3886,6 +3881,10 @@ static void shader_load_complete_task(void *param)
 		s->shader_path = bstrdup(task->path);
 		bfree(s->performance_compiled_path);
 		s->performance_compiled_path = bstrdup(obs_data_get_string(task->settings, "shader_file"));
+        obs_data_t *current_settings = obs_source_get_settings(s->context);
+        cache_runtime_settings(s, current_settings ? current_settings : task->settings);
+        if (current_settings)
+            obs_data_release(current_settings);
 
 #ifdef _DEBUG
 		if (s->watcher)
@@ -4144,22 +4143,8 @@ static void update_reaction_state(struct hypershader_data *s)
         bind_reaction_state(s);
         return;
     }
-    obs_data_t *settings=obs_source_get_settings(s->context);
-    if(!settings) return;
-    int driver=(int)obs_data_get_int(settings,"param_response_driver");
-    const char *source=obs_data_get_string(settings,"audio_source");
-    bool mix=obs_data_get_int(settings,"input_mode")==INPUT_MODE_AUDIO;
-    bool enabled=obs_data_get_bool(settings,"enable_sound") && source && *source;
-    bool temporal=!obs_data_has_user_value(settings,"param_temporal_response") ||
-                  obs_data_get_bool(settings,"param_temporal_response");
-    uint64_t input_key=1469598103934665603ULL;
-    if(source) for(const unsigned char *p=(const unsigned char *)source;*p;p++)
-        input_key=(input_key ^ *p)*1099511628211ULL;
-    input_key=(input_key ^ (uint64_t)(unsigned)driver)*1099511628211ULL;
-    input_key=(input_key ^ (uint64_t)mix)*1099511628211ULL;
-    input_key=(input_key ^ (uint64_t)obs_data_get_int(settings,"audio_mix"))*1099511628211ULL;
-    input_key=(input_key ^ (uint64_t)enabled)*1099511628211ULL;
-    input_key=(input_key ^ (uint64_t)temporal)*1099511628211ULL;
+    const int driver=s->reaction_driver;
+    const uint64_t input_key=s->reaction_config_key;
     if(s->reaction_input_key!=input_key || !s->reaction_frame_ns ||
        now<s->reaction_frame_ns || now-s->reaction_frame_ns>500000000ULL) {
         memset(&s->reaction_state,0,sizeof(s->reaction_state));
@@ -4177,31 +4162,17 @@ static void update_reaction_state(struct hypershader_data *s)
     case 5:signal=s->render_audio_bands[7];break;
     default:break;
     }
-    struct hs_reaction_config cfg={
-        .threshold={reaction_setting(settings,"param_threshold",.025f),
-                    reaction_setting(settings,"param_strong_threshold",.16f),
-                    reaction_setting(settings,"param_accent_threshold",.30f)},
-        .width=reaction_setting(settings,"param_transition_width",.045f),
-        .hysteresis=reaction_setting(settings,"param_hysteresis",.008f),
-        .attack=reaction_setting(settings,"param_attack_ms",35.0f)*.001f,
-        .release=reaction_setting(settings,"param_release_ms",120.0f)*.001f,
-        .hold=reaction_setting(settings,"param_hold_ms",90.0f)*.001f,
-        .frequency=reaction_setting(settings,"param_spring_frequency",3.0f),
-        .damping=reaction_setting(settings,"param_spring_damping",.55f)
-    };
-    if(!temporal) cfg.attack=cfg.release=cfg.hold=cfg.hysteresis=0.0f;
     // A source can stop sending PCM without ever sending a final silent
     // frame. A repeatedly analyzed FFT window is not new audio.
     uint64_t capture=atomic_load_explicit(&s->last_audio_capture_ns,memory_order_acquire);
     uint64_t wall_now=os_gettime_ns();
     if(!capture || wall_now<capture || wall_now-capture>250000000ULL)
         signal=0.0f;
-    if(enabled || mix)
-        hs_reaction_step(&s->reaction_state,&cfg,
-                         signal*reaction_setting(settings,"param_sensitivity",1.0f),dt);
+    if(s->reaction_enabled)
+        hs_reaction_step(&s->reaction_state,&s->reaction_config,
+                         signal*s->reaction_sensitivity,dt);
     else
         memset(&s->reaction_state,0,sizeof(s->reaction_state));
-    obs_data_release(settings);
     bind_reaction_state(s);
 }
 
@@ -4219,16 +4190,9 @@ static void update_animated_channels(struct hypershader_data *s)
     enum hs_image_playback mode = HS_IMAGE_CONTINUOUS;
     bool reactive = s->ep_audio_reaction_state && s->effect &&
         s->ep_animation_playback;
-    if (reactive) {
-        obs_data_t *settings = obs_source_get_settings(s->context);
-        if (settings) {
-            int configured = obs_data_has_user_value(settings,"param_animation_playback")
-                ? (int)obs_data_get_int(settings,"param_animation_playback") : HS_IMAGE_RESTART;
-            if (configured >= HS_IMAGE_CONTINUOUS && configured <= HS_IMAGE_RESUME)
-                mode = (enum hs_image_playback)configured;
-            obs_data_release(settings);
-        }
-    }
+    if (reactive && s->animation_policy >= HS_IMAGE_CONTINUOUS &&
+        s->animation_policy <= HS_IMAGE_RESUME)
+        mode = (enum hs_image_playback)s->animation_policy;
     uint64_t frame_ns = obs_get_video_frame_time();
     for (int i=0; i<CHANNEL_COUNT; ++i) {
         if (s->channel_types[i] != 1 || !s->ep_input[i]) continue;
@@ -4262,38 +4226,19 @@ static void update_sprite_atlases(struct hypershader_data *s)
     bool any=false;
     for(int i=0;i<CHANNEL_COUNT;++i) any|=s->ep_input_atlas[i]!=NULL;
     if(!any) return;
-    obs_data_t *settings=obs_source_get_settings(s->context);
-    if(!settings) return;
-    const char *states[]={"idle","active","strong","accent"};
-    int policy=obs_data_has_user_value(settings,"param_animation_playback")
-        ? (int)obs_data_get_int(settings,"param_animation_playback"):1;
+    int policy=s->animation_policy;
     uint64_t now=obs_get_video_frame_time();
     for(int i=0;i<CHANNEL_COUNT;++i) {
         if(!s->ep_input_atlas[i]) continue;
         int state=i+(s->kind==HYPER_KIND_SOURCE?0:1);
         if(state>=4) continue;
-        const char *prefix=states[state];
-        char fps_key[64];
-        snprintf(fps_key,sizeof(fps_key),"param_%s_atlas_fps",prefix);
-        struct hs_atlas_config c={
-            .columns=atlas_setting(settings,prefix,"columns",1),
-            .rows=atlas_setting(settings,prefix,"rows",1),
-            .first=atlas_setting(settings,prefix,"first",0),
-            .count=atlas_setting(settings,prefix,"count",0),
-            .mode=atlas_setting(settings,prefix,"mode",0),
-            .fps=obs_data_has_user_value(settings,fps_key)?obs_data_get_double(settings,fps_key):12.0,
-            .rest_min=state==0?reaction_setting(settings,"param_idle_atlas_rest_min",1.0f):0.0,
-            .rest_max=state==0?reaction_setting(settings,"param_idle_atlas_rest_max",4.0f):0.0
-        };
-        if(state>0&&c.mode>HS_ATLAS_RANDOM) c.mode=HS_ATLAS_LOOP;
-        c=hs_atlas_sanitize(c);
+        struct hs_atlas_config c=s->atlas_config[state];
         bool trigger=state>0&&s->reaction_state.target[state-1]>0.01f;
         bool visible=state==0||s->reaction_state.gate[state-1]>0.01f;
         unsigned frame=hs_atlas_step(&s->atlas_clock[i],c,now,state==0?0:policy,
             trigger,visible,(uint32_t)((uintptr_t)s>>4)^(uint32_t)now^(uint32_t)(i+1));
         vec4_set(&s->atlas_value[i],(float)c.columns,(float)c.rows,(float)frame,0.0f);
     }
-    obs_data_release(settings);
     bind_sprite_atlases(s);
 }
 
@@ -4788,37 +4733,24 @@ static void update_performance_stats(struct hypershader_data *s, double render_t
 /* A live modulation is a bounded render-time override, not a settings
  * mutation. One mapping per instance; stored path binds it to its shader.
  * The same evaluated signal feeds regular Draw and every graph pass. */
-static float performance_modulated_value(struct hypershader_data *s, obs_data_t *settings,
-		const struct shader_param_meta *m, const char *prop, float base)
+static float performance_modulated_value(struct hypershader_data *s,
+        const struct shader_param_meta *m, float base)
 {
-	int driver = (int)obs_data_get_int(settings, "perf_mod_source");
-	if (driver < 1 || driver > 8 || !m->has_min || !m->has_max ||
-	    !isfinite(m->min) || !isfinite(m->max) || m->min >= m->max ||
-	    strcmp(obs_data_get_string(settings, "perf_mod_param"), prop) != 0 ||
-	    !s->performance_compiled_path ||
-	    strcmp(s->performance_compiled_path, obs_data_get_string(settings, "shader_file")) != 0 ||
-	    strcmp(obs_data_get_string(settings, "perf_mod_shader"),
-		   obs_data_get_string(settings, "shader_file")) != 0)
-		return base;
-	/* An old effect may remain active during a pending replacement.
-	 * The published render identity gates the mapping in the UI; here
-	 * the current effect metadata must also match the stored target. */
-    if(driver==8){
-        if(m->audio_tag)return base;
-        for(int i=0;i<AUDIO_MAP_SLOTS;i++)
-            if(s->audio_map_name[i]&&!strcmp(s->audio_map_name[i],m->name))return base;
+    const int driver = m->render_mod_driver;
+    if (!driver)
+        return base;
+    if (driver == 8) {
         float value=0;
-        const long long age=obs_data_get_int(settings,"perf_mod_data_age_ms");
-        if(!hs_data_driver_read(s->data_driver,obs_data_get_string(settings,"perf_mod_data_uuid"),
-            age>0?(int)fmin(60000.,(double)age):5000,&value))return base;
+        if (!hs_data_driver_read(s->data_driver,s->mod_uuid,s->mod_age_ms,&value))
+            return base;
         return fmaxf(m->min,fminf(m->max,value));
     }
 	float signal = 0.f;
-	const float depth = (float)obs_data_get_double(settings, "perf_mod_depth");
+	const float depth = s->mod_depth;
 	if (!isfinite(depth) || depth <= 0.f)
 		return base;
 	if (driver == 1) {
-		const float hz = (float)obs_data_get_double(settings, "perf_mod_hz");
+		const float hz = s->mod_hz;
 		signal = cosf(6.28318530718f * s->time_accumulator *
 			(isfinite(hz) ? fmaxf(.01f, fminf(hz, 10.f)) : 1.f));
 	} else if (driver <= 5) {
@@ -4848,22 +4780,91 @@ static float performance_modulated_value(struct hypershader_data *s, obs_data_t 
 		base + signal * fminf(depth, 1.f) * (m->max - m->min)));
 }
 
-/* Snapshot settings once per render, not once per technique. Graphics
- * serialization also protects descriptor lifetime across effect replacement. */
-static void graph_snapshot_controls(struct hypershader_data *s)
+/* Decode persistent settings only on update or effect replacement. The graphics
+ * context serializes publication with drawing; only the motion-request bit is
+ * consumed by video_tick outside that context. */
+static void cache_runtime_settings(struct hypershader_data *s, obs_data_t *settings)
 {
-	if (!s->metadata_rc)
-		return;
-	obs_data_t *settings = obs_source_get_settings(s->context);
+    if (!settings) return;
+    const char *shader = obs_data_get_string(settings,"shader_file");
+    const char *mod_shader = obs_data_get_string(settings,"perf_mod_shader");
+    const char *mod_param = obs_data_get_string(settings,"perf_mod_param");
+    const int mod_driver = (int)obs_data_get_int(settings,"perf_mod_source");
+    const bool requested = *shader && !strcmp(shader,mod_shader);
+    atomic_store_explicit(&s->mod_motion_requested,requested && mod_driver==6,memory_order_relaxed);
+    const bool driver_valid = requested && s->performance_compiled_path &&
+        !strcmp(shader,s->performance_compiled_path) && mod_driver>=1 && mod_driver<=8;
+    s->mod_depth=(float)obs_data_get_double(settings,"perf_mod_depth");
+    s->mod_hz=(float)obs_data_get_double(settings,"perf_mod_hz");
+    const char *uuid=obs_data_get_string(settings,"perf_mod_data_uuid");
+    s->mod_uuid[0]=0;
+    if(strlen(uuid)==36) memcpy(s->mod_uuid,uuid,37);
+    const long long age=obs_data_get_int(settings,"perf_mod_data_age_ms");
+    s->mod_age_ms=age>0?(int)fmin(60000.,(double)age):5000;
+    int driver=(int)obs_data_get_int(settings,"param_response_driver");
+    const char *source=obs_data_get_string(settings,"audio_source");
+    bool mix=obs_data_get_int(settings,"input_mode")==INPUT_MODE_AUDIO;
+    bool enabled=obs_data_get_bool(settings,"enable_sound") && source && *source;
+    bool temporal=!obs_data_has_user_value(settings,"param_temporal_response") ||
+                  obs_data_get_bool(settings,"param_temporal_response");
+    uint64_t input_key=1469598103934665603ULL;
+    if(source) for(const unsigned char *p=(const unsigned char *)source;*p;p++)
+        input_key=(input_key ^ *p)*1099511628211ULL;
+    input_key=(input_key ^ (uint64_t)(unsigned)driver)*1099511628211ULL;
+    input_key=(input_key ^ (uint64_t)mix)*1099511628211ULL;
+    input_key=(input_key ^ (uint64_t)obs_data_get_int(settings,"audio_mix"))*1099511628211ULL;
+    input_key=(input_key ^ (uint64_t)enabled)*1099511628211ULL;
+    input_key=(input_key ^ (uint64_t)temporal)*1099511628211ULL;
+    struct hs_reaction_config cfg={
+        .threshold={reaction_setting(settings,"param_threshold",.025f),
+                    reaction_setting(settings,"param_strong_threshold",.16f),
+                    reaction_setting(settings,"param_accent_threshold",.30f)},
+        .width=reaction_setting(settings,"param_transition_width",.045f),
+        .hysteresis=reaction_setting(settings,"param_hysteresis",.008f),
+        .attack=reaction_setting(settings,"param_attack_ms",35.0f)*.001f,
+        .release=reaction_setting(settings,"param_release_ms",120.0f)*.001f,
+        .hold=reaction_setting(settings,"param_hold_ms",90.0f)*.001f,
+        .frequency=reaction_setting(settings,"param_spring_frequency",3.0f),
+        .damping=reaction_setting(settings,"param_spring_damping",.55f)
+    };
+    if(!temporal) cfg.attack=cfg.release=cfg.hold=cfg.hysteresis=0.0f;
+    s->reaction_config=cfg;
+    s->reaction_config_key=input_key;
+    s->reaction_driver=driver;
+    s->reaction_enabled=enabled || mix;
+    s->reaction_sensitivity=reaction_setting(settings,"param_sensitivity",1.0f);
+    s->animation_policy=obs_data_has_user_value(settings,"param_animation_playback")
+        ? (int)obs_data_get_int(settings,"param_animation_playback") : HS_IMAGE_RESTART;
+    const char *states[]={"idle","active","strong","accent"};
+    for (int state=0;state<4;state++) {
+        const char *prefix=states[state];
+        char fps_key[64];
+        snprintf(fps_key,sizeof(fps_key),"param_%s_atlas_fps",prefix);
+        struct hs_atlas_config c={
+            .columns=atlas_setting(settings,prefix,"columns",1),
+            .rows=atlas_setting(settings,prefix,"rows",1),
+            .first=atlas_setting(settings,prefix,"first",0),
+            .count=atlas_setting(settings,prefix,"count",0),
+            .mode=atlas_setting(settings,prefix,"mode",0),
+            .fps=obs_data_has_user_value(settings,fps_key)?obs_data_get_double(settings,fps_key):12.0,
+            .rest_min=state==0?reaction_setting(settings,"param_idle_atlas_rest_min",1.0f):0.0,
+            .rest_max=state==0?reaction_setting(settings,"param_idle_atlas_rest_max",4.0f):0.0
+        };
+        if(state>0&&c.mode>HS_ATLAS_RANDOM) c.mode=HS_ATLAS_LOOP;
+        c=hs_atlas_sanitize(c);
+        s->atlas_config[state]=c;
+    }
+    if (!s->metadata_rc) return;
 	for (size_t i = 0; i < s->metadata_rc->meta.num; i++) {
 		struct shader_param_meta *m = &s->metadata_rc->meta.array[i];
 		m->render_valid = false;
+		m->render_mod_driver = 0;
 		if (!settings || !m->render_key[0])
 			continue;
 		const char *prop = m->render_key;
 		if (m->audio_tag && s->meta_audio_values && i < s->meta_audio_count) {
 			if (m->render_type == GS_SHADER_PARAM_FLOAT) {
-				m->render_value.scalar = s->meta_audio_values[i];
+				m->render_value.scalar = 0.f;
 				m->render_valid = true;
 			}
 			continue;
@@ -4873,7 +4874,23 @@ static void graph_snapshot_controls(struct hypershader_data *s)
 		case GS_SHADER_PARAM_FLOAT: {
 			float base = (float)(user || !m->has_default ?
 				obs_data_get_double(settings, prop) : m->default_val);
-			m->render_value.scalar = performance_modulated_value(s, settings, m, prop, base);
+			m->render_base = base;
+            m->render_value.scalar = base;
+            if (driver_valid && !strcmp(mod_param, prop) &&
+                m->has_min && m->has_max && isfinite(m->min) &&
+                isfinite(m->max) && m->min < m->max) {
+                bool mapped = false;
+                if (mod_driver == 8) {
+                    for (int j=0;j<AUDIO_MAP_SLOTS;j++) {
+                        char key[64];
+                        snprintf(key,sizeof(key),"mapping_%d_name",j);
+                        if (!strcmp(obs_data_get_string(settings,key),m->name))
+                            mapped = true;
+                    }
+                }
+                if (!mapped)
+                    m->render_mod_driver = mod_driver;
+            }
 			m->render_valid = true;
 			break;
 		}
@@ -4901,8 +4918,22 @@ static void graph_snapshot_controls(struct hypershader_data *s)
 			break;
 		}
 	}
-	if (settings)
-		obs_data_release(settings);
+}
+
+/* Only time-varying inputs are evaluated once per render. All passes share
+ * this value, including the unmodified base for missing/stale signals. */
+static void graph_snapshot_controls(struct hypershader_data *s)
+{
+    if (!s->metadata_rc) return;
+    for (size_t i=0;i<s->metadata_rc->meta.num;i++) {
+        struct shader_param_meta *m=&s->metadata_rc->meta.array[i];
+        if (!m->render_valid || m->render_type!=GS_SHADER_PARAM_FLOAT)
+            continue;
+        if (m->audio_tag && s->meta_audio_values && i<s->meta_audio_count)
+            m->render_value.scalar=s->meta_audio_values[i];
+        else
+            m->render_value.scalar=performance_modulated_value(s,m,m->render_base);
+    }
 }
 
 static void graph_bind_controls(struct hypershader_data *s)

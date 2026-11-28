@@ -16,6 +16,15 @@ class RenderControlCache(unittest.TestCase):
             self.assertNotIn(expensive, bind)
         self.assertIn("render_value", bind)
 
+    def test_frame_paths_do_not_read_settings(self):
+        for name in ("graph_snapshot_controls", "performance_modulated_value",
+                     "update_reaction_state", "update_animated_channels",
+                     "update_sprite_atlases", "sight_tick"):
+            with self.subTest(name=name):
+                for expensive in ("obs_source_get_settings", "obs_data_",
+                                  "reaction_setting(", "atlas_setting("):
+                    self.assertNotIn(expensive, body(name))
+
     def test_compositor_handles_resolved_at_creation(self):
         self.assertNotIn("gs_effect_get_param_by_name", body("output_draw_composited"))
         self.assertIn("compose_base_image", body("output_compositor_prepare"))

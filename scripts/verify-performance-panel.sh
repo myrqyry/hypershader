@@ -22,4 +22,4 @@ SHADER
 if ! (cd "$work/home" && HOME="$PWD" XDG_CONFIG_HOME="$PWD" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a timeout 35 "$work/panel" "$module" "$work/data") >"$work/result.log" 2>&1; then
  tail -65 "$work/result.log";exit 1
 fi
-grep -E '^PERFORMANCE_(PANEL|MODULATION|PCM|IN_PLACE)' "$work/result.log"
+grep -E '^PERFORMANCE_(PANEL|MODULATION|PCM|IN_PLACE|CACHE)' "$work/result.log"

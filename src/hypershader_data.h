@@ -134,6 +134,8 @@ struct shader_param_meta {
 	enum hs_metadata_signal render_audio_signal;
 	char render_key[256];
 	bool render_valid, render_default_color_valid;
+	float render_base;
+	int render_mod_driver;
 	struct vec4 render_default_color, render_color;
 	union { float scalar; int integer; bool boolean; } render_value;
 
@@ -250,6 +252,18 @@ struct hypershader_data {
 
 	char *shader_path;
 	char *performance_compiled_path;
+    /* Written only in the graphics context by settings update/effect load.
+     * No OBS settings object or string pointer is retained by the render path. */
+    float mod_depth, mod_hz;
+    char mod_uuid[37];
+    int mod_age_ms;
+    atomic_bool mod_motion_requested;
+    int reaction_driver, animation_policy;
+    bool reaction_enabled;
+    uint64_t reaction_config_key;
+    float reaction_sensitivity;
+    struct hs_reaction_config reaction_config;
+    struct hs_atlas_config atlas_config[4];
 	hs_data_driver *data_driver;
 	char *shader_error; /* Last compilation error message */
 	struct vec2 mouse_pos;
