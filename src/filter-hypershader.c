@@ -1493,6 +1493,53 @@ static void log_debug_direct(const char *msg)
 	}
 }
 
+/* Called with the graphics context and, during shader replacement, s->mutex.
+ * No scene allocation or GPU texture creation in the frame-render callback. */
+static void entity_scene_release(struct hypershader_data *s)
+{
+    const bool allocated = s->scene != NULL;
+    if (s->scene)
+        scene_destroy(s->scene);
+    s->scene = NULL;
+    bfree(s->entity_data);
+    s->entity_data = NULL;
+    if (s->entity_texture)
+        gs_texture_destroy(s->entity_texture);
+    s->entity_texture = NULL;
+    s->entity_count = 0;
+    s->entity_count_max = 0;
+    if (allocated)
+        blog(LOG_INFO, "[hypershader] EnTT Scene Manager released.");
+}
+
+static void entity_scene_configure(struct hypershader_data *s)
+{
+    if (!s->ep_entityCount || (!s->ep_entityTexture && !s->ep_entities)) {
+        entity_scene_release(s);
+        return;
+    }
+    if (!s->scene) {
+        s->scene = scene_create();
+        s->entity_count_max = 100;
+        s->entity_data = bzalloc((size_t)s->entity_count_max * 4 * sizeof(float));
+        if (!s->scene || !s->entity_data) {
+            entity_scene_release(s);
+            blog(LOG_WARNING, "[hypershader] Entity scene allocation failed");
+            return;
+        }
+        s->entity_count = scene_get_entities(s->scene, s->entity_data, s->entity_count_max);
+        blog(LOG_INFO, "[hypershader] EnTT Scene Manager initialized.");
+    }
+    if (s->ep_entityTexture && !s->entity_texture) {
+        s->entity_texture = gs_texture_create(s->entity_count_max, 1, GS_RGBA32F, 1, NULL, GS_DYNAMIC);
+        if (!s->entity_texture)
+            blog(LOG_WARNING, "[hypershader] Entity texture allocation failed");
+    } else if (!s->ep_entityTexture && s->entity_texture) {
+        gs_texture_destroy(s->entity_texture);
+        s->entity_texture = NULL;
+    }
+}
+
 static void filter_destroy(void *data)
 {
 	struct hypershader_data *s = data;
@@ -1582,24 +1629,11 @@ static void filter_destroy(void *data)
 		log_debug_direct("filter_destroy: mp_destroy end");
 	}
 
-	if (s->scene) {
-		log_debug_direct("filter_destroy: scene_destroy start");
-		scene_destroy(s->scene);
-		s->scene = NULL;
-		log_debug_direct("filter_destroy: scene_destroy end");
-	}
-	if (s->entity_data) {
-		bfree(s->entity_data);
-		s->entity_data = NULL;
-	}
+	entity_scene_release(s);
 	if (s->mp_mask_tex) {
 		gs_texture_destroy(s->mp_mask_tex);
 		s->mp_mask_tex = NULL;
 	}
-    if (s->entity_texture) {
-        gs_texture_destroy(s->entity_texture);
-        s->entity_texture = NULL;
-    }
 	if (s->mp_landmarks_tex) {
 		gs_texture_destroy(s->mp_landmarks_tex);
 		s->mp_landmarks_tex = NULL;
@@ -2905,16 +2939,7 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
 	else
 		blog(LOG_INFO, "[hypershader] Sight selected: skipping redundant native MediaPipe models");
 
-	/* Initialize EnTT Scene */
-	s->scene = scene_create();
-	s->entity_count_max = 100;
-	s->entity_data = (float *)bzalloc(s->entity_count_max * 4 * sizeof(float));
-	if (!s->entity_data) {
-		blog(LOG_ERROR, "[hypershader] Failed to allocate entity data");
-		filter_destroy(s);
-		return NULL;
-	}
-	blog(LOG_INFO, "[hypershader] EnTT Scene Manager initialized.");
+	/* Entity scenes are allocated only by a compatible compiled effect. */
 
 #ifdef __linux__
 	s->x11_display = XOpenDisplay(NULL);
@@ -3356,8 +3381,11 @@ static void filter_tick(void *data, float seconds)
 	sight_tick(s);
     /* A scene with an active entityTexture shader has actual evolving physics.
      * Do not spend cycles updating unused demo scenes in every filter. */
-    if (s->scene && s->ep_entityTexture && seconds > 0.0f)
-        scene_update(s->scene, s->mp_runner, seconds * 1000.0f);
+    if (seconds > 0.0f && pthread_mutex_trylock(&s->mutex) == 0) {
+        if (s->scene && (s->ep_entityTexture || s->ep_entities))
+            scene_update(s->scene, s->mp_runner, seconds * 1000.0f);
+        pthread_mutex_unlock(&s->mutex);
+    }
     /* hs_graph_frame and physical frame_count remain real render counters for
      * feedback initialization. hs_frame_index is virtual, governed by global speed. */
     s->shader_frame_count += s->time_scale;
@@ -3745,6 +3773,7 @@ static void shader_load_complete_task(void *param)
         s->ep_entityCount = gs_effect_get_param_by_name(s->effect, "entityCount");
         s->ep_entityTexture = gs_effect_get_param_by_name(s->effect, "entityTexture");
         s->ep_entities = gs_effect_get_param_by_name(s->effect, "entities");
+        entity_scene_configure(s);
 
 		/* Cache the source texture handles on the newly loaded effect.
 		 * These must be refreshed on every shader swap. In particular, OBS
@@ -4631,21 +4660,23 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
     /* OBS's effect compiler flattens float4 uniform arrays in OpenGL.
      * Use a typed RGBA32F texture, exactly matching scene_get_entities'
      * real [x,y,radius,type] records. Every pixel is one entire entity. */
-    if (s->scene && s->ep_entityCount && s->entity_data &&
-        (s->ep_entityTexture || s->ep_entities)) {
-        int count = scene_get_entities(s->scene, s->entity_data, s->entity_count_max);
+    if (s->ep_entityCount && (s->ep_entityTexture || s->ep_entities)) {
+        if (s->scene && s->entity_data && pthread_mutex_trylock(&s->mutex) == 0) {
+            s->entity_count = scene_get_entities(s->scene, s->entity_data, s->entity_count_max);
+            pthread_mutex_unlock(&s->mutex);
+        }
+        const int count = s->ep_entityTexture && !s->entity_texture ? 0 : s->entity_count;
         gs_effect_set_int(s->ep_entityCount, count);
         if (s->ep_entityTexture) {
-            if (!s->entity_texture)
-                s->entity_texture = gs_texture_create(s->entity_count_max, 1,
-                    GS_RGBA32F, 1, NULL, GS_DYNAMIC);
             if (s->entity_texture) {
                 gs_texture_set_image(s->entity_texture,
                     (const uint8_t *)s->entity_data,
                     (uint32_t)(s->entity_count_max * 4 * sizeof(float)), false);
                 gs_effect_set_texture(s->ep_entityTexture, s->entity_texture);
+            } else {
+                gs_effect_set_texture(s->ep_entityTexture, s->dummy_texture);
             }
-        } else if (s->ep_entities) {
+        } else if (s->ep_entities && count > 0) {
             gs_effect_set_val(s->ep_entities, s->entity_data,
                 (size_t)count * 4 * sizeof(float));
         }

@@ -625,6 +625,7 @@ struct hypershader_data {
 	void *scene;                 /* scene_handle_t */
 	float *entity_data;          /* Buffer for entity data (x, y, scale, type) */
 	int entity_count_max;        /* Buffer capacity */
+	int entity_count;            /* Last coherent render snapshot */
 	gs_eparam_t *ep_entities;    /* uniform float4 entities[100]; */
 	gs_eparam_t *ep_entityCount; /* uniform int entityCount; */
     gs_eparam_t *ep_entityTexture; /* typed RGBA32F 100x1 entity data sampler */

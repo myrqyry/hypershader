@@ -3,7 +3,11 @@
 extern "C" {
 
 void* scene_create() {
-    return new hs::SceneManager();
+    try {
+        return new hs::SceneManager();
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void scene_destroy(void* scene_ptr) {
