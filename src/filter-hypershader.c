@@ -1540,21 +1540,6 @@ static gs_effect_t *create_effect_with_includes(const char *path, char **error_b
 	return effect;
 }
 
-static void log_debug_direct(const char *msg)
-{
-	blog(LOG_DEBUG, "%s", msg);
-	char *debug_path = obs_module_config_path("hypershader_debug.log");
-	if (debug_path) {
-		FILE *f = fopen(debug_path, "a");
-		if (f) {
-			fprintf(f, "%s\n", msg);
-			fflush(f);
-			fclose(f);
-		}
-		bfree(debug_path);
-	}
-}
-
 /* Called with the graphics context and, during shader replacement, s->mutex.
  * No scene allocation or GPU texture creation in the frame-render callback. */
 static void entity_scene_release(struct hypershader_data *s)
@@ -1628,23 +1613,23 @@ static void filter_destroy(void *data)
 	s->data_driver = NULL;
 	effect_hotkeys_unregister(s->effect_hotkeys);
 	effect_hotkeys_unregister(s->history_reset_hotkeys);
-	log_debug_direct("filter_destroy: START");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: START");
 
 	/* 1. Stop worker thread FIRST */
 	if (audio_thread_is_active(&s->audio_thread_mgr)) {
-		log_debug_direct("filter_destroy: Stop audio thread");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Stop audio thread");
 		audio_thread_stop(&s->audio_thread_mgr, &s->audio_cv);
-		log_debug_direct("filter_destroy: Audio thread joined successfully");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Audio thread joined successfully");
 	}
 
 	if (s->sound_preview_running) {
-		log_debug_direct("filter_destroy: Stop sound preview");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Stop sound preview");
 		s->sound_preview_running = false;
 		pthread_join(s->sound_preview_thread, NULL);
 	}
 
 	if (s->probe_running) {
-		log_debug_direct("filter_destroy: Stop mix probe");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Stop mix probe");
 		s->probe_running = false;
 		pthread_join(s->probe_thread, NULL);
 	}
@@ -1653,7 +1638,7 @@ static void filter_destroy(void *data)
 	 * If we join inside obs_enter_graphics(), queued graphics tasks may stall
 	 * and race with resource destruction. */
 	if (s->shader_load_thread_run) {
-		log_debug_direct("filter_destroy: Stop shader load thread");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Stop shader load thread");
 		pthread_mutex_lock(&s->shader_load_mutex);
 		s->shader_load_thread_run = false;
 		pthread_cond_signal(&s->shader_load_cond);
@@ -1661,19 +1646,19 @@ static void filter_destroy(void *data)
 		pthread_join(s->shader_load_thread, NULL);
 		pthread_mutex_destroy(&s->shader_load_mutex);
 		pthread_cond_destroy(&s->shader_load_cond);
-		log_debug_direct("filter_destroy: Shader load thread joined");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Shader load thread joined");
 	}
 
 	/* Native MediaPipe sync exists even if Sight mode skipped the worker. */
 	if (s->mp_thread_run) {
-		log_debug_direct("filter_destroy: Stop MediaPipe thread");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Stop MediaPipe thread");
 		pthread_mutex_lock(&s->mp_mutex);
 		s->mp_thread_run = false;
 		pthread_cond_signal(&s->mp_cond);
 		pthread_mutex_unlock(&s->mp_mutex);
 		pthread_join(s->mp_thread, NULL);
 		s->mp_pending_task_active = false;
-		log_debug_direct("filter_destroy: MediaPipe thread joined");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: MediaPipe thread joined");
 	}
 	if (s->mp_sync_ready) {
 		pthread_mutex_destroy(&s->mp_mutex);
@@ -1688,24 +1673,24 @@ static void filter_destroy(void *data)
 	}
 	/* 3. Disconnect audio BEFORE freeing buffers */
 	if (s->audio_connected) {
-		log_debug_direct("filter_destroy: Disconnect audio");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Disconnect audio");
 		stop_obs_audio_connection(s);
 	}
 	stop_source_audio_connection(s);
 
-	log_debug_direct("filter_destroy: Cleanup FFT");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: Cleanup FFT");
 	/* hyper_audio_destroy handles all audio resource cleanup (including pthread primitives) */
 	hyper_audio_destroy(s);
 
-	log_debug_direct("filter_destroy: Cleanup Graphics");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: Cleanup Graphics");
 	/* 4. Graphics resources (enter/leave graphics context) */
 	obs_enter_graphics();
 
 	if (s->mp_runner) {
-		log_debug_direct("filter_destroy: mp_destroy start");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: mp_destroy start");
 		mp_destroy(s->mp_runner);
 		s->mp_runner = NULL;
-		log_debug_direct("filter_destroy: mp_destroy end");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: mp_destroy end");
 	}
 
 	entity_scene_release(s);
@@ -1821,7 +1806,7 @@ static void filter_destroy(void *data)
 
 #ifdef __linux__
 	if (s->x11_display) {
-		log_debug_direct("filter_destroy: Closing X11 display");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Closing X11 display");
 		Display *dpy = s->x11_display;
 		s->x11_display = NULL;
 		XCloseDisplay(dpy);
@@ -1833,7 +1818,7 @@ static void filter_destroy(void *data)
 	/* Note: We do NOT lock mutex again for string cleanup - strings can be freed without mutex protection
        since the graphics thread is done rendering and we're in the destruction phase */
 
-	log_debug_direct("filter_destroy: Cleanup Channels");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: Cleanup Channels");
 	/* 5. Channel cleanup */
 	for (int i = 0; i < CHANNEL_COUNT; i++) {
 		if (s->channel_sources[i]) {
@@ -1854,7 +1839,7 @@ static void filter_destroy(void *data)
 		}
 	}
 
-	log_debug_direct("filter_destroy: Cleanup Strings");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: Cleanup Strings");
 	/* 6. String resources (safe to free without mutex since rendering is complete) */
 	if (s->shader_path) {
 		bfree(s->shader_path);
@@ -1886,11 +1871,11 @@ static void filter_destroy(void *data)
 		}
 	}
 
-	log_debug_direct("filter_destroy: Cleanup Metadata");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: Cleanup Metadata");
 
 	/* Metadata cleanup logic (Bug C fix: prevent double-free) */
 	if (s->metadata_rc) {
-		log_debug_direct("filter_destroy: Releasing metadata_rc");
+		blog(LOG_DEBUG, "[hypershader] filter_destroy: Releasing metadata_rc");
 		pthread_mutex_lock(&s->mutex);
 		struct shader_meta_rc *rc = s->metadata_rc;
 		s->metadata_rc = NULL;
@@ -1908,9 +1893,9 @@ static void filter_destroy(void *data)
 	pthread_mutex_destroy(&s->mutex);
 	pthread_mutex_destroy(&s->audio_route_lock);
 
-	log_debug_direct("filter_destroy: bfree(s)");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: bfree(s)");
 	bfree(s);
-	log_debug_direct("filter_destroy: END");
+	blog(LOG_DEBUG, "[hypershader] filter_destroy: END");
 }
 
 /* Channel selection changes and GPU texture ownership share the graphics
