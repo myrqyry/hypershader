@@ -622,7 +622,10 @@ struct hypershader_data {
 	/* Pre-allocated MediaPipe task (avoids allocation in render callback) */
 #define MP_FRAME_SIZE (192 * 192 * 4)       /* Fixed 192x192 RGBA buffer */
 	uint8_t *mp_preallocated_frame; /* Pre-allocated frame buffer for worker */
-	atomic_bool mp_frame_buffer_in_use; /* Reserved through capture, inference and result upload */
+	atomic_uint mp_epoch, mp_result_epoch;
+    mp_graph_type_t mp_requested_graph; /* graphics context */
+    unsigned mp_capture_epoch; /* graphics context, through fence */
+    atomic_bool mp_frame_buffer_in_use; /* Reserved through capture, inference and result upload */
     uint64_t mp_last_capture_frame; /* Graphics-context-only deduplication */
     bool mp_capture_frame_valid;
 
@@ -632,6 +635,8 @@ struct hypershader_data {
 		uint8_t *frame_data;
 		int width;
 		int height;
+        unsigned epoch;
+        mp_graph_type_t graph;
 	} mp_pending_task_storage;
 	bool mp_pending_task_active; /* Flag: true when data is ready for worker */
 

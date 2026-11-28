@@ -147,6 +147,8 @@ void mp_destroy(mp_runner_t *runner);
 
 /* Start a specific graph */
 bool mp_start_graph(mp_runner_t *runner, mp_graph_type_t type);
+/* Immutable model capability; does not take the inference data lock. */
+bool mp_graph_available(mp_runner_t *runner, mp_graph_type_t type);
 
 /* Process a frame (RGBA, 8-bit) */
 /* Returns true if processed successfully (internal queue not full) */

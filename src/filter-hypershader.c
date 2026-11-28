@@ -2355,6 +2355,7 @@ cleanup_error:
 /* TASK executed on graphics thread to upload MediaPipe results */
 struct mp_update_task_data {
 	struct hypershader_data *s;
+    unsigned epoch;
 	uint8_t *mask_buffer;
 	int mask_width;
 	int mask_height;
@@ -2470,29 +2471,25 @@ static void filter_update(void *data, obs_data_t *settings)
 	 * Native graph remains available if the user switches back. */
 	if (!sight_requested && !s->mp_runner)
 		hs_ensure_native_mediapipe(s);
-	bool native_graph_changed = false;
-	if (s->mp_runner && !sight_requested) {
-		int graph = (int)obs_data_get_int(settings, "mp_controlnet_model");
-		if (graph == 0)
-			graph = MP_GRAPH_FACE_MESH; // Start default
+    int graph = (int)obs_data_get_int(settings, "mp_controlnet_model");
+    if (graph == 0) graph=MP_GRAPH_FACE_MESH;
+    bool graph_ready = !sight_requested && s->mp_runner &&
+        mp_graph_available(s->mp_runner,(mp_graph_type_t)graph);
+    const bool native_enabled = graph_ready && s->mp_thread_run;
 
-		bool graph_ready = mp_get_current_graph(s->mp_runner) == (mp_graph_type_t)graph;
-		if (!graph_ready) {
-			native_graph_changed = true;
-			graph_ready = mp_start_graph(s->mp_runner, (mp_graph_type_t)graph);
-		}
-		s->mp_enabled = s->mp_thread_run && graph_ready && graph != MP_GRAPH_NONE;
-		if (!graph_ready)
-			blog(LOG_WARNING, "[hypershader] MediaPipe mode %d unavailable; processing disabled", graph);
-	} else {
-		s->mp_enabled = false;
-	}
-
-	/* Apply dynamic parameters (custom uniforms) from settings */
-	/* Protect access to s->effect with graphics context lock */
-	obs_enter_graphics();
-	if (!s->mp_enabled || native_graph_changed)
-		mp_cancel_pending_readback(s);
+    /* Publish desired graph and generation together in the graphics owner.
+     * Only the inference worker actually starts/switches a graph. */
+    obs_enter_graphics();
+    const mp_graph_type_t requested = native_enabled ? (mp_graph_type_t)graph : MP_GRAPH_NONE;
+    if (requested != s->mp_requested_graph || native_enabled != s->mp_enabled) {
+        atomic_fetch_add_explicit(&s->mp_epoch,1,memory_order_acq_rel);
+        s->mp_requested_graph=requested;
+        s->mp_enabled=native_enabled;
+        mp_cancel_pending_readback(s);
+        s->mp_capture_frame_valid=false;
+    }
+    if (!sight_requested && s->mp_runner && !graph_ready)
+        blog(LOG_WARNING,"[hypershader] MediaPipe mode %d unavailable; processing disabled",graph);
 	if (s->effect && s->metadata_rc) {
 		size_t count = gs_effect_get_num_params(s->effect);
 		for (size_t i = 0; i < count; i++) {
@@ -2890,8 +2887,10 @@ extern void *mp_worker_thread(void *data);
 static void workload_set_active(struct hypershader_data *s, bool active)
 {
     bool previous=atomic_exchange_explicit(&s->workload_active,active,memory_order_acq_rel);
-    if (previous && !active)
+    if (previous && !active) {
         atomic_fetch_add_explicit(&s->workload_epoch,1,memory_order_seq_cst);
+        atomic_fetch_add_explicit(&s->mp_epoch,1,memory_order_acq_rel);
+    }
     if (previous!=active && s->audio_lockfree_ring.data)
         pthread_cond_signal(&s->audio_cv);
 }
@@ -2957,6 +2956,8 @@ static void *hypershader_create(obs_data_t *settings, obs_source_t *context, enu
     atomic_init(&s->mp_frame_buffer_in_use, false);
     atomic_init(&s->mp_thread_run, false);
     atomic_init(&s->mp_enabled, false);
+    atomic_init(&s->mp_epoch,1);
+    atomic_init(&s->mp_result_epoch,0);
     atomic_init(&s->mp_analyze_trigger, false);
 	atomic_init(&s->live_render_ns, 0);
     atomic_init(&s->workload_active,false);
@@ -3550,7 +3551,10 @@ static void filter_tick(void *data, float seconds)
      * Do not spend cycles updating unused demo scenes in every filter. */
     if (active && seconds > 0.0f && pthread_mutex_trylock(&s->mutex) == 0) {
         if (s->scene && (s->ep_entityTexture || s->ep_entities))
-            scene_update(s->scene, s->mp_runner, seconds * 1000.0f);
+            scene_update(s->scene, s->mp_enabled &&
+                atomic_load_explicit(&s->mp_result_epoch,memory_order_acquire)==
+                atomic_load_explicit(&s->mp_epoch,memory_order_acquire) ? s->mp_runner : NULL,
+                seconds * 1000.0f);
         pthread_mutex_unlock(&s->mutex);
     }
     /* hs_graph_frame and physical frame_count remain real render counters for
@@ -3558,6 +3562,18 @@ static void filter_tick(void *data, float seconds)
     s->shader_frame_count += s->time_scale;
 	if (seconds > 0.0f)
 		s->time_accumulator += seconds * s->time_scale;
+}
+
+static bool mp_epoch_current(struct hypershader_data *s,unsigned epoch)
+{
+    return s->mp_thread_run && s->mp_enabled &&
+        atomic_load_explicit(&s->workload_active,memory_order_acquire) &&
+        epoch==atomic_load_explicit(&s->mp_epoch,memory_order_acquire);
+}
+
+static bool mp_result_current(struct hypershader_data *s)
+{
+    return mp_epoch_current(s,atomic_load_explicit(&s->mp_result_epoch,memory_order_acquire));
 }
 
 /* TASK executed on graphics thread to upload MediaPipe results */
@@ -3581,22 +3597,17 @@ static void mp_update_textures_task(void *param)
 
 	struct hypershader_data *s = task->s;
 
-	/* Check if source has been destroyed or MediaPipe disabled */
-	if (!s->mp_thread_run || !s->mp_enabled) {
-		if (task->mask_buffer)
-			bfree(task->mask_buffer);
-		if (task->landmark_data)
-			bfree(task->landmark_data);
-		if (task->ref_landmark_data)
-			bfree(task->ref_landmark_data);
-        atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
-		obs_source_release(s->context);
-		bfree(task);
-		return;
-	}
-
-	/* Graphics tasks can run without a current graphics context. */
-	obs_enter_graphics();
+    /* Validate inside the graphics context, after any concurrent settings
+     * update; stale results never modify live textures or reference data. */
+    obs_enter_graphics();
+    if (!mp_epoch_current(s,task->epoch)) {
+        obs_leave_graphics();
+        goto release_task;
+    }
+    if (!task->mask_buffer && s->mp_mask_tex) {
+        gs_texture_destroy(s->mp_mask_tex);
+        s->mp_mask_tex=NULL;
+    }
 	if (task->mask_buffer) {
 		uint32_t cw = s->mp_mask_tex ? gs_texture_get_width(s->mp_mask_tex) : 0;
 		uint32_t ch = s->mp_mask_tex ? gs_texture_get_height(s->mp_mask_tex) : 0;
@@ -3664,7 +3675,9 @@ static void mp_update_textures_task(void *param)
 		}
 	}
 
+    atomic_store_explicit(&s->mp_result_epoch,task->epoch,memory_order_release);
 	obs_leave_graphics();
+release_task:
 	if (task->mask_buffer)
 		bfree(task->mask_buffer);
 	if (task->landmark_data)
@@ -4140,6 +4153,7 @@ void *shader_load_worker_thread(void *data)
 void *mp_worker_thread(void *data)
 {
 	struct hypershader_data *s = data;
+    unsigned graph_epoch=0;
 
 	while (s->mp_thread_run) {
 		pthread_mutex_lock(&s->mp_mutex);
@@ -4153,15 +4167,28 @@ void *mp_worker_thread(void *data)
 
 		/* Copy task data locally so render thread can reuse storage immediately */
 		struct mp_process_task_data task = s->mp_pending_task_storage;
-		bool analyze_reference = atomic_exchange_explicit(&s->mp_analyze_trigger,false,memory_order_relaxed);
 		s->mp_pending_task_active = false;
 		pthread_mutex_unlock(&s->mp_mutex);
 
+        if (!mp_epoch_current(s,task.epoch))
+            goto release_frame;
+        /* No settings/video thread changes the runner's graph while it is
+         * executing. Restart model state on a new workload generation. */
+        if (graph_epoch!=task.epoch) {
+            if (!mp_start_graph(s->mp_runner,task.graph))
+                goto release_frame;
+            graph_epoch=task.epoch;
+        }
+        if (!mp_epoch_current(s,task.epoch))
+            goto release_frame;
+        bool analyze_reference=atomic_exchange_explicit(&s->mp_analyze_trigger,false,memory_order_relaxed);
 		/* Process frame with MediaPipe */
-		if (mp_process_frame(s->mp_runner, task.frame_data, task.width, task.height, task.width * 4)) {
+		if (mp_process_frame(s->mp_runner, task.frame_data, task.width, task.height, task.width * 4) &&
+            mp_epoch_current(s,task.epoch)) {
 
 			struct mp_update_task_data *update_data = bzalloc(sizeof(*update_data));
 			update_data->s = s;
+            update_data->epoch=task.epoch;
 
 			/* Retrieve segmentation mask */
 			mp_mask_data_t mask = {0};
@@ -4198,7 +4225,7 @@ void *mp_worker_thread(void *data)
 				}
 			}
 
-            if (obs_source_get_ref(s->context)) {
+            if (mp_epoch_current(s,task.epoch) && obs_source_get_ref(s->context)) {
                 obs_queue_task(OBS_TASK_GRAPHICS, mp_update_textures_task, update_data, false);
                 /* The upload task releases the reservation; never queue a
                  * second result until the first has been consumed. */
@@ -4210,6 +4237,7 @@ void *mp_worker_thread(void *data)
             bfree(update_data);
         }
 
+release_frame:
         atomic_store_explicit(&s->mp_frame_buffer_in_use,false,memory_order_release);
 
 		/* Task struct is embedded - no bfree needed */
@@ -4658,6 +4686,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 	pthread_mutex_lock(&s->mutex);
 	sight_selected = s->sight_use_tracking;
 	pthread_mutex_unlock(&s->mutex);
+    const bool native_current=mp_result_current(s);
 	const bool sight_present = sight_selected && s->sight_points_tex &&
 		s->sight_point_count > 0;
 	const bool sight_face = sight_present && s->sight_kind == SIGHT_SNAPSHOT_FACE &&
@@ -4712,7 +4741,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 	if (s->ep_face_present)
 		gs_effect_set_float(s->ep_face_present,
 				sight_selected ? (sight_face ? 1.f : 0.f) :
-				(s->mp_enabled && s->mp_landmarks_tex ? 1.f : 0.f));
+				(native_current && s->mp_landmarks_tex ? 1.f : 0.f));
 	if (s->ep_sight_matte_present)
 		gs_effect_set_float(s->ep_sight_matte_present,sight_selected && s->sight_matte_present ? 1.f : 0.f);
     const bool depth=sight_selected&&s->sight_depth_present&&s->sight_depth_tex;
@@ -4766,22 +4795,20 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 					     hs_face_surface_triangles(s->sight_face_surface) : s->dummy_texture);
 		if (s->ep_segmentation)
 			gs_effect_set_texture(s->ep_segmentation, s->sight_matte_present ? s->sight_matte_tex : s->dummy_texture);
-	} else if (s->mp_enabled) {
-		if (s->ep_segmentation && s->mp_mask_tex)
-			gs_effect_set_texture(s->ep_segmentation, s->mp_mask_tex);
-		if (s->ep_landmarks)
-			gs_effect_set_texture(s->ep_landmarks, s->mp_landmarks_tex);
-		if (s->ep_reference_landmarks && s->mp_ref_landmarks_tex)
-			gs_effect_set_texture(s->ep_reference_landmarks, s->mp_ref_landmarks_tex);
-		if (s->mp_face_surface) {
-			if (s->ep_face_surface)
-				gs_effect_set_texture(s->ep_face_surface,
-						     hs_face_surface_texture(s->mp_face_surface));
-			if (s->ep_face_triangles)
-				gs_effect_set_texture(s->ep_face_triangles,
-						     hs_face_surface_triangles(s->mp_face_surface));
-		}
-	}
+    } else {
+        if (s->ep_segmentation)
+            gs_effect_set_texture(s->ep_segmentation,native_current && s->mp_mask_tex ? s->mp_mask_tex : s->dummy_texture);
+        if (s->ep_landmarks)
+            gs_effect_set_texture(s->ep_landmarks,native_current ? s->mp_landmarks_tex : NULL);
+        if (s->ep_reference_landmarks)
+            gs_effect_set_texture(s->ep_reference_landmarks,s->mp_enabled ? s->mp_ref_landmarks_tex : NULL);
+        if (s->ep_face_surface)
+            gs_effect_set_texture(s->ep_face_surface,native_current && s->mp_landmarks_tex && s->mp_face_surface ?
+                hs_face_surface_texture(s->mp_face_surface) : s->dummy_texture);
+        if (s->ep_face_triangles)
+            gs_effect_set_texture(s->ep_face_triangles,native_current && s->mp_landmarks_tex && s->mp_face_surface ?
+                hs_face_surface_triangles(s->mp_face_surface) : s->dummy_texture);
+    }
 
     /* OBS's effect compiler flattens float4 uniform arrays in OpenGL.
      * Use a typed RGBA32F texture, exactly matching scene_get_entities'
@@ -4829,7 +4856,7 @@ static void update_shader_uniforms(struct hypershader_data *s, uint32_t width, u
 	unsigned flags = (sight_present ? 1u : 0u) | (depth ? 2u : 0u) |
 		(flow ? 4u : 0u) | (text ? 8u : 0u) | (motion ? 16u : 0u) |
 		(sight_selected && s->sight_matte_present ? 32u : 0u) | (subject ? 64u : 0u) |
-		(sight_face || (!sight_selected && s->mp_enabled && s->mp_landmarks_tex) ? 128u : 0u);
+		(sight_face || (!sight_selected && native_current && s->mp_landmarks_tex) ? 128u : 0u);
 	for (unsigned i = 0; i < 4; ++i)
 		if (s->channel_textures[i])
 			flags |= 1u << (8 + i);
@@ -5413,6 +5440,7 @@ static gs_texture_t *output_capture_filter_base(struct hypershader_data *s,
 /* Called only for an admitted synchronous capture or a signaled GPU fence. */
 static bool mp_submit_staged_frame(struct hypershader_data *s)
 {
+    if (!mp_epoch_current(s,s->mp_capture_epoch)) return false;
     const int mp_w=192, mp_h=192;
     uint8_t *pixels=NULL;
     uint32_t pitch=0;
@@ -5432,12 +5460,13 @@ static bool mp_submit_staged_frame(struct hypershader_data *s)
      * while holding the graphics context, even for a short submission. */
     if (pthread_mutex_trylock(&s->mp_mutex)!=0)
         return false;
-    if (!s->mp_thread_run || !s->mp_enabled) {
+    if (!mp_epoch_current(s,s->mp_capture_epoch)) {
         pthread_mutex_unlock(&s->mp_mutex);
         return false;
     }
     s->mp_pending_task_storage=(struct mp_process_task_data){
-        .s=s,.frame_data=s->mp_preallocated_frame,.width=mp_w,.height=mp_h};
+        .s=s,.frame_data=s->mp_preallocated_frame,.width=mp_w,.height=mp_h,
+        .epoch=s->mp_capture_epoch,.graph=s->mp_requested_graph};
     s->mp_pending_task_active=true;
     pthread_cond_signal(&s->mp_cond);
     pthread_mutex_unlock(&s->mp_mutex);
@@ -5492,6 +5521,8 @@ static void process_mediapipe_frame(struct hypershader_data *s,
         mp_cancel_pending_readback(s);
         return;
     }
+    if (s->mp_readback_fence && !mp_epoch_current(s,s->mp_capture_epoch))
+        mp_cancel_pending_readback(s);
     const uint64_t frame = obs_get_video_frame_time();
     if (s->mp_capture_frame_valid && s->mp_last_capture_frame == frame)
         return;
@@ -5513,6 +5544,7 @@ static void process_mediapipe_frame(struct hypershader_data *s,
             &expected,true,memory_order_acquire,memory_order_relaxed))
         return;
 
+    s->mp_capture_epoch=atomic_load_explicit(&s->mp_epoch,memory_order_acquire);
     s->mp_last_capture_frame = frame;
     s->mp_capture_frame_valid = true;
     const int mp_w=192, mp_h=192;

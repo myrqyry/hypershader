@@ -10,7 +10,7 @@ export MESA_SHADER_CACHE_DISABLE=true
 trap 'rm -rf "$work"' EXIT
 g++ -std=c++17 -O2 -Wl,--export-dynamic -I"$(pkg-config --variable=includedir libobs)/obs" \
     "$repo/scripts/verify-mediapipe-filter-obs.cpp" -o "$work/probe" $(pkg-config --libs libobs) -ldl
-(cd "$work" && HOME="$work" XDG_CONFIG_HOME="$work" xvfb-run -a timeout 30 "$work/probe" \
+(cd "$work" && HOME="$work" XDG_CONFIG_HOME="$work" xvfb-run -a timeout 55 "$work/probe" \
     "$module" "$data" "$effect" "$face") >"$work/log" 2>&1 || {
     rg -n '(MP_CAPTURE|MP_FILTER_GPU|\[MediaPipe\]|error:|failed|MP_AUDIT)' "$work/log" | tail -55 || true
     exit 1

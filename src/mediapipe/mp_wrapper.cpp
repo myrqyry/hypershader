@@ -819,11 +819,12 @@ void mp_destroy(mp_runner_t *ptr)
 	delete runner;
 }
 
-bool mp_start_graph(mp_runner_t *ptr, mp_graph_type_t type)
+bool mp_graph_available(mp_runner_t *ptr, mp_graph_type_t type)
 {
 	if (!ptr)
 		return false;
 	mp_runner *runner = (mp_runner *)ptr;
+    (void)runner;
 	// Only accept modes with an implemented output path and available models.
 	bool face_available = false;
 #ifdef USE_ONNX_MEDIAPIPE
@@ -832,10 +833,17 @@ bool mp_start_graph(mp_runner_t *ptr, mp_graph_type_t type)
 #ifdef USE_LITERT_MEDIAPIPE
 	face_available = face_available || (runner->compiled_model_det && runner->compiled_model_land);
 #endif
-	const bool supported = type == MP_GRAPH_NONE ||
+	return type == MP_GRAPH_NONE ||
 		(face_available && (type == MP_GRAPH_FACE_MESH ||
 		                    type == MP_GRAPH_SELFIE_SEGMENTATION ||
 		                    type == MP_GRAPH_PRIVACY));
+}
+
+bool mp_start_graph(mp_runner_t *ptr, mp_graph_type_t type)
+{
+    if (!ptr) return false;
+    mp_runner *runner = (mp_runner *)ptr;
+    const bool supported = mp_graph_available(ptr,type);
 	if (!supported) {
 		// Do not keep a previous graph active after rejecting a selection.
 		std::lock_guard<std::mutex> lock(runner->data_lock);

@@ -247,9 +247,23 @@ state before reopening admission. No thread join or worker mutex wait is
 introduced on the visibility or render path. FFT reconfiguration can be
 deferred until demand returns. Sound-test preview is independent.
 
-Native MediaPipe capture is already draw-driven, but this change does
-not cancel a running inference or qualify the lifetime of a queued result
-across a suspend/resume. Model resources and GPU allocations are retained.
+Native MediaPipe capture is draw-driven. A generation accompanies the
+capture, staged readback, inference task and queued graphics publication.
+Suspending the workload or changing its requested graph/provider invalidates
+old generations; the next draw discards an old fence and binds no old
+landmark/mask/face-surface data. The single capture reservation stays with
+its current owner until release, even when its generation expires. Graph
+changes and graph restart happen on the inference worker, not in the
+settings callback. An already running model invocation can finish, but its
+stale result is dropped. Model resources and compatible GPU allocations are
+retained; an explicitly captured reference texture is not transient live
+tracking data. Initial model loading remains synchronous.
+
+With the real ONNX face model staged as described above, set
+`HS_MP_TEST_EPOCH=1` on `verify-mediapipe-filter-obs.sh` to hold a completed
+face result across disable/re-enable, provider changes, graph changes and
+hide/show. The probe checks both pre-upload and post-upload pixels on blank
+input and verifies fresh inference after all four changes.
 
 Run the isolated native lifecycle/PCM/Sight-provider fixture:
 

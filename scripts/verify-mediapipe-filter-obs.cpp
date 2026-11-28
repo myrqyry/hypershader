@@ -218,6 +218,76 @@ int main(int argc,char**argv){
     if(i>70){blankLast=x;blankBright=last_bright_pixels;}
     std::this_thread::sleep_for(35ms);
  }
+ // Retain a real face result, invalidate the workload, and resume on blank
+ // input. Execute the held graphics callback while holding the graphics
+ // context so no replacement result can conceal a stale publication.
+ auto epochProbe=[&](int change){
+    heldCount.store(0);
+    obs_enter_graphics();gs_texture_set_image(active->texture,face.data(),W*4,false);obs_leave_graphics();
+    {std::lock_guard<std::mutex> lock(heldMutex);holdResults=true;}
+    for(int i=0;i<50&&heldCount.load()==0;i++){
+        render(videoSource);std::this_thread::sleep_for(35ms);
+    }
+    // The first pending result may have originated on blank. Drain it
+    // and explicitly hold the next face capture after several face draws.
+    std::vector<std::pair<obs_task_t,void*>> old;
+    {std::lock_guard<std::mutex> lock(heldMutex);old.swap(heldResults);heldCount.store(0);}
+    for(auto&entry:old)realQueue()(OBS_TASK_GRAPHICS,entry.first,entry.second,true);
+    for(int i=0;i<50&&heldCount.load()==0;i++){
+        render(videoSource);std::this_thread::sleep_for(35ms);
+    }
+    {std::lock_guard<std::mutex> lock(heldMutex);old.clear();old.swap(heldResults);}
+    const bool held=old.size()==1;
+    if(change==1){
+        auto* cfg=obs_source_get_settings(filter);
+        obs_data_set_bool(cfg,"sight_use_tracking",true);obs_source_update(filter,cfg);obs_data_release(cfg);
+        std::this_thread::sleep_for(150ms);
+        cfg=obs_source_get_settings(filter);
+        obs_data_set_bool(cfg,"sight_use_tracking",false);obs_source_update(filter,cfg);obs_data_release(cfg);
+        std::this_thread::sleep_for(150ms);
+    }else if(change==2){
+        auto* cfg=obs_source_get_settings(filter);
+        obs_data_set_int(cfg,"mp_controlnet_model",1);obs_source_update(filter,cfg);obs_data_release(cfg);
+        std::this_thread::sleep_for(150ms);
+        cfg=obs_source_get_settings(filter);
+        obs_data_set_int(cfg,"mp_controlnet_model",2);obs_source_update(filter,cfg);obs_data_release(cfg);
+        std::this_thread::sleep_for(150ms);
+    }else if(change==3){
+        obs_set_output_source(0,nullptr);obs_source_dec_showing(videoSource);
+        std::this_thread::sleep_for(400ms);
+        obs_source_inc_showing(videoSource);obs_set_output_source(0,videoSource);
+    }else{
+        obs_source_set_enabled(filter,false);std::this_thread::sleep_for(350ms);
+        obs_source_set_enabled(filter,true);
+    }
+    obs_enter_graphics();
+    gs_texture_set_image(active->texture,blank.data(),W*4,false);
+    float before=render(videoSource);
+    for(auto&entry:old)entry.first(entry.second);
+    float after=render(videoSource);
+    obs_leave_graphics();
+    {std::lock_guard<std::mutex> lock(heldMutex);holdResults=false;release.clear();release.swap(heldResults);}
+    for(auto&entry:release)realQueue()(OBS_TASK_GRAPHICS,entry.first,entry.second,false);
+    float recovery=0;
+    for(int i=0;i<50;i++){recovery=render(videoSource);std::this_thread::sleep_for(25ms);}
+    bool ok=held&&before>=0&&before<0.05f&&after>=0&&after<0.05f&&recovery<0.05f;
+    printf("MP_CAPTURE_EPOCH mode=%s held=%d before=%.4f after=%.4f recovered=%.4f PASS=%d\n",
+        change==1?"provider":change==2?"graph":change==3?"hidden":"disable",held,before,after,recovery,ok);
+    return ok;
+ };
+ bool epochs=true;
+ if(std::getenv("HS_MP_TEST_EPOCH")) {
+    bool activity=epochProbe(0);
+    bool provider=epochProbe(1);
+    bool graph=epochProbe(2);
+    bool hidden=epochProbe(3);
+    obs_enter_graphics();gs_texture_set_image(active->texture,face.data(),W*4,false);obs_leave_graphics();
+    float fresh=0;
+    for(int i=0;i<50;i++){fresh=render(videoSource);std::this_thread::sleep_for(25ms);}
+    bool recovered=fresh>0.25f&&fresh<0.75f;
+    printf("MP_CAPTURE_EPOCH_RECOVERY face=%.4f PASS=%d\n",fresh,recovered);
+    epochs=activity&&provider&&graph&&hidden&&recovered;
+ }
  auto* properties=obs_source_properties(filter);
  auto* modes=properties?obs_properties_get(properties,"mp_controlnet_model"):nullptr;
  if (modes) {
@@ -234,7 +304,7 @@ int main(int argc,char**argv){
       prematureMaps.load()==0&&waitingPolls.load()==0);
  printf("MP_CAPTURE_FENCE required=%d delayed=%u ready=%u premature_maps=%u blocking_polls=%u expired_fences=%u PASS=%d\n",
         expectFence,delayedPolls.load(),readyPolls.load(),prematureMaps.load(),waitingPolls.load(),discardedFences.load(),fenceWorks);
- bool pass=admitted&&backpressure&&fenceWorks&&faceLast>0.25f&&faceLast<0.75f&&blankLast<0.05f&&blankBright<10&&modeUi;
+ bool pass=epochs&&admitted&&backpressure&&fenceWorks&&faceLast>0.25f&&faceLast<0.75f&&blankLast<0.05f&&blankBright<10&&modeUi;
  printf("MP_FILTER_GPU initial=%.4f face=%.4f blank=%.4f blank_bright=%u mode_ui=%d PASS=%d\n",initial,faceLast,blankLast,blankBright,modeUi,pass);
  obs_set_output_source(0,nullptr);
 
